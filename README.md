@@ -164,3 +164,5 @@ Open `http://localhost:3000` in your web browser.
 18. `Attachment Validation`: Permitted file extensions (`.pdf`, `.png`, `.jpg`, `.xlsx`, `.docx`, `.csv`, `.txt`) and 10MB size limits.
 19. **Master End-to-End Journey**:
     Customer creates ticket ➔ Ticket ID generated ➔ L1 assigned ➔ Customer acknowledged ➔ L1 starts work (Timer starts) ➔ L1 adds notes ➔ L1 escalates to L2 (Timer continues) ➔ L2 works ➔ L2 escalates to L3 (Timer continues) ➔ L3 resolves ➔ Manager reviews ➔ Manager approves ➔ Customer submits rating + remarks ➔ Ticket closes ➔ Complete timeline exists ➔ Resolution time verified ➔ SLA result verified.
+#   k a n v t e c h - s e r v i c e - m a n a g e m e n t  
+ 
