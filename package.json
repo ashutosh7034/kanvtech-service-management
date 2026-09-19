@@ -1,0 +1,19 @@
+{
+  "name": "kanvtech-service-management",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Kanvtech Service Management Platform - Enterprise Customer Service and Ticket Management System",
+  "scripts": {
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "build:server": "npm run build --prefix server",
+    "build:client": "npm run build --prefix client",
+    "build": "npm run build:server && npm run build:client",
+    "test": "npm run test --prefix server",
+    "db:init": "npm run db:init --prefix server",
+    "db:seed": "npm run db:seed --prefix server"
+  },
+  "keywords": ["service-management", "ticketing", "enterprise", "sla", "kanvtech"],
+  "author": "Kanvtech Engineering Team",
+  "license": "UNLICENSED"
+}
