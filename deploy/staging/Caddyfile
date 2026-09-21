@@ -1,0 +1,37 @@
+# ==============================================================================
+# KANVTECH SERVICE MANAGEMENT — STAGING REVERSE PROXY (CADDY)
+# Features automatic TLS certificates via Let's Encrypt / ZeroSSL
+# ==============================================================================
+
+staging.kanvtech.com {
+    # 12MB upload limit for ticket attachments
+    request_body {
+        max_size 12MB
+    }
+
+    # Security Headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Reverse proxy /api/* to NestJS backend
+    handle /api/* {
+        reverse_proxy 127.0.0.1:5000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+
+    # Reverse proxy all other routes to Next.js web frontend
+    handle {
+        reverse_proxy 127.0.0.1:3000 {
+            header_up Host {host}
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-Proto {scheme}
+        }
+    }
+}

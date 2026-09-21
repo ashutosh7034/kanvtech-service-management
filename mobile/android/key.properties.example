@@ -1,0 +1,10 @@
+# Android Release Keystore Configuration Example
+# Copy this file to `key.properties` (never commit key.properties with real passwords!)
+#
+# Generate a new release keystore via keytool:
+# keytool -genkey -v -keystore kanvtech-release.jks -keyalg RSA -keysize 2048 -validity 10000 -alias kanvtech_release
+#
+keyAlias=kanvtech_release
+keyPassword=YOUR_KEY_PASSWORD
+storeFile=../kanvtech-release.jks
+storePassword=YOUR_STORE_PASSWORD

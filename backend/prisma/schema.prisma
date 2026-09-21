@@ -1,0 +1,484 @@
+// Kanvtech Service Management Platform - Prisma Schema (PostgreSQL)
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  ADMIN
+  MANAGER
+  L1_EMPLOYEE
+  L2_EMPLOYEE
+  L3_EMPLOYEE
+  CUSTOMER
+}
+
+enum EmployeeLevel {
+  L1
+  L2
+  L3
+}
+
+enum EmployeeAvailability {
+  AVAILABLE
+  BUSY
+  OFFLINE
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AttendanceStatus {
+  CHECKED_IN
+  CHECKED_OUT
+}
+
+enum TicketPriority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum TicketLevel {
+  L1
+  L2
+  L3
+  PARENT_COMPANY
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  MANAGER_REVIEW
+  CUSTOMER_FEEDBACK
+  CLOSED
+}
+
+enum SLAStatus {
+  ON_TRACK
+  WARNING
+  BREACHED
+  MET
+}
+
+enum AssignmentType {
+  AUTO
+  MANUAL
+}
+
+enum CommentType {
+  INTERNAL_NOTE
+  CUSTOMER_COMMUNICATION
+  SYSTEM
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+  PUSH
+  IN_APP
+}
+
+enum NotificationStatus {
+  SENT
+  FAILED
+}
+
+// 1. Roles & Permissions Master
+model Role {
+  name            String @id @db.VarChar(50)
+  description     String @db.VarChar(255)
+  permissionsJson String @map("permissions_json") @db.Text
+
+  @@map("roles")
+}
+
+// 2. System Users
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique @db.VarChar(191)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         UserRole
+  isActive     Boolean   @default(true) @map("is_active")
+  lastLoginAt  DateTime? @map("last_login_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  employee          Employee?
+  companyContacts   CompanyContact[]
+  createdTickets    Ticket[]                  @relation("TicketCreator")
+  closedTickets     Ticket[]                  @relation("TicketCloser")
+  assignedTicketsBy TicketAssignment[]        @relation("AssignedByUser")
+  ticketHistory     TicketHistory[]
+  comments          TicketComment[]
+  attachments       TicketAttachment[]
+  feedback          TicketFeedback[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  @@index([role], name: "idx_users_role")
+  @@index([email], name: "idx_users_email")
+  @@map("users")
+}
+
+// 3. Companies Master
+model Company {
+  id                     String   @id @db.VarChar(50) // CMP-0001
+  companyName            String   @map("company_name") @db.VarChar(255)
+  address                String   @db.Text
+  gstn                   String?  @db.VarChar(50)
+  primaryEmail           String   @map("primary_email") @db.VarChar(191)
+  alternateEmails        String?  @map("alternate_emails") @db.Text
+  contactPerson          String   @map("contact_person") @db.VarChar(150)
+  contactPhone           String   @map("contact_phone") @db.VarChar(50)
+  contactAddress         String?  @map("contact_address") @db.Text
+  contactStatus          String   @default("ACTIVE") @map("contact_status") @db.VarChar(50)
+  alternateContact       String?  @map("alternate_contact") @db.VarChar(150)
+  alternateContactPhone  String?  @map("alternate_contact_phone") @db.VarChar(50)
+  alternateContactAddress String? @map("alternate_contact_address") @db.Text
+  alternateContactEmail  String?  @map("alternate_contact_email") @db.VarChar(191)
+  isActive               Boolean  @default(true) @map("is_active")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
+
+  contacts CompanyContact[]
+  tickets  Ticket[]
+
+  @@index([companyName], name: "idx_companies_name")
+  @@index([isActive], name: "idx_companies_active")
+  @@map("companies")
+}
+
+// 4. Company Contacts
+model CompanyContact {
+  id          Int      @id @default(autoincrement())
+  companyId   String   @map("company_id") @db.VarChar(50)
+  userId      Int?     @map("user_id")
+  name        String   @db.VarChar(150)
+  email       String   @db.VarChar(191)
+  phone       String   @db.VarChar(50)
+  designation String?  @db.VarChar(100)
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tickets Ticket[]
+
+  @@index([companyId], name: "idx_contacts_company")
+  @@index([email], name: "idx_contacts_email")
+  @@map("company_contacts")
+}
+
+// 5. Employees Master
+model Employee {
+  id           String               @id @db.VarChar(50) // EMP-001
+  userId       Int                  @unique @map("user_id")
+  name         String               @db.VarChar(150)
+  email        String               @unique @db.VarChar(191)
+  phone        String               @db.VarChar(50)
+  department   String               @db.VarChar(100)
+  designation  String               @db.VarChar(100)
+  level        EmployeeLevel
+  managerId    String?              @map("manager_id") @db.VarChar(50)
+  availability EmployeeAvailability @default(AVAILABLE)
+  status       EmployeeStatus       @default(ACTIVE)
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manager             Employee?                 @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates        Employee[]                @relation("EmployeeManager")
+  attendance          EmployeeAttendance[]
+  assignedTickets     Ticket[]                  @relation("AssignedEmployee")
+  assignments         TicketAssignment[]
+  escalationsMade     TicketEscalation[]        @relation("EscalatedBy")
+  escalationsReceived TicketEscalation[]        @relation("AssignedTo")
+  resolutionSessions  TicketResolutionSession[]
+
+  @@index([level], name: "idx_employees_level")
+  @@index([status], name: "idx_employees_status")
+  @@index([availability], name: "idx_employees_avail")
+  @@map("employees")
+}
+
+// 6. Employee Attendance
+model EmployeeAttendance {
+  id              Int              @id @default(autoincrement())
+  employeeId      String           @map("employee_id") @db.VarChar(50)
+  checkInTime     DateTime         @map("check_in_time")
+  checkOutTime    DateTime?        @map("check_out_time")
+  locationLat     Float?           @map("location_lat")
+  locationLng     Float?           @map("location_lng")
+  locationAddress String?          @map("location_address") @db.VarChar(255)
+  status          AttendanceStatus @default(CHECKED_IN)
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([employeeId, checkInTime], name: "idx_attendance_emp")
+  @@map("employee_attendance")
+}
+
+// 7. Tickets Core
+model Ticket {
+  id                     String         @id @db.VarChar(50) // KT-2026-000001
+  companyId              String         @map("company_id") @db.VarChar(50)
+  customerContactId      Int            @map("customer_contact_id")
+  problemType            String         @map("problem_type") @db.VarChar(150)
+  priority               TicketPriority
+  category               String         @db.VarChar(100)
+  description            String         @db.Text
+  createdBy              Int            @map("created_by")
+  assignedEmployeeId     String?        @map("assigned_employee_id") @db.VarChar(50)
+  assignedLevel          TicketLevel    @default(L1) @map("assigned_level")
+  status                 TicketStatus   @default(OPEN)
+  slaPriority            TicketPriority @default(MEDIUM) @map("sla_priority")
+  slaDeadline            DateTime?      @map("sla_deadline")
+  slaStatus              SLAStatus      @default(ON_TRACK) @map("sla_status")
+  resolutionStartedAt    DateTime?      @map("resolution_started_at")
+  resolutionEndedAt      DateTime?      @map("resolution_ended_at")
+  totalResolutionSeconds Int            @default(0) @map("total_resolution_seconds")
+  closedAt               DateTime?      @map("closed_at")
+  closedBy               Int?           @map("closed_by")
+  closureReason          String?        @map("closure_reason") @db.Text
+  createdAt              DateTime       @default(now()) @map("created_at")
+  updatedAt              DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  company            Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  customerContact    CompanyContact            @relation(fields: [customerContactId], references: [id], onDelete: Restrict)
+  creator            User                      @relation("TicketCreator", fields: [createdBy], references: [id], onDelete: Restrict)
+  assignedEmployee   Employee?                 @relation("AssignedEmployee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  closer             User?                     @relation("TicketCloser", fields: [closedBy], references: [id], onDelete: SetNull)
+  assignments        TicketAssignment[]
+  history            TicketHistory[]
+  escalations        TicketEscalation[]
+  resolutionSessions TicketResolutionSession[]
+  comments           TicketComment[]
+  attachments        TicketAttachment[]
+  feedback           TicketFeedback?
+
+  @@index([status], name: "idx_tickets_status")
+  @@index([companyId], name: "idx_tickets_company")
+  @@index([customerContactId], name: "idx_tickets_contact")
+  @@index([assignedEmployeeId], name: "idx_tickets_assigned")
+  @@index([priority], name: "idx_tickets_priority")
+  @@index([createdAt], name: "idx_tickets_created_at")
+  @@map("tickets")
+}
+
+// 8. Ticket Assignments History
+model TicketAssignment {
+  id             Int            @id @default(autoincrement())
+  ticketId       String         @map("ticket_id") @db.VarChar(50)
+  employeeId     String         @map("employee_id") @db.VarChar(50)
+  level          TicketLevel
+  assignedBy     Int            @map("assigned_by")
+  assignedAt     DateTime       @default(now()) @map("assigned_at")
+  unassignedAt   DateTime?      @map("unassigned_at")
+  assignmentType AssignmentType @default(MANUAL) @map("assignment_type")
+
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  assigner User     @relation("AssignedByUser", fields: [assignedBy], references: [id], onDelete: Restrict)
+
+  @@index([ticketId], name: "idx_assign_ticket")
+  @@index([employeeId], name: "idx_assign_emp")
+  @@map("ticket_assignments")
+}
+
+// 9. Chronological Ticket History
+model TicketHistory {
+  id           Int      @id @default(autoincrement())
+  ticketId     String   @map("ticket_id") @db.VarChar(50)
+  actorUserId  Int      @map("actor_user_id")
+  actionType   String   @map("action_type") @db.VarChar(50)
+  title        String   @db.VarChar(150)
+  description  String?  @db.Text
+  metadataJson String?  @map("metadata_json") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actor  User   @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId, createdAt], name: "idx_history_ticket")
+  @@map("ticket_history")
+}
+
+// 10. Ticket Escalations
+model TicketEscalation {
+  id                     Int           @id @default(autoincrement())
+  ticketId               String        @map("ticket_id") @db.VarChar(50)
+  fromLevel              EmployeeLevel @map("from_level")
+  toLevel                TicketLevel   @map("to_level")
+  escalatedByEmployeeId String        @map("escalated_by_employee_id") @db.VarChar(50)
+  assignedToEmployeeId   String?       @map("assigned_to_employee_id") @db.VarChar(50)
+  reason                 String        @db.VarChar(255)
+  notes                  String?       @db.Text
+  createdAt              DateTime      @default(now()) @map("created_at")
+
+  ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  escalatedBy Employee  @relation("EscalatedBy", fields: [escalatedByEmployeeId], references: [id], onDelete: Restrict)
+  assignedTo  Employee? @relation("AssignedTo", fields: [assignedToEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId], name: "idx_escalations_ticket")
+  @@map("ticket_escalations")
+}
+
+// 11. Ticket Resolution Sessions
+model TicketResolutionSession {
+  id              Int         @id @default(autoincrement())
+  ticketId        String      @map("ticket_id") @db.VarChar(50)
+  employeeId      String      @map("employee_id") @db.VarChar(50)
+  level           TicketLevel
+  startedAt       DateTime    @default(now()) @map("started_at")
+  endedAt         DateTime?   @map("ended_at")
+  durationSeconds Int         @default(0) @map("duration_seconds")
+
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId], name: "idx_sessions_ticket")
+  @@map("ticket_resolution_sessions")
+}
+
+// 12. Ticket Comments & Notes
+model TicketComment {
+  id            Int         @id @default(autoincrement())
+  ticketId      String      @map("ticket_id") @db.VarChar(50)
+  authorUserId  Int         @map("author_user_id")
+  commentType   CommentType @default(INTERNAL_NOTE) @map("comment_type")
+  message       String      @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  author User   @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([ticketId], name: "idx_comments_ticket")
+  @@map("ticket_comments")
+}
+
+// 13. Ticket Attachments
+model TicketAttachment {
+  id         Int      @id @default(autoincrement())
+  ticketId   String   @map("ticket_id") @db.VarChar(50)
+  fileName   String   @map("file_name") @db.VarChar(255)
+  filePath   String   @map("file_path") @db.VarChar(255)
+  fileSize   Int      @map("file_size")
+  mimeType   String   @map("mime_type") @db.VarChar(100)
+  uploadedBy Int      @map("uploaded_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  uploader User   @relation(fields: [uploadedBy], references: [id], onDelete: Restrict)
+
+  @@index([ticketId], name: "idx_attachments_ticket")
+  @@map("ticket_attachments")
+}
+
+// 14. Customer Feedback (CSAT)
+model TicketFeedback {
+  id             Int      @id @default(autoincrement())
+  ticketId       String   @unique @map("ticket_id") @db.VarChar(50)
+  customerUserId Int      @map("customer_user_id")
+  rating         Int      @db.SmallInt
+  remarks        String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  customer User   @relation(fields: [customerUserId], references: [id], onDelete: Restrict)
+
+  @@map("ticket_feedback")
+}
+
+// 15. SLA Configurations
+model SlaConfiguration {
+  id                       Int            @id @default(autoincrement())
+  priority                 TicketPriority @unique
+  responseTimeHours        Float          @map("response_time_hours")
+  resolutionTimeHours      Float          @map("resolution_time_hours")
+  warningThresholdPercent  Int            @default(75) @map("warning_threshold_percent")
+  isActive                 Boolean        @default(true) @map("is_active")
+  updatedAt                DateTime       @default(now()) @updatedAt @map("updated_at")
+
+  @@map("sla_configurations")
+}
+
+// 16. User In-App Notifications
+model Notification {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  title     String   @db.VarChar(150)
+  message   String   @db.Text
+  type      String   @db.VarChar(50)
+  isRead    Boolean  @default(false) @map("is_read")
+  linkUrl   String?  @map("link_url") @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead], name: "idx_notif_user_unread")
+  @@map("notifications")
+}
+
+// 17. Multi-Channel Notification Logs
+model NotificationLog {
+  id           Int                 @id @default(autoincrement())
+  channel      NotificationChannel
+  recipient    String              @db.VarChar(191)
+  eventType    String              @map("event_type") @db.VarChar(100)
+  payloadJson  String?             @map("payload_json") @db.Text
+  status       NotificationStatus  @default(SENT)
+  errorMessage String?             @map("error_message") @db.Text
+  sentAt       DateTime            @default(now()) @map("sent_at")
+
+  @@index([channel], name: "idx_notif_logs_channel")
+  @@index([sentAt], name: "idx_notif_logs_sent_at")
+  @@map("notification_logs")
+}
+
+// 18. Audit Logs
+model AuditLog {
+  id             Int      @id @default(autoincrement())
+  actorUserId    Int?     @map("actor_user_id")
+  action         String   @db.VarChar(100)
+  entityType     String   @map("entity_type") @db.VarChar(50)
+  entityId       String   @map("entity_id") @db.VarChar(50)
+  oldValuesJson  String?  @map("old_values_json") @db.Text
+  newValuesJson  String?  @map("new_values_json") @db.Text
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId], name: "idx_audit_entity")
+  @@index([createdAt], name: "idx_audit_created_at")
+  @@map("audit_logs")
+}
+
+// 19. System Settings
+model SystemSetting {
+  settingKey   String   @id @map("setting_key") @db.VarChar(100)
+  settingValue String   @map("setting_value") @db.Text
+  description  String?  @db.VarChar(255)
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+// 20. Monotonic Sequence Generator (Guaranteed Collision-Safe ID Allocation)
+model SequenceTracker {
+  name         String   @id @db.VarChar(50) // e.g. 'TICKET_SEQ', 'COMPANY_SEQ'
+  currentValue Int      @default(0) @map("current_value")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("sequence_trackers")
+}

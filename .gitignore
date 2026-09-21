@@ -1,16 +1,86 @@
+# Dependencies
 node_modules/
-*/node_modules/
-*/*/node_modules/
-dist/
-*/dist/
-build/
-*/build/
+**/node_modules/
+
+# Production / Build Output
 .next/
-*/.next/
-.dart_tool/
-*/.dart_tool/
-uploads/
-*/uploads/
-*.log
+**/.next/
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Environment Variables & Secrets
 .env
+.env.*
 .env.local
+.env.development
+.env.test
+.env.production
+.env.staging
+!.env.example
+!.env.*.example
+
+# Certificates & Private Keys
+*.key
+*.pem
+*.crt
+*.cer
+*.pfx
+*.p12
+certs/
+**/certs/
+
+# Local Database, Embedded Data & Backups
+.pgdata/
+**/.pgdata/
+*.sqlite
+*.sqlite*
+*.db
+backups/
+**/backups/
+
+# File Uploads & Temp Storage
+uploads/
+**/uploads/
+tmp/
+**/tmp/
+*.tmp
+
+# Logs
+*.log
+**/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Flutter / Mobile artifacts
+.dart_tool/
+**/.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+
+# IDE / Editor artifacts
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Generated
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
