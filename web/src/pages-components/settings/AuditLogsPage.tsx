@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { ShieldAlert, RefreshCw, Search } from 'lucide-react';
+import { formatDateTime } from '../../utils/date';
 
 export const AuditLogsPage: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([]);
@@ -110,7 +111,7 @@ export const AuditLogsPage: React.FC = () => {
               filteredLogs.map((log) => (
                 <tr key={log.id}>
                   <td style={{ fontSize: 12, color: '#64748b', whiteSpace: 'nowrap' }}>
-                    {new Date(log.created_at).toLocaleString()}
+                    {formatDateTime(log.created_at)}
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{log.actor_email || 'System'}</div>

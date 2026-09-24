@@ -16,6 +16,7 @@ import {
   CheckCircle,
   AlertTriangle,
 } from 'lucide-react';
+import { formatDate } from '../../utils/date';
 
 export const CustomerMobileView: React.FC = () => {
   const { user } = useAuth();
@@ -344,7 +345,7 @@ export const CustomerMobileView: React.FC = () => {
                       {t.problem_type}
                     </div>
                     <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
-                      {new Date(t.created_at).toLocaleDateString()} • {t.assigned_level} Tier
+                      {formatDate(t.created_at)} • {t.assigned_level} Tier
                     </div>
                   </div>
                 ))}

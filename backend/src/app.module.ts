@@ -17,6 +17,9 @@ import { ImportModule } from './import/import.module';
 import { ReportsModule } from './reports/reports.module';
 import { JobsModule } from './jobs/jobs.module';
 import { HealthModule } from './health/health.module';
+import { ProductsModule } from './products/products.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { ImplementationsModule } from './implementations/implementations.module';
 
 @Module({
   imports: [
@@ -35,6 +38,9 @@ import { HealthModule } from './health/health.module';
     CompaniesModule,
     EmployeesModule,
     TicketsModule,
+    ProductsModule,
+    SubscriptionsModule,
+    ImplementationsModule,
     ImportModule,
     ReportsModule,
     JobsModule,

@@ -114,6 +114,52 @@ export const api = {
   getSLASettings: () => request('/reports/sla'),
   updateSLASettings: (data: any) => request('/reports/sla', { method: 'PUT', body: JSON.stringify(data) }),
 
+  // Products
+  getProducts: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/products?${qs}`);
+  },
+  getProduct: (id: string) => request(`/products/${id}`),
+  createProduct: (data: any) => request('/products', { method: 'POST', body: JSON.stringify(data) }),
+  updateProduct: (id: string, data: any) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleProductStatus: (id: string, isActive: boolean) =>
+    request(`/products/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
+  getProductStats: () => request('/products/stats'),
+
+  // Subscriptions & AMC
+  getSubscriptions: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/subscriptions?${qs}`);
+  },
+  getSubscription: (id: string) => request(`/subscriptions/${id}`),
+  createSubscription: (data: any) => request('/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
+  updateSubscription: (id: string, data: any) => request(`/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  sendSubscriptionWarning: (id: string, message?: string) =>
+    request(`/subscriptions/${id}/warning`, { method: 'POST', body: JSON.stringify({ message }) }),
+  renewSubscription: (id: string, data: any) =>
+    request(`/subscriptions/${id}/renew`, { method: 'POST', body: JSON.stringify(data) }),
+  getSubscriptionStats: () => request('/subscriptions/stats'),
+
+  // Implementations
+  getImplementations: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/implementations?${qs}`);
+  },
+  getImplementation: (id: string) => request(`/implementations/${id}`),
+  createImplementation: (data: any) => request('/implementations', { method: 'POST', body: JSON.stringify(data) }),
+  updateImplementation: (id: string, data: any) =>
+    request(`/implementations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getImplementationStats: () => request('/implementations/stats'),
+
+  // Task Allotment
+  getTaskAllotmentQueue: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/task-allotment/queue?${qs}`);
+  },
+  getEligibleEmployees: () => request('/task-allotment/eligible-employees'),
+  getAllotmentStats: () => request('/task-allotment/stats'),
+  directAssignTicket: (data: any) => request('/task-allotment/assign', { method: 'POST', body: JSON.stringify(data) }),
+
   // Audit Logs
   getAuditLogs: () => request('/audit-logs'),
 };

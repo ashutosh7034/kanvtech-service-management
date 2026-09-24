@@ -6,12 +6,14 @@ import { SLABadge } from '../../components/common/SLABadge';
 import {
   Ticket,
   AlertOctagon,
-  Clock,
   CheckCircle2,
-  ArrowUpRight,
   CheckSquare,
-  Users,
   TrendingUp,
+  Package,
+  Rocket,
+  ShieldCheck,
+  UserCheck,
+  ArrowRight,
 } from 'lucide-react';
 
 interface Props {
@@ -21,7 +23,15 @@ interface Props {
 export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
   const { user } = useAuth();
   const [data, setData] = useState<any>(null);
+  const [bizStats, setBizStats] = useState<{
+    products?: any;
+    subscriptions?: any;
+    implementations?: any;
+    allotment?: any;
+  }>({});
   const [loading, setLoading] = useState(true);
+
+  const isManagement = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   useEffect(() => {
     loadDashboard();
@@ -33,6 +43,25 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
       const res = await api.getDashboard();
       if (res.metrics) {
         setData(res.metrics);
+      }
+
+      if (isManagement) {
+        try {
+          const [pStats, sStats, iStats, aStats] = await Promise.all([
+            api.getProductStats().catch(() => ({ stats: null })),
+            api.getSubscriptionStats().catch(() => ({ stats: null })),
+            api.getImplementationStats().catch(() => ({ stats: null })),
+            api.getAllotmentStats().catch(() => ({ stats: null })),
+          ]);
+          setBizStats({
+            products: pStats.stats,
+            subscriptions: sStats.stats,
+            implementations: iStats.stats,
+            allotment: aStats.stats,
+          });
+        } catch (e) {
+          console.error('Failed to load business stats', e);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -60,6 +89,11 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
+          {isManagement && (
+            <button className="btn btn-secondary" onClick={() => onNavigate('task_allotment')}>
+              <UserCheck size={16} /> Task Allotment ({bizStats.allotment?.totalUnassigned || 0})
+            </button>
+          )}
           <button className="btn btn-primary" onClick={() => onNavigate('tickets_create')}>
             + Open New Ticket
           </button>
@@ -170,6 +204,89 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
           </div>
         </div>
       </div>
+
+      {/* Management Quick Stats (Business, AMC, Implementations) */}
+      {isManagement && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 20 }}>
+          <div
+            className="card"
+            style={{ marginBottom: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', border: '1px solid #bbf7d0' }}
+            onClick={() => onNavigate('products')}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>
+                  Product Catalog
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#14532d', marginTop: 4 }}>
+                  {bizStats.products?.active || 0} <span style={{ fontSize: 13, fontWeight: 400, color: '#4ade80' }}>/ {bizStats.products?.total || 0} Total</span>
+                </div>
+                <div style={{ fontSize: 12, color: '#166534', marginTop: 4 }}>
+                  Active software & hardware modules
+                </div>
+              </div>
+              <div style={{ background: '#dcfce7', padding: 10, borderRadius: 8 }}>
+                <Package size={22} color="#16a34a" />
+              </div>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#15803d' }}>
+              Manage Products <ArrowRight size={13} />
+            </div>
+          </div>
+
+          <div
+            className="card"
+            style={{ marginBottom: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)', border: '1px solid #bfdbfe' }}
+            onClick={() => onNavigate('maintenance')}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#1e40af', textTransform: 'uppercase' }}>
+                  AMC & Subscriptions
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#1e3a8a', marginTop: 4 }}>
+                  {bizStats.subscriptions?.active || 0} Active
+                </div>
+                <div style={{ fontSize: 12, color: '#1e40af', marginTop: 4 }}>
+                  {bizStats.subscriptions?.expiringSoon || 0} expiring soon • {bizStats.subscriptions?.expired || 0} expired
+                </div>
+              </div>
+              <div style={{ background: '#dbeafe', padding: 10, borderRadius: 8 }}>
+                <ShieldCheck size={22} color="#2563eb" />
+              </div>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#1d4ed8' }}>
+              View Contracts <ArrowRight size={13} />
+            </div>
+          </div>
+
+          <div
+            className="card"
+            style={{ marginBottom: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #ffffff 0%, #faf5ff 100%)', border: '1px solid #e9d5ff' }}
+            onClick={() => onNavigate('implementations')}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#6b21a8', textTransform: 'uppercase' }}>
+                  Client Implementations
+                </div>
+                <div style={{ fontSize: 22, fontWeight: 700, color: '#581c87', marginTop: 4 }}>
+                  {bizStats.implementations?.active || 0} Ongoing
+                </div>
+                <div style={{ fontSize: 12, color: '#6b21a8', marginTop: 4 }}>
+                  {bizStats.implementations?.avgProgress || 0}% average progress ({bizStats.implementations?.live || 0} Live)
+                </div>
+              </div>
+              <div style={{ background: '#f3e8ff', padding: 10, borderRadius: 8 }}>
+                <Rocket size={22} color="#9333ea" />
+              </div>
+            </div>
+            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#7e22ce' }}>
+              Track Onboarding <ArrowRight size={13} />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Middle Section: SLA Breakdown & Priority Distribution */}
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 20 }}>

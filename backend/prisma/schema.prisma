@@ -55,10 +55,30 @@ enum TicketLevel {
 enum TicketStatus {
   OPEN
   IN_PROGRESS
+  REOPENED
   RESOLVED
   MANAGER_REVIEW
   CUSTOMER_FEEDBACK
   CLOSED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRING_SOON
+  EXPIRED
+  RENEWED
+}
+
+enum ImplementationStatus {
+  NEW
+  PLANNING
+  IN_PROGRESS
+  CONFIGURATION
+  TESTING
+  READY_FOR_GO_LIVE
+  LIVE
+  COMPLETED
+  BLOCKED
 }
 
 enum SLAStatus {
@@ -120,6 +140,7 @@ model User {
   comments          TicketComment[]
   attachments       TicketAttachment[]
   feedback          TicketFeedback[]
+  reopenedTickets   TicketReopenHistory[]
   notifications     Notification[]
   auditLogs         AuditLog[]
 
@@ -148,8 +169,10 @@ model Company {
   createdAt              DateTime @default(now()) @map("created_at")
   updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
 
-  contacts CompanyContact[]
-  tickets  Ticket[]
+  contacts        CompanyContact[]
+  tickets         Ticket[]
+  subscriptions   Subscription[]
+  implementations Implementation[]
 
   @@index([companyName], name: "idx_companies_name")
   @@index([isActive], name: "idx_companies_active")
@@ -194,15 +217,17 @@ model Employee {
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at")
 
-  user                User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  manager             Employee?                 @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
-  subordinates        Employee[]                @relation("EmployeeManager")
-  attendance          EmployeeAttendance[]
-  assignedTickets     Ticket[]                  @relation("AssignedEmployee")
-  assignments         TicketAssignment[]
-  escalationsMade     TicketEscalation[]        @relation("EscalatedBy")
-  escalationsReceived TicketEscalation[]        @relation("AssignedTo")
-  resolutionSessions  TicketResolutionSession[]
+  user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  manager              Employee?                 @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
+  subordinates         Employee[]                @relation("EmployeeManager")
+  attendance           EmployeeAttendance[]
+  assignedTickets      Ticket[]                  @relation("AssignedEmployee")
+  assignments          TicketAssignment[]
+  escalationsMade      TicketEscalation[]        @relation("EscalatedBy")
+  escalationsReceived  TicketEscalation[]        @relation("AssignedTo")
+  resolutionSessions   TicketResolutionSession[]
+  ownedSubscriptions   Subscription[]
+  ownedImplementations Implementation[]
 
   @@index([level], name: "idx_employees_level")
   @@index([status], name: "idx_employees_status")
@@ -265,6 +290,7 @@ model Ticket {
   comments           TicketComment[]
   attachments        TicketAttachment[]
   feedback           TicketFeedback?
+  reopenHistory      TicketReopenHistory[]
 
   @@index([status], name: "idx_tickets_status")
   @@index([companyId], name: "idx_tickets_company")
@@ -482,3 +508,99 @@ model SequenceTracker {
 
   @@map("sequence_trackers")
 }
+
+// 21. Product Master
+model Product {
+  id          String   @id @db.VarChar(50) // PROD-0001
+  code        String   @unique @db.VarChar(50)
+  name        String   @db.VarChar(150)
+  category    String   @db.VarChar(100)
+  description String?  @db.Text
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  subscriptions   Subscription[]
+  implementations Implementation[]
+
+  @@index([code], name: "idx_products_code")
+  @@index([category], name: "idx_products_category")
+  @@index([isActive], name: "idx_products_active")
+  @@map("products")
+}
+
+// 22. Annual Maintenance / Subscriptions
+model Subscription {
+  id                String             @id @db.VarChar(50) // SUB-0001
+  companyId         String             @map("company_id") @db.VarChar(50)
+  productId         String             @map("product_id") @db.VarChar(50)
+  planName          String             @map("plan_name") @db.VarChar(100)
+  startDate         DateTime           @map("start_date")
+  expiryDate        DateTime           @map("expiry_date")
+  renewalDate       DateTime?          @map("renewal_date")
+  status            SubscriptionStatus @default(ACTIVE)
+  ownerEmployeeId   String?            @map("owner_employee_id") @db.VarChar(50)
+  notes             String?            @db.Text
+  lastWarningSentAt DateTime?          @map("last_warning_sent_at")
+  warningCount      Int                @default(0) @map("warning_count")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @default(now()) @updatedAt @map("updated_at")
+
+  company         Company          @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product         Product          @relation(fields: [productId], references: [id], onDelete: Restrict)
+  ownerEmployee   Employee?        @relation(fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  implementations Implementation[]
+
+  @@index([companyId], name: "idx_subscriptions_company")
+  @@index([productId], name: "idx_subscriptions_product")
+  @@index([status], name: "idx_subscriptions_status")
+  @@index([expiryDate], name: "idx_subscriptions_expiry")
+  @@map("subscriptions")
+}
+
+// 23. New Implementations
+model Implementation {
+  id                 String               @id @db.VarChar(50) // IMP-0001
+  companyId          String               @map("company_id") @db.VarChar(50)
+  productId          String               @map("product_id") @db.VarChar(50)
+  subscriptionId     String?              @map("subscription_id") @db.VarChar(50)
+  ownerEmployeeId    String?              @map("owner_employee_id") @db.VarChar(50)
+  teamMembersJson    String?              @map("team_members_json") @db.Text
+  startDate          DateTime             @map("start_date")
+  targetGoLiveDate   DateTime             @map("target_go_live_date")
+  actualGoLiveDate   DateTime?            @map("actual_go_live_date")
+  status             ImplementationStatus @default(NEW)
+  progressPercentage Int                  @default(0) @map("progress_percentage")
+  pendingActivities  String?              @map("pending_activities") @db.Text
+  notes              String?              @db.Text
+  completedAt        DateTime?            @map("completed_at")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at")
+
+  company       Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  subscription  Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  ownerEmployee Employee?     @relation(fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+
+  @@index([companyId], name: "idx_implementations_company")
+  @@index([productId], name: "idx_implementations_product")
+  @@index([status], name: "idx_implementations_status")
+  @@map("implementations")
+}
+
+// 24. Ticket Reopen History
+model TicketReopenHistory {
+  id             Int          @id @default(autoincrement())
+  ticketId       String       @map("ticket_id") @db.VarChar(50)
+  reopenedBy     Int          @map("reopened_by")
+  reopenReason   String       @map("reopen_reason") @db.Text
+  previousStatus TicketStatus @map("previous_status")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  ticket         Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  reopenedByUser User   @relation(fields: [reopenedBy], references: [id], onDelete: Restrict)
+
+  @@index([ticketId], name: "idx_reopen_ticket")
+  @@map("ticket_reopen_history")
+}
+

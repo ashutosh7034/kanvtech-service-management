@@ -3,6 +3,7 @@ import { Bell, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { api } from '../../api/client';
+import { formatTime } from '../../utils/date';
 
 interface Props {
   pageTitle: string;
@@ -153,7 +154,7 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
                       <div style={{ fontWeight: 600, fontSize: 12, color: '#0f172a' }}>{n.title}</div>
                       <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>{n.message}</div>
                       <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>
-                        {new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {formatTime(n.created_at)}
                       </div>
                     </div>
                   ))

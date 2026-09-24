@@ -167,41 +167,66 @@ export class TicketsController {
   }
 
   @Post(':id/reopen')
-  @Roles('ADMIN', 'MANAGER')
-  @ApiOperation({ summary: 'Manager reopens ticket sending back to IN_PROGRESS' })
+  @Roles('ADMIN', 'MANAGER', 'CUSTOMER')
+  @ApiOperation({ summary: 'Customer or Manager reopens ticket sending back to active support workflow' })
   async reopenTicket(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    if (req.user.role === 'CUSTOMER') {
+      const ticket = await this.ticketsService.getTicketById(id);
+      if (!ticket || ticket.company_id !== req.user.companyId) {
+        return { success: false, error: 'Unauthorized ticket access' };
+      }
+    }
     await this.approvalsService.reopenResolution({
       ticketId: id,
-      managerUserId: req.user.userId,
-      reason: body.reason || 'Additional investigation requested by manager',
+      userId: req.user.userId,
+      reason: body.reason || body.reopenReason || body.reopen_reason || 'Problem is still occurring',
+      isCustomer: req.user.role === 'CUSTOMER',
     });
-    return { success: true, message: 'Ticket reopened' };
+    const reopenedTicket = await this.ticketsService.getTicketById(id);
+    return { success: true, ticket: reopenedTicket, message: 'Ticket reopened successfully and returned to support queue' };
   }
 
   @Post(':id/feedback')
   @Roles('ADMIN', 'CUSTOMER')
   @ApiOperation({ summary: 'Customer submits CSAT rating and remarks (auto-closes ticket)' })
   async submitFeedback(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    if (req.user.role === 'CUSTOMER') {
+      const ticket = await this.ticketsService.getTicketById(id);
+      if (!ticket || ticket.company_id !== req.user.companyId) {
+        return { success: false, error: 'Unauthorized ticket access' };
+      }
+    }
     await this.feedbackService.submitFeedback({
       ticketId: id,
       customerUserId: req.user.userId,
       rating: Number(body.rating),
       remarks: body.remarks,
     });
-    return { success: true, message: 'Feedback submitted and ticket closed' };
+    const feedbackTicket = await this.ticketsService.getTicketById(id);
+    return { success: true, ticket: feedbackTicket, message: 'Feedback submitted and ticket closed' };
   }
 
   @Post(':id/close')
-  @Roles('ADMIN', 'MANAGER')
-  @ApiOperation({ summary: 'Explicit ticket closure by manager or admin' })
+  @Roles('ADMIN', 'MANAGER', 'CUSTOMER')
+  @ApiOperation({ summary: 'Explicit ticket closure by customer, manager or admin' })
   async closeTicket(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    if (req.user.role === 'CUSTOMER') {
+      const ticket = await this.ticketsService.getTicketById(id);
+      if (!ticket || ticket.company_id !== req.user.companyId) {
+        return { success: false, error: 'Unauthorized ticket access' };
+      }
+    }
     await this.feedbackService.closeTicket({
       ticketId: id,
       closedByUserId: req.user.userId,
-      closureReason: body.closureReason || body.closure_reason || 'Manual closure by authorized manager',
-      source: 'MANUAL',
+      closureReason:
+        body.closureReason ||
+        body.closure_reason ||
+        (req.user.role === 'CUSTOMER' ? 'Customer confirmed resolution and closed ticket' : 'Manual closure by authorized manager'),
+      source: req.user.role === 'CUSTOMER' ? 'FEEDBACK' : 'MANUAL',
     });
-    return { success: true, message: 'Ticket closed' };
+    const closedTicket = await this.ticketsService.getTicketById(id);
+    return { success: true, ticket: closedTicket, message: 'Ticket successfully closed' };
   }
 
   @Post(':id/comments')

@@ -10,7 +10,9 @@ import {
   Lock,
   FileText,
   Paperclip,
+  RotateCcw,
 } from 'lucide-react';
+import { formatDateTime } from '../../utils/date';
 
 interface TimelineEntry {
   id: number;
@@ -29,6 +31,8 @@ export const TicketTimeline: React.FC<{ items: TimelineEntry[] }> = ({ items }) 
       case 'CREATED':
         return { icon: <PlusCircle size={12} />, className: 'created', label: 'Created' };
       case 'ASSIGNED':
+      case 'TICKET_ASSIGNED':
+      case 'TICKET_REASSIGNED':
         return { icon: <UserCheck size={12} />, className: 'assigned', label: 'Assigned' };
       case 'STARTED':
         return { icon: <Play size={12} />, className: 'started', label: 'Work Started' };
@@ -39,7 +43,9 @@ export const TicketTimeline: React.FC<{ items: TimelineEntry[] }> = ({ items }) 
       case 'REVIEW_APPROVED':
         return { icon: <CheckSquare size={12} />, className: 'review', label: 'Manager Approved' };
       case 'REVIEW_REOPENED':
-        return { icon: <ArrowUpRight size={12} />, className: 'escalated', label: 'Reopened' };
+      case 'REOPENED':
+      case 'CUSTOMER_REOPENED':
+        return { icon: <RotateCcw size={12} />, className: 'escalated', label: 'Customer Reopened' };
       case 'FEEDBACK_SUBMITTED':
         return { icon: <Star size={12} />, className: 'feedback', label: 'Feedback' };
       case 'CLOSED':
@@ -52,14 +58,7 @@ export const TicketTimeline: React.FC<{ items: TimelineEntry[] }> = ({ items }) 
   };
 
   const formatDate = (isoString: string) => {
-    const d = new Date(isoString);
-    return d.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true,
-    });
+    return formatDateTime(isoString);
   };
 
   if (!items || items.length === 0) {

@@ -4,9 +4,13 @@ import {
   Building2,
   Users,
   Ticket,
+  UserCheck,
   ArrowUpRight,
   CheckSquare,
   BarChart3,
+  Package,
+  Rocket,
+  ShieldCheck,
   FileSpreadsheet,
   Settings,
   ShieldAlert,
@@ -78,6 +82,16 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
           <span>Support Tickets</span>
         </button>
 
+        {isAccessible(['MANAGER']) && (
+          <button
+            className={`nav-item ${currentView === 'task_allotment' ? 'active' : ''}`}
+            onClick={() => onNavigate('task_allotment')}
+          >
+            <UserCheck size={16} />
+            <span>Task Allotment</span>
+          </button>
+        )}
+
         {isAccessible(['MANAGER', 'L2_EMPLOYEE', 'L3_EMPLOYEE']) && (
           <button
             className={`nav-item ${currentView === 'escalations' ? 'active' : ''}`}
@@ -106,6 +120,36 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
             <BarChart3 size={16} />
             <span>Reports & SLA</span>
           </button>
+        )}
+
+        {isAccessible(['MANAGER']) && (
+          <>
+            <div className="nav-section-title" style={{ marginTop: 10 }}>Business Management</div>
+
+            <button
+              className={`nav-item ${currentView === 'products' ? 'active' : ''}`}
+              onClick={() => onNavigate('products')}
+            >
+              <Package size={16} />
+              <span>Product Master</span>
+            </button>
+
+            <button
+              className={`nav-item ${currentView === 'implementations' ? 'active' : ''}`}
+              onClick={() => onNavigate('implementations')}
+            >
+              <Rocket size={16} />
+              <span>New Implementations</span>
+            </button>
+
+            <button
+              className={`nav-item ${currentView === 'maintenance' ? 'active' : ''}`}
+              onClick={() => onNavigate('maintenance')}
+            >
+              <ShieldCheck size={16} />
+              <span>Annual Maintenance</span>
+            </button>
+          </>
         )}
 
         {isAccessible(['MANAGER']) && (

@@ -42,6 +42,7 @@ export class TicketsService {
     const activeStatuses: TicketStatus[] = [
       TicketStatus.OPEN,
       TicketStatus.IN_PROGRESS,
+      TicketStatus.REOPENED,
       TicketStatus.RESOLVED,
       TicketStatus.MANAGER_REVIEW,
       TicketStatus.CUSTOMER_FEEDBACK,
@@ -56,7 +57,7 @@ export class TicketsService {
 
     if (activeCount >= 2) {
       throw new BadRequestException(
-        'Customer currently has 2 active tickets in progress. Per Kanvtech policy, a new ticket cannot be opened until an existing ticket is closed.',
+        'You already have 2 active tickets. Please close an existing ticket before creating a new one.',
       );
     }
   }
@@ -99,10 +100,10 @@ export class TicketsService {
         id: ticketId,
         companyId: params.companyId,
         customerContactId: params.customerContactId,
-        problemType: params.problemType.trim(),
+        problemType: (params.problemType || 'General Incident').trim(),
         priority: params.priority,
-        category: params.category.trim(),
-        description: params.description.trim(),
+        category: (params.category || 'General Support').trim(),
+        description: (params.description || '').trim(),
         createdBy: params.createdByUserId,
         assignedEmployeeId,
         assignedLevel: TicketLevel.L1,
@@ -197,6 +198,12 @@ export class TicketsService {
         feedback: {
           include: { customer: { select: { email: true } } },
         },
+        reopenHistory: {
+          orderBy: { createdAt: 'desc' },
+          include: {
+            reopenedByUser: { select: { email: true, role: true } },
+          },
+        },
       },
     });
 
@@ -210,6 +217,17 @@ export class TicketsService {
     });
 
     const timerStats = await this.timerService.getTotalResolutionTime(id);
+
+    const formattedReopenHistory = (t.reopenHistory || []).map((rh) => ({
+      id: rh.id,
+      ticket_id: rh.ticketId,
+      reopened_by: rh.reopenedBy,
+      reopened_by_email: rh.reopenedByUser?.email,
+      reopened_by_role: rh.reopenedByUser?.role,
+      reopen_reason: rh.reopenReason,
+      previous_status: rh.previousStatus,
+      created_at: rh.createdAt,
+    }));
 
     return {
       id: t.id,
@@ -246,8 +264,12 @@ export class TicketsService {
       assigned_employee_level: t.assignedEmployee?.level || null,
       assigned_employee_phone: t.assignedEmployee?.phone || null,
       creator_email: t.creator?.email || null,
+      is_reopened: (t.reopenHistory && t.reopenHistory.length > 0) || t.status === TicketStatus.REOPENED,
+      isReopened: (t.reopenHistory && t.reopenHistory.length > 0) || t.status === TicketStatus.REOPENED,
       computedSLA: slaInfo,
       timer: timerStats,
+      reopen_history: formattedReopenHistory,
+      reopenHistory: formattedReopenHistory,
       timeline: t.history.map((h) => ({
         id: h.id,
         ticket_id: h.ticketId,

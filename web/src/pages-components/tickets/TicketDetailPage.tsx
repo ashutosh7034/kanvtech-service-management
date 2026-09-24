@@ -28,6 +28,8 @@ import {
   Lock,
 } from 'lucide-react';
 
+import { formatDateTime, formatDate } from '../../utils/date';
+
 interface Props {
   ticketId: string;
   onBack: () => void;
@@ -36,7 +38,7 @@ interface Props {
 export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
   const { user } = useAuth();
   const { showToast } = useNotifications();
-  const [ticket, setTicket] = useState<Ticket | null>(null);
+  const [ticket, setTicket] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   // Modals / Action States
@@ -152,12 +154,16 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
 
   const handleReopen = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!reopenReason.trim()) {
+      alert('Please provide a reason for reopening the ticket');
+      return;
+    }
     setReopening(true);
     try {
       await api.reopenTicket(ticketId, { reason: reopenReason });
       setShowReopenModal(false);
       setReopenReason('');
-      showToast('Ticket reopened and returned to IN_PROGRESS.', 'info');
+      showToast('Ticket reopened and returned to active support.', 'info');
       loadTicket();
     } catch (err: any) {
       showToast(err.message, 'danger');
@@ -171,7 +177,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
     setSubmittingFeedback(true);
     try {
       await api.submitFeedback(ticketId, { rating, remarks: feedbackRemarks });
-      showToast('Feedback submitted. Ticket is now closed.', 'success');
+      showToast('Feedback submitted and ticket closed successfully.', 'success');
       loadTicket();
     } catch (err: any) {
       showToast(err.message, 'danger');
@@ -219,6 +225,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
   const isManagerOrAdmin = ['ADMIN', 'MANAGER'].includes(user?.role || '');
   const canWork = isAssignedToMe || isManagerOrAdmin;
   const isCustomer = user?.role === 'CUSTOMER';
+  const isReopenEligible = ['MANAGER_REVIEW', 'CUSTOMER_FEEDBACK', 'RESOLVED', 'CLOSED'].includes(ticket.status);
 
   return (
     <div>
@@ -229,13 +236,20 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
         </button>
 
         <div style={{ display: 'flex', gap: 8 }}>
+          {/* Customer Reopen Button */}
+          {isCustomer && isReopenEligible && (
+            <button className="btn btn-danger btn-sm" onClick={() => setShowReopenModal(true)}>
+              <RotateCcw size={14} /> Reopen Ticket
+            </button>
+          )}
+
           {canWork && ticket.status === 'OPEN' && (
             <button className="btn btn-primary" onClick={handleStartWork}>
               <Play size={14} /> Start Work
             </button>
           )}
 
-          {canWork && ticket.status === 'IN_PROGRESS' && (
+          {canWork && (ticket.status === 'IN_PROGRESS' || ticket.status === 'REOPENED') && (
             <>
               {ticket.assigned_level !== 'PARENT_COMPANY' && (
                 <button className="btn btn-secondary" onClick={() => setShowEscalateModal(true)}>
@@ -287,7 +301,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
               {ticket.problem_type}
             </h3>
             <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-              Category: <strong>{ticket.category}</strong> • Opened on {new Date(ticket.created_at).toLocaleString()}
+              Category: <strong>{ticket.category}</strong> • Opened on {formatDateTime(ticket.created_at)}
             </div>
           </div>
 
@@ -296,7 +310,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
               <SLABadge status={ticket.computedSLA?.status || ticket.sla_status} remainingSeconds={ticket.computedSLA?.remainingSeconds} />
             </div>
             <div style={{ fontSize: 11, color: '#64748b' }}>
-              Deadline: {ticket.sla_deadline ? new Date(ticket.sla_deadline).toLocaleString() : 'N/A'}
+              Deadline: {formatDateTime(ticket.sla_deadline)}
             </div>
           </div>
         </div>
@@ -337,8 +351,8 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
         </div>
       )}
 
-      {/* Customer Feedback Prompt Banner */}
-      {ticket.status === 'CUSTOMER_FEEDBACK' && (
+      {/* Customer Verification & Feedback Prompt Banner */}
+      {(ticket.status === 'CUSTOMER_FEEDBACK' || (isCustomer && (ticket.status === 'RESOLVED' || ticket.status === 'MANAGER_REVIEW'))) && (
         <div
           style={{
             background: '#fff7ed',
@@ -348,11 +362,26 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             marginBottom: 16,
           }}
         >
-          <div style={{ fontWeight: 700, color: '#9a3412', fontSize: 15, marginBottom: 4 }}>
-            Customer Experience Rating (CSAT)
-          </div>
-          <div style={{ fontSize: 13, color: '#7c2d12', marginBottom: 12 }}>
-            The technical team has completed your resolution and management has verified the fix. Please rate your service experience to conclude closure.
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, color: '#9a3412', fontSize: 15, marginBottom: 4 }}>
+                Customer Verification & CSAT Feedback
+              </div>
+              <div style={{ fontSize: 13, color: '#7c2d12', marginBottom: 12 }}>
+                Technical resolution has been submitted. Please test the solution. If satisfied, provide your service rating and conclude closure. If the issue persists, click "Reopen Ticket".
+              </div>
+            </div>
+            {isCustomer && (
+              <button
+                type="button"
+                className="btn btn-danger btn-sm"
+                onClick={() => setShowReopenModal(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <RotateCcw size={13} />
+                Problem Not Solved? Reopen Ticket
+              </button>
+            )}
           </div>
 
           <form onSubmit={handleFeedbackSubmit}>
@@ -383,7 +412,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
               <input
                 type="text"
                 className="form-control"
-                placeholder="Optional remarks regarding resolution competency, response time, or satisfaction..."
+                placeholder="Optional remarks regarding resolution quality, timeliness, or technician support..."
                 value={feedbackRemarks}
                 onChange={(e) => setFeedbackRemarks(e.target.value)}
               />
@@ -403,30 +432,43 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             background: '#f8fafc',
             border: '1px solid #cbd5e1',
             borderRadius: 8,
-            padding: '12px 18px',
+            padding: '14px 18px',
             marginBottom: 16,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
           }}
         >
           <div>
             <span style={{ fontWeight: 700, color: '#334155' }}>Ticket Formally Closed</span>
-            <div style={{ fontSize: 12, color: '#64748b' }}>
-              Closed on {ticket.closed_at ? new Date(ticket.closed_at).toLocaleString() : 'N/A'}. Reason: {ticket.closure_reason}
+            <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+              Closed on {formatDateTime(ticket.closed_at)}. {ticket.closure_reason ? `Reason: ${ticket.closure_reason}` : ''}
             </div>
           </div>
-          {ticket.feedback && (
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ea580c', fontWeight: 700 }}>
-                <Star size={16} fill="#ea580c" />
-                <span>{ticket.feedback.rating} / 5 Stars</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            {ticket.feedback && (
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#ea580c', fontWeight: 700 }}>
+                  <Star size={16} fill="#ea580c" />
+                  <span>{ticket.feedback.rating} / 5 Stars</span>
+                </div>
+                {ticket.feedback.remarks && (
+                  <div style={{ fontSize: 11, color: '#64748b' }}>"{ticket.feedback.remarks}"</div>
+                )}
               </div>
-              {ticket.feedback.remarks && (
-                <div style={{ fontSize: 11, color: '#64748b' }}>"{ticket.feedback.remarks}"</div>
-              )}
-            </div>
-          )}
+            )}
+            {isCustomer && (
+              <button
+                className="btn btn-outline btn-sm"
+                onClick={() => setShowReopenModal(true)}
+                title="Reopen ticket if issue recurred"
+              >
+                <RotateCcw size={13} /> Reopen Ticket
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -678,7 +720,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
                         )}
                       </div>
                       <span style={{ fontSize: 11, color: '#94a3b8' }}>
-                        {new Date(cm.created_at).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })}
+                        {formatDateTime(cm.created_at)}
                       </span>
                     </div>
                     <div style={{ fontSize: 13, color: '#334155', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
@@ -694,7 +736,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
           </div>
         </div>
 
-        {/* Right Column: Timer & Timeline */}
+        {/* Right Column: Timer & Timeline & Reopen History */}
         <div>
           {/* Continuous Resolution Timer Widget */}
           <ResolutionTimerWidget
@@ -704,6 +746,29 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             canControl={canWork}
             onStart={handleStartWork}
           />
+
+          {/* Reopen History Card (if any reopens occurred) */}
+          {(ticket.reopen_history || ticket.reopenHistory || []).length > 0 && (
+            <div className="card" style={{ marginTop: 16, borderLeft: '4px solid #ef4444' }}>
+              <div className="card-header" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <RotateCcw size={14} color="#ef4444" />
+                <div className="card-title" style={{ color: '#b91c1c' }}>Ticket Reopen History</div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, fontSize: 12 }}>
+                {(ticket.reopen_history || ticket.reopenHistory || []).map((rh: any, idx: number) => (
+                  <div key={rh.id || idx} style={{ padding: 10, background: '#fef2f2', borderRadius: 6, border: '1px solid #fecaca' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 600, color: '#991b1b' }}>
+                      <span>Reopened by: {rh.reopened_by_email || `User #${rh.reopened_by}`}</span>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>{formatDateTime(rh.created_at)}</span>
+                    </div>
+                    <div style={{ marginTop: 4, color: '#450a0a', fontStyle: 'italic' }}>
+                      "{rh.reopen_reason}"
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Chronological Audit Timeline */}
           <div className="card" style={{ marginTop: 16 }}>

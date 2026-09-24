@@ -384,6 +384,14 @@ async function runQASuite() {
 
   let lifecycleTicketId: string = '';
 
+  // Clean up any existing active tickets so 2-ticket rule allows new ticket creation
+  await prisma.ticket.updateMany({
+    where: {
+      status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED', 'RESOLVED', 'MANAGER_REVIEW', 'CUSTOMER_FEEDBACK'] },
+    },
+    data: { status: 'CLOSED', closedAt: new Date() },
+  });
+
   // 5.1 Ticket Creation (Customer)
   try {
     const res = await api('/tickets', {
@@ -402,6 +410,7 @@ async function runQASuite() {
       lifecycleTicketId = ticketData.id;
       record('Ticket Lifecycle', '1. Ticket Creation by Customer', 'PASS', `Ticket: ${lifecycleTicketId}`);
     } else {
+      console.log('DEBUG ticket create response:', res.status, JSON.stringify(res.data));
       record('Ticket Lifecycle', '1. Ticket Creation by Customer', 'FAIL', `Status ${res.status}`);
     }
   } catch (e: any) {

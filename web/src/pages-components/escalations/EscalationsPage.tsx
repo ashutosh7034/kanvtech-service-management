@@ -4,6 +4,7 @@ import { Ticket } from '../../types';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { SLABadge } from '../../components/common/SLABadge';
 import { ArrowUpRight, Eye } from 'lucide-react';
+import { formatTime } from '../../utils/date';
 
 export const EscalationsPage: React.FC<{ onNavigateDetail: (id: string) => void }> = ({ onNavigateDetail }) => {
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -115,7 +116,7 @@ export const EscalationsPage: React.FC<{ onNavigateDetail: (id: string) => void 
                         </div>
                         {t.escalated_by_name && (
                           <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>
-                            By {t.escalated_by_name} {t.escalated_at ? `(${new Date(t.escalated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})` : ''}
+                            By {t.escalated_by_name} {t.escalated_at ? `(${formatTime(t.escalated_at)})` : ''}
                           </div>
                         )}
                       </div>

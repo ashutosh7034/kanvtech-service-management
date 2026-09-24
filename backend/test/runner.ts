@@ -18,6 +18,10 @@ import { TicketsService } from '../src/tickets/tickets.service';
 import { ImportService } from '../src/import/import.service';
 import { StorageService } from '../src/storage/storage.service';
 
+import { ProductsService } from '../src/products/products.service';
+import { SubscriptionsService } from '../src/subscriptions/subscriptions.service';
+import { ImplementationsService } from '../src/implementations/implementations.service';
+
 let passed = 0;
 let failed = 0;
 
@@ -59,6 +63,9 @@ async function runAllTests() {
   const storageService = new StorageService();
   const jwtService = new JwtService({ secret: process.env.JWT_SECRET || 'kanvtech-super-secret-production-jwt-key-2026' });
   const authService = new AuthService(prisma, jwtService);
+  const productsService = new ProductsService(prisma, auditService);
+  const subscriptionsService = new SubscriptionsService(prisma, auditService, notificationsService);
+  const implementationsService = new ImplementationsService(prisma, auditService);
 
   // Seed baseline masters
   await seedDatabase();
@@ -183,7 +190,7 @@ async function runAllTests() {
           description: 'Third ticket attempt must fail.',
           createdByUserId: 1,
         }),
-      /Customer currently has 2 active tickets in progress/,
+      /2 active tickets/,
     );
 
     // Close Ticket 2 to keep workspace clean
@@ -480,6 +487,212 @@ async function runAllTests() {
     assert.strictEqual(t.feedback.rating, 5, 'Step 10: Feedback is 5 stars');
     assert(t.timeline.length >= 8, 'Step 10: Complete chronological timeline exists');
     assert(t.sla_status === 'MET' || t.sla_status === 'ON_TRACK', 'Step 10: SLA is MET');
+  });
+
+  // 20. Product Master Management
+  await test('20. Product Master - CRUD, Code Uniqueness, and Status Toggle', async () => {
+    const prod = await productsService.createProduct(
+      {
+        name: 'KANVTECH AI Bot Suite',
+        category: 'Artificial Intelligence',
+        description: 'Automated omnichannel customer service assistant.',
+        isActive: true,
+      },
+      1,
+    );
+    assert(prod.id.startsWith('PROD-'), 'Product ID must be formatted as PROD-XXXX');
+    assert.strictEqual(prod.isActive, true);
+
+    const updated = await productsService.updateProduct(
+      prod.id,
+      { description: 'Updated AI assistant suite with multi-agent orchestration.' },
+      1,
+    );
+    assert.strictEqual(updated.description, 'Updated AI assistant suite with multi-agent orchestration.');
+
+    const toggled = await productsService.toggleProductStatus(prod.id, false, 1);
+    assert.strictEqual(toggled.isActive, false, 'Product status toggled to inactive');
+
+    const stats = await productsService.getStats();
+    assert(stats.total >= 5, 'Stats reflect all products in catalog');
+  });
+
+  // 21. Direct Task Allotment (Authority-based assignment)
+  await test('21. Task Allotment - Admin/Manager Direct Assignment to any Tier', async () => {
+    // 1. Create a ticket
+    const ticket = await ticketsService.createTicket({
+      companyId: 'CMP-0001',
+      customerContactId: 1,
+      problemType: 'Critical Production Latency',
+      priority: TicketPriority.HIGH,
+      category: 'Core DB',
+      description: 'Admin directly assigning to L3 senior architect.',
+      createdByUserId: 1,
+    });
+
+    // 2. Admin directly assigns to L3 employee EMP-005 (Priya Nair)
+    await assignmentsService.assignTicket({
+      ticketId: ticket.id,
+      employeeId: 'EMP-005',
+      level: TicketLevel.L3,
+      assignedByUserId: 1,
+      assignmentType: 'MANUAL',
+      notes: 'Direct assignment by Platform Administrator for priority resolution.',
+    });
+
+    const refreshed = await ticketsService.getTicketById(ticket.id);
+    assert.strictEqual(refreshed.assigned_employee_id, 'EMP-005', 'Assigned directly to EMP-005');
+    assert.strictEqual(refreshed.assigned_level, 'L3', 'Level aligned with L3');
+
+    // 3. Reassign to L2 employee EMP-004
+    await assignmentsService.assignTicket({
+      ticketId: ticket.id,
+      employeeId: 'EMP-004',
+      level: TicketLevel.L2,
+      assignedByUserId: 1,
+      assignmentType: 'MANUAL',
+      notes: 'Reassigned to L2 specialist.',
+    });
+
+    const reassigned = await ticketsService.getTicketById(ticket.id);
+    assert.strictEqual(reassigned.assigned_employee_id, 'EMP-004', 'Reassigned to EMP-004');
+
+    // Close ticket
+    await prisma.ticket.update({ where: { id: ticket.id }, data: { status: 'CLOSED' } });
+  });
+
+  // 22. Annual Maintenance & Subscriptions
+  await test('22. Annual Maintenance / Subscriptions - Tracking, Warning & Renewal', async () => {
+    const now = new Date();
+    const sub = await subscriptionsService.createSubscription(
+      {
+        companyId: 'CMP-0001',
+        productId: 'PROD-0001',
+        planName: 'Enterprise SLA Plan 2026',
+        startDate: now,
+        expiryDate: new Date(now.getTime() + 15 * 24 * 60 * 60 * 1000), // 15 days left -> EXPIRING_SOON
+        notes: 'Annual SLA agreement.',
+      },
+      1,
+    );
+    assert(sub.id.startsWith('SUB-'), 'Subscription ID formatted as SUB-XXXX');
+    assert.strictEqual(sub.status, 'EXPIRING_SOON', 'Within 30 days should be EXPIRING_SOON');
+
+    // Send renewal warning
+    const warnRes = await subscriptionsService.sendWarning(sub.id, 1, 'Renewal due in 15 days.');
+    assert.strictEqual(warnRes.success, true);
+    assert.strictEqual(warnRes.subscription.warningCount, 1);
+
+    // Renew subscription for 1 year
+    const renewed = await subscriptionsService.renewSubscription(
+      sub.id,
+      {
+        newExpiryDate: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+        planName: 'Enterprise SLA Plan 2027 (Renewed)',
+        notes: 'PO approved and renewed for 1 year.',
+      },
+      1,
+    );
+    assert.strictEqual(renewed.status, 'RENEWED', 'Status updated to RENEWED');
+    assert(renewed.renewal_date, 'Renewal timestamp recorded');
+  });
+
+  // 23. New Implementations Management
+  await test('23. New Implementation - Lifecycle, Milestones, and Go-Live', async () => {
+    const now = new Date();
+    const imp = await implementationsService.createImplementation(
+      {
+        companyId: 'CMP-0001',
+        productId: 'PROD-0002',
+        startDate: now,
+        targetGoLiveDate: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000),
+        status: 'CONFIGURATION' as any,
+        progressPercentage: 45,
+        pendingActivities: 'Configure POS terminals and load inventory master.',
+        notes: 'Retail rollout phase 1.',
+      },
+      1,
+    );
+    assert(imp.id.startsWith('IMP-'), 'Implementation ID formatted as IMP-XXXX');
+    assert.strictEqual(imp.progress_percentage, 45);
+
+    // Update progress to 100% and mark COMPLETED
+    const completedImp = await implementationsService.updateImplementation(
+      imp.id,
+      {
+        status: 'COMPLETED' as any,
+        progressPercentage: 100,
+        pendingActivities: 'All stores live and operational.',
+      },
+      1,
+    );
+    assert.strictEqual(completedImp.status, 'COMPLETED');
+    assert.strictEqual(completedImp.progress_percentage, 100);
+    assert(completedImp.completed_at, 'Completion timestamp saved');
+  });
+
+  // 24. Customer Ticket Reopening and Full Resolution Cycle
+  await test('24. Customer Reopening - Reopen with Reason, Timer Restart & Reopen History', async () => {
+    // 1. Create a ticket
+    const ticket = await ticketsService.createTicket({
+      companyId: 'CMP-0001',
+      customerContactId: 1,
+      problemType: 'Database Deadlock on Settlement',
+      priority: TicketPriority.HIGH,
+      category: 'Database',
+      description: 'Transaction batch failing with error 1205.',
+      createdByUserId: 7, // customer rajesh@acme.com
+    });
+
+    // 2. Specialist starts and resolves
+    await ticketsService.startWork(ticket.id, 'EMP-002', 3);
+    await approvalsService.submitForReview({
+      ticketId: ticket.id,
+      employeeId: 'EMP-002',
+      resolutionNotes: 'Indexes rebuilt on settlement table.',
+      actorUserId: 3,
+    });
+
+    // 3. Customer checks and says problem is still occurring -> Customer Reopens
+    await approvalsService.reopenResolution({
+      ticketId: ticket.id,
+      userId: 7,
+      reason: 'Issue recurred during midday batch run at 11:30 AM.',
+      isCustomer: true,
+    });
+
+    let reopenedTicket = await ticketsService.getTicketById(ticket.id);
+    assert.strictEqual(reopenedTicket.status, 'IN_PROGRESS', 'Ticket returned to IN_PROGRESS');
+    assert(reopenedTicket.reopen_history.length >= 1, 'Reopen history recorded');
+    assert.strictEqual(
+      reopenedTicket.reopen_history[0].reopen_reason,
+      'Issue recurred during midday batch run at 11:30 AM.',
+      'Reopen reason preserved in history',
+    );
+
+    // 4. Specialist does second pass and submits final resolution
+    await approvalsService.submitForReview({
+      ticketId: ticket.id,
+      employeeId: 'EMP-002',
+      resolutionNotes: 'Applied index hints and isolation level adjustment.',
+      actorUserId: 3,
+    });
+    await approvalsService.approveResolution({
+      ticketId: ticket.id,
+      managerUserId: 2,
+    });
+
+    // 5. Customer submits feedback and closes
+    await feedbackService.submitFeedback({
+      ticketId: ticket.id,
+      customerUserId: 7,
+      rating: 5,
+      remarks: 'Second fix resolved the issue completely. Excellent support.',
+    });
+
+    const finalTicket = await ticketsService.getTicketById(ticket.id);
+    assert.strictEqual(finalTicket.status, 'CLOSED', 'Final ticket status is CLOSED');
+    assert.strictEqual(finalTicket.reopen_history.length, 1, 'Reopen history is retained on closed ticket');
   });
 
   console.log('\n===============================================================');

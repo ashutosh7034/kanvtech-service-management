@@ -17,6 +17,10 @@ import { SLASettingsPage } from './pages-components/settings/SLASettingsPage';
 import { AuditLogsPage } from './pages-components/settings/AuditLogsPage';
 import { CustomerMobileView } from './pages-components/mobile/CustomerMobileView';
 import { EmployeeMobileView } from './pages-components/mobile/EmployeeMobileView';
+import { ProductsPage } from './pages-components/products/ProductsPage';
+import { TaskAllotmentPage } from './pages-components/task-allotment/TaskAllotmentPage';
+import { MaintenancePage } from './pages-components/maintenance/MaintenancePage';
+import { ImplementationsPage } from './pages-components/implementations/ImplementationsPage';
 
 export const App: React.FC = () => {
   const { user, loading } = useAuth();
@@ -53,10 +57,18 @@ export const App: React.FC = () => {
         return 'Customer Support Tickets';
       case 'ticket_detail':
         return `Work Screen • ${activeTicketId || 'Ticket'}`;
+      case 'task_allotment':
+        return 'Task Allotment & Workload Queue';
       case 'escalations':
         return 'Senior Tier Escalation Queue';
       case 'approvals':
         return 'Manager Resolution Approvals';
+      case 'products':
+        return 'Product Master Catalog';
+      case 'implementations':
+        return 'New Client Implementations';
+      case 'maintenance':
+        return 'Annual Maintenance & Subscriptions';
       case 'reports':
         return 'Operational Analytics & Reports';
       case 'import':
@@ -89,6 +101,10 @@ export const App: React.FC = () => {
       case 'approvals':
       case 'reports':
       case 'import':
+      case 'task_allotment':
+      case 'products':
+      case 'implementations':
+      case 'maintenance':
         return userRole === 'MANAGER';
       case 'escalations':
         return ['MANAGER', 'L2_EMPLOYEE', 'L3_EMPLOYEE'].includes(userRole);
@@ -132,8 +148,12 @@ export const App: React.FC = () => {
           {currentView === 'ticket_detail' && activeTicketId && (
             <TicketDetailPage ticketId={activeTicketId} onBack={() => navigateTo('tickets')} />
           )}
+          {currentView === 'task_allotment' && <TaskAllotmentPage onNavigateDetail={(id) => navigateTo('ticket_detail', id)} />}
           {currentView === 'escalations' && <EscalationsPage onNavigateDetail={(id) => navigateTo('ticket_detail', id)} />}
           {currentView === 'approvals' && <ApprovalsPage onNavigateDetail={(id) => navigateTo('ticket_detail', id)} />}
+          {currentView === 'products' && <ProductsPage />}
+          {currentView === 'implementations' && <ImplementationsPage />}
+          {currentView === 'maintenance' && <MaintenancePage />}
           {currentView === 'reports' && <ReportsPage />}
           {currentView === 'import' && <ImportPage />}
           {currentView === 'sla_settings' && <SLASettingsPage />}

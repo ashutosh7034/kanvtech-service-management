@@ -148,46 +148,81 @@ export class ApprovalsService {
 
   async reopenResolution(params: {
     ticketId: string;
-    managerUserId: number;
+    managerUserId?: number;
+    userId?: number;
     reason: string;
+    isCustomer?: boolean;
   }): Promise<void> {
+    const actorId = params.userId || params.managerUserId || 1;
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: params.ticketId },
-      include: { assignedEmployee: true },
+      include: { assignedEmployee: true, customerContact: true },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    if (ticket.status !== TicketStatus.MANAGER_REVIEW && ticket.status !== TicketStatus.RESOLVED) {
+    const allowableStatuses: TicketStatus[] = [
+      TicketStatus.MANAGER_REVIEW,
+      TicketStatus.RESOLVED,
+      TicketStatus.CUSTOMER_FEEDBACK,
+      TicketStatus.CLOSED,
+    ];
+
+    if (!allowableStatuses.includes(ticket.status)) {
       throw new BadRequestException(`Ticket cannot be reopened from '${ticket.status}'.`);
     }
 
+    // 1. Record in TicketReopenHistory
+    await this.prisma.ticketReopenHistory.create({
+      data: {
+        ticketId: params.ticketId,
+        reopenedBy: actorId,
+        reopenReason: params.reason.trim(),
+        previousStatus: ticket.status,
+      },
+    });
+
+    // 2. Transition ticket back to active support
     await this.prisma.ticket.update({
       where: { id: params.ticketId },
       data: {
         status: TicketStatus.IN_PROGRESS,
         resolutionEndedAt: null,
+        closedAt: null,
+        closedBy: null,
+        closureReason: null,
       },
     });
 
+    // 3. Add note
     await this.prisma.ticketComment.create({
       data: {
         ticketId: params.ticketId,
-        authorUserId: params.managerUserId,
-        commentType: CommentType.INTERNAL_NOTE,
-        message: `Reopened by Manager: ${params.reason}`,
+        authorUserId: actorId,
+        commentType: params.isCustomer ? CommentType.CUSTOMER_COMMUNICATION : CommentType.INTERNAL_NOTE,
+        message: `Ticket Reopened (${params.isCustomer ? 'Customer' : 'Manager'}): ${params.reason}`,
       },
     });
 
+    // 4. Log in timeline
+    const actionType = params.isCustomer ? 'CUSTOMER_REOPENED_TICKET' : 'MANAGER_REOPENED_TICKET';
+    const title = params.isCustomer ? 'Ticket Reopened by Customer' : 'Resolution Sent Back / Reopened by Manager';
     await this.prisma.ticketHistory.create({
       data: {
         ticketId: params.ticketId,
-        actorUserId: params.managerUserId,
-        actionType: 'REVIEW_REOPENED',
-        title: 'Resolution Sent Back / Reopened by Manager',
-        description: params.reason,
+        actorUserId: actorId,
+        actionType,
+        title,
+        description: `Reason: ${params.reason}`,
+        metadataJson: JSON.stringify({
+          reopenedBy: actorId,
+          reason: params.reason,
+          previousStatus: ticket.status,
+          isCustomer: !!params.isCustomer,
+        }),
       },
     });
 
+    // 5. Resume work timer if assigned employee exists
     if (ticket.assignedEmployeeId) {
       await this.timerService.startWorkSession(
         ticket.id,
@@ -200,7 +235,7 @@ export class ApprovalsService {
           eventType: 'TICKET_REOPENED',
           ticketId: params.ticketId,
           title: `Ticket Reopened: ${params.ticketId}`,
-          message: `Manager requested additional work on ticket ${params.ticketId}. Reason: ${params.reason}`,
+          message: `${params.isCustomer ? 'Customer' : 'Manager'} reopened ticket ${params.ticketId}. Reason: ${params.reason}`,
           recipientUserId: ticket.assignedEmployee.userId,
           recipientEmail: ticket.assignedEmployee.email,
           linkUrl: `/tickets/${params.ticketId}`,
@@ -208,12 +243,13 @@ export class ApprovalsService {
       }
     }
 
+    // 6. Audit log
     await this.auditService.log({
-      actorUserId: params.managerUserId,
-      action: 'MANAGER_REOPENED_TICKET',
+      actorUserId: actorId,
+      action: params.isCustomer ? 'CUSTOMER_REOPENED_TICKET' : 'MANAGER_REOPENED_TICKET',
       entityType: 'TICKET',
       entityId: params.ticketId,
-      newValues: { reason: params.reason },
+      newValues: { reason: params.reason, previousStatus: ticket.status },
     });
   }
 }
