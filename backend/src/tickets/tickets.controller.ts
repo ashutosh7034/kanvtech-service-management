@@ -63,7 +63,7 @@ export class TicketsController {
       limit: query.limit,
     });
 
-    return { success: true, ...result };
+    return { success: true, tickets: result.data, ...result };
   }
 
   @Get(':id')

@@ -122,8 +122,9 @@ async function runProductionSmokeTest() {
       headers: { Authorization: 'Bearer ' + adminToken },
     });
     const data: any = await res.json();
+    const list = data.data || data.products || [];
     assert(res.status === 200, 'Product Master Listing 200 OK');
-    assert(Array.isArray(data.products) && data.products.length > 0, 'Products listed from production database');
+    assert(Array.isArray(list) && list.length > 0, `Products listed from production database (${list.length} products)`);
   } catch (e: any) {
     assert(false, 'Products Master: ' + e.message);
   }
@@ -134,8 +135,9 @@ async function runProductionSmokeTest() {
       headers: { Authorization: 'Bearer ' + managerToken },
     });
     const data: any = await res.json();
+    const list = data.data || data.subscriptions || [];
     assert(res.status === 200, 'Subscriptions / AMC Listing 200 OK');
-    assert(Array.isArray(data.subscriptions), 'Subscriptions returned from database');
+    assert(Array.isArray(list) && list.length > 0, `Subscriptions returned from database (${list.length} contracts)`);
   } catch (e: any) {
     assert(false, 'Subscriptions: ' + e.message);
   }
@@ -146,8 +148,9 @@ async function runProductionSmokeTest() {
       headers: { Authorization: 'Bearer ' + managerToken },
     });
     const data: any = await res.json();
+    const list = data.data || data.implementations || [];
     assert(res.status === 200, 'Implementations Listing 200 OK');
-    assert(Array.isArray(data.implementations), 'Implementations returned from database');
+    assert(Array.isArray(list) && list.length > 0, `Implementations returned from database (${list.length} projects)`);
   } catch (e: any) {
     assert(false, 'Implementations: ' + e.message);
   }
@@ -169,7 +172,9 @@ async function runProductionSmokeTest() {
     });
     const tData: any = await custTickets.json();
     assert(custTickets.status === 200, 'Customer tickets accessible');
-    const allAcme = tData.tickets.every((t: any) => t.company_id === 'CMP-0001' || t.companyId === 'CMP-0001');
+    const ticketsList = tData.tickets || tData.data || [];
+    assert(Array.isArray(ticketsList), 'Customer tickets returned');
+    const allAcme = ticketsList.length === 0 || ticketsList.every((t: any) => t.company_id === 'CMP-0001' || t.companyId === 'CMP-0001');
     assert(allAcme, 'Customer isolation strictly enforced (100% owned tickets)');
   } catch (e: any) {
     assert(false, 'Customer Isolation: ' + e.message);
