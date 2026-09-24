@@ -20,9 +20,9 @@ export const ReportsPage: React.FC = () => {
         api.getWorkloadReport(),
         api.getEscalationsReport(),
       ]);
-      setResolutionByLevel(resLevel.data || []);
-      setWorkload(resWorkload.data || []);
-      setEscalations(resEsc.data || null);
+      setResolutionByLevel(resLevel?.data || resLevel || []);
+      setWorkload(resWorkload?.data || resWorkload || []);
+      setEscalations(resEsc?.data || resEsc || null);
     } catch (err) {
       console.error(err);
     } finally {

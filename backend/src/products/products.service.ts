@@ -302,4 +302,42 @@ export class ProductsService {
       categories: categories.map((c) => ({ category: c.category, count: c._count._all })),
     };
   }
+
+  async deleteProduct(id: string, actorUserId: number) {
+    const existing = await this.prisma.product.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: {
+            subscriptions: true,
+            implementations: true,
+          },
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Product not found');
+    }
+
+    if (existing._count.subscriptions > 0 || existing._count.implementations > 0) {
+      throw new BadRequestException(
+        `Cannot delete product '${existing.name}' (${existing.code}) because it is associated with active customer subscriptions (${existing._count.subscriptions}) or implementations (${existing._count.implementations}). Deactivate it instead to preserve business history.`,
+      );
+    }
+
+    await this.prisma.product.delete({
+      where: { id },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_DELETED',
+      entityType: 'PRODUCT',
+      entityId: id,
+      oldValues: { id: existing.id, code: existing.code, name: existing.name },
+    });
+
+    return { success: true, message: `Product ${existing.code} deleted successfully` };
+  }
 }

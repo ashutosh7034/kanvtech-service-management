@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -79,5 +80,13 @@ export class ProductsController {
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : Boolean(body.is_active);
     const product = await this.productsService.toggleProductStatus(id, isActive, req.user.userId);
     return { success: true, product, message: 'Product status updated successfully' };
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Delete a product (Only permitted if not referenced by subscriptions/implementations)' })
+  async deleteProduct(@Param('id') id: string, @Request() req: any) {
+    const result = await this.productsService.deleteProduct(id, req.user.userId);
+    return result;
   }
 }

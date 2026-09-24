@@ -125,6 +125,7 @@ export const api = {
   toggleProductStatus: (id: string, isActive: boolean) =>
     request(`/products/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
   getProductStats: () => request('/products/stats'),
+  deleteProduct: (id: string) => request(`/products/${id}`, { method: 'DELETE' }),
 
   // Subscriptions & AMC
   getSubscriptions: (params: any = {}) => {

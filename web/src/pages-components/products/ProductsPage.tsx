@@ -16,6 +16,8 @@ import {
   Check,
   X,
   AlertCircle,
+  Trash2,
+  Eye,
 } from 'lucide-react';
 import { formatDate } from '../../utils/date';
 
@@ -34,6 +36,7 @@ interface Product {
 
 export const ProductsPage: React.FC = () => {
   const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
   const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
 
   const [products, setProducts] = useState<Product[]>([]);
@@ -47,6 +50,7 @@ export const ProductsPage: React.FC = () => {
   // Modal states
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showViewModal, setShowViewModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
     code: '',
@@ -146,6 +150,26 @@ export const ProductsPage: React.FC = () => {
     }
   };
 
+  const handleDeleteProduct = async (product: Product) => {
+    if (product.subscriptions_count > 0 || product.implementations_count > 0) {
+      alert(
+        `Cannot delete product "${product.name}" because it is linked to ${product.subscriptions_count} subscription(s) and ${product.implementations_count} implementation(s). Please deactivate it instead.`,
+      );
+      return;
+    }
+
+    if (!window.confirm(`Are you sure you want to permanently delete product "${product.name}" (${product.code})? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await api.deleteProduct(product.id);
+      fetchData();
+    } catch (err: any) {
+      alert(`Deletion failed: ${err.message}`);
+    }
+  };
+
   const openEdit = (product: Product) => {
     setSelectedProduct(product);
     setFormData({
@@ -156,6 +180,11 @@ export const ProductsPage: React.FC = () => {
       isActive: product.isActive,
     });
     setShowEditModal(true);
+  };
+
+  const openView = (product: Product) => {
+    setSelectedProduct(product);
+    setShowViewModal(true);
   };
 
   return (
@@ -342,32 +371,124 @@ export const ProductsPage: React.FC = () => {
                   <td style={{ padding: '12px 16px', color: '#64748b' }}>
                     {formatDate(p.created_at)}
                   </td>
-                  {isAdminOrManager && (
-                    <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: 6 }}>
+                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                    <div style={{ display: 'inline-flex', gap: 6 }}>
+                      <button
+                        className="btn btn-outline btn-xs"
+                        onClick={() => openView(p)}
+                        title="View Product Details"
+                      >
+                        <Eye size={13} />
+                      </button>
+                      {isAdminOrManager && (
+                        <>
+                          <button
+                            className="btn btn-outline btn-xs"
+                            onClick={() => openEdit(p)}
+                            title="Edit Product"
+                          >
+                            <Edit2 size={13} />
+                          </button>
+                          <button
+                            className={`btn btn-xs ${p.isActive ? 'btn-outline' : 'btn-success'}`}
+                            onClick={() => handleToggleStatus(p)}
+                            title={p.isActive ? 'Deactivate Product' : 'Activate Product'}
+                          >
+                            {p.isActive ? <X size={13} color="#b91c1c" /> : <Check size={13} />}
+                          </button>
+                        </>
+                      )}
+                      {isAdmin && (
                         <button
                           className="btn btn-outline btn-xs"
-                          onClick={() => openEdit(p)}
-                          title="Edit Product"
+                          onClick={() => handleDeleteProduct(p)}
+                          title="Delete Product (Admin Only)"
+                          style={{ color: '#b91c1c' }}
                         >
-                          <Edit2 size={13} />
+                          <Trash2 size={13} />
                         </button>
-                        <button
-                          className={`btn btn-xs ${p.isActive ? 'btn-outline' : 'btn-success'}`}
-                          onClick={() => handleToggleStatus(p)}
-                          title={p.isActive ? 'Deactivate Product' : 'Activate Product'}
-                        >
-                          {p.isActive ? <X size={13} color="#b91c1c" /> : <Check size={13} />}
-                        </button>
-                      </div>
-                    </td>
-                  )}
+                      )}
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      {/* View Product Details Modal */}
+      {showViewModal && selectedProduct && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 520, padding: 24, background: 'white', borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#0f172a' }}>
+                Product Details • <code>{selectedProduct.code}</code>
+              </h3>
+              <button onClick={() => setShowViewModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+                <X size={18} color="#64748b" />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>PRODUCT NAME</div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>{selectedProduct.name}</div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>CATEGORY</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: '#334155', marginTop: 2 }}>{selectedProduct.category}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>STATUS</div>
+                  <div style={{ marginTop: 2 }}>
+                    <span
+                      className="badge"
+                      style={{
+                        background: selectedProduct.isActive ? '#dcfce7' : '#f1f5f9',
+                        color: selectedProduct.isActive ? '#15803d' : '#64748b',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {selectedProduct.isActive ? 'ACTIVE' : 'INACTIVE'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>DESCRIPTION & CAPABILITIES</div>
+                <div style={{ fontSize: 13, color: '#334155', marginTop: 2, background: '#f8fafc', padding: 10, borderRadius: 6, border: '1px solid #e2e8f0', minHeight: 60 }}>
+                  {selectedProduct.description || 'No additional description provided.'}
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ padding: 10, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>ACTIVE SUBSCRIPTIONS</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#0b3b60', marginTop: 2 }}>{selectedProduct.subscriptions_count}</div>
+                </div>
+                <div style={{ padding: 10, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>IMPLEMENTATIONS</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: '#0284c7', marginTop: 2 }}>{selectedProduct.implementations_count}</div>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                Created on {formatDate(selectedProduct.created_at)}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 20 }}>
+              <button className="btn btn-secondary" onClick={() => setShowViewModal(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Product Modal */}
       {showAddModal && (

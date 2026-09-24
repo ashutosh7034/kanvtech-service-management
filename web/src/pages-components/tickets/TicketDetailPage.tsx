@@ -133,7 +133,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
       await api.resolveTicket(ticketId, { resolutionNotes });
       setShowResolveModal(false);
       setResolutionNotes('');
-      showToast('Ticket marked resolved. Submitted for Manager Review.', 'success');
+      showToast('Technical resolution submitted. Ticket transitioned to Customer Verification.', 'success');
       loadTicket();
     } catch (err: any) {
       showToast(err.message, 'danger');
@@ -225,6 +225,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
   const isManagerOrAdmin = ['ADMIN', 'MANAGER'].includes(user?.role || '');
   const canWork = isAssignedToMe || isManagerOrAdmin;
   const isCustomer = user?.role === 'CUSTOMER';
+  const isCustomerOwner = isCustomer && user?.companyId === ticket.company_id;
   const isReopenEligible = ['MANAGER_REVIEW', 'CUSTOMER_FEEDBACK', 'RESOLVED', 'CLOSED'].includes(ticket.status);
 
   return (
@@ -237,7 +238,7 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
 
         <div style={{ display: 'flex', gap: 8 }}>
           {/* Customer Reopen Button */}
-          {isCustomer && isReopenEligible && (
+          {isCustomerOwner && isReopenEligible && ticket.status !== 'IN_PROGRESS' && (
             <button className="btn btn-danger btn-sm" onClick={() => setShowReopenModal(true)}>
               <RotateCcw size={14} /> Reopen Ticket
             </button>
@@ -316,43 +317,8 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
         </div>
       </div>
 
-      {/* Manager Review Notification Callout */}
-      {ticket.status === 'MANAGER_REVIEW' && (
-        <div
-          style={{
-            background: '#faf5ff',
-            border: '1px solid #d8b4fe',
-            borderRadius: 8,
-            padding: '14px 18px',
-            marginBottom: 16,
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <div>
-            <div style={{ fontWeight: 700, color: '#6b21a8', fontSize: 14 }}>
-              Pending Operations Manager Review
-            </div>
-            <div style={{ fontSize: 13, color: '#581c87', marginTop: 2 }}>
-              The assigned specialist completed technical resolution. Please inspect the resolution notes and timeline below.
-            </div>
-          </div>
-          {isManagerOrAdmin && (
-            <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-danger btn-sm" onClick={() => setShowReopenModal(true)}>
-                Reopen / Send Back
-              </button>
-              <button className="btn btn-success btn-sm" onClick={handleApprove}>
-                Approve Resolution
-              </button>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Customer Verification & Feedback Prompt Banner */}
-      {(ticket.status === 'CUSTOMER_FEEDBACK' || (isCustomer && (ticket.status === 'RESOLVED' || ticket.status === 'MANAGER_REVIEW'))) && (
+      {/* Customer Verification & Feedback Prompt Banner (Customer Interactive View) */}
+      {(ticket.status === 'CUSTOMER_FEEDBACK' || ticket.status === 'RESOLVED') && isCustomerOwner && !ticket.feedback && (
         <div
           style={{
             background: '#fff7ed',
@@ -368,20 +334,18 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
                 Customer Verification & CSAT Feedback
               </div>
               <div style={{ fontSize: 13, color: '#7c2d12', marginBottom: 12 }}>
-                Technical resolution has been submitted. Please test the solution. If satisfied, provide your service rating and conclude closure. If the issue persists, click "Reopen Ticket".
+                Technical resolution has been submitted. Please test the solution. If satisfied, provide your service rating and close the ticket. If the problem persists, click "Reopen Ticket".
               </div>
             </div>
-            {isCustomer && (
-              <button
-                type="button"
-                className="btn btn-danger btn-sm"
-                onClick={() => setShowReopenModal(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-              >
-                <RotateCcw size={13} />
-                Problem Not Solved? Reopen Ticket
-              </button>
-            )}
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => setShowReopenModal(true)}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <RotateCcw size={13} />
+              Problem Not Solved? Reopen Ticket
+            </button>
           </div>
 
           <form onSubmit={handleFeedbackSubmit}>
@@ -422,6 +386,36 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
               {submittingFeedback ? 'Submitting...' : 'Submit Feedback & Close Ticket'}
             </button>
           </form>
+        </div>
+      )}
+
+      {/* Staff View: Awaiting Customer Verification (Read-Only Info Banner for Admins/Managers/Employees) */}
+      {(ticket.status === 'CUSTOMER_FEEDBACK' || ticket.status === 'RESOLVED') && !isCustomer && !ticket.feedback && (
+        <div
+          style={{
+            background: '#f0fdf4',
+            border: '1px solid #bbf7d0',
+            borderRadius: 8,
+            padding: '14px 18px',
+            marginBottom: 16,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
+          <div>
+            <div style={{ fontWeight: 700, color: '#166534', fontSize: 14 }}>
+              Technical Resolution Completed • Awaiting Customer Verification
+            </div>
+            <div style={{ fontSize: 13, color: '#14532d', marginTop: 2 }}>
+              Technical work has been delivered to the customer. Awaiting customer testing, CSAT rating, or reopen request.
+            </div>
+          </div>
+          {isManagerOrAdmin && (
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowReopenModal(true)}>
+              <RotateCcw size={13} /> Reopen Ticket
+            </button>
+          )}
         </div>
       )}
 

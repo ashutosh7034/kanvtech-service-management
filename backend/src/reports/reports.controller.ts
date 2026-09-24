@@ -49,14 +49,14 @@ export class ReportsController {
   @ApiOperation({ summary: 'Get escalation flow matrix and top escalation reasons' })
   async getEscalationReport() {
     const data = await this.reportsService.getEscalationReport();
-    return { success: true, ...data };
+    return { success: true, data, ...data };
   }
 
   @Get('sla')
   @ApiOperation({ summary: 'Get active SLA configuration rules' })
   async getSLASettings() {
     const configs = await this.slaService.getConfigurations();
-    return { success: true, configurations: configs };
+    return { success: true, configs, configurations: configs };
   }
 
   @Put('sla')

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCircle2 } from 'lucide-react';
+import { Bell, CheckCircle2, LogOut, ChevronDown, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { api } from '../../api/client';
@@ -10,18 +10,23 @@ interface Props {
 }
 
 export const Header: React.FC<Props> = ({ pageTitle }) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead, showToast } = useNotifications();
   const [showNotifMenu, setShowNotifMenu] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
 
   const notifMenuRef = useRef<HTMLDivElement>(null);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close notification dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handleDocumentClick = (event: MouseEvent) => {
       if (notifMenuRef.current && !notifMenuRef.current.contains(event.target as Node)) {
         setShowNotifMenu(false);
+      }
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
       }
     };
 
@@ -45,6 +50,13 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
       showToast(err.message, 'danger');
     }
   };
+
+  const handleLogout = () => {
+    setShowProfileMenu(false);
+    logout();
+  };
+
+  const userInitial = user?.displayName ? user.displayName[0].toUpperCase() : (user?.email ? user.email[0].toUpperCase() : 'U');
 
   return (
     <header className="top-header">
@@ -71,6 +83,7 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
           <button
             onClick={() => {
               setShowNotifMenu(!showNotifMenu);
+              setShowProfileMenu(false);
             }}
             style={{
               position: 'relative',
@@ -164,30 +177,137 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
           )}
         </div>
 
-        {/* User Identity Chip */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingLeft: 8, borderLeft: '1px solid var(--border-subtle)' }}>
-          <div
+        {/* User Identity Chip & Interactive Profile Menu */}
+        <div style={{ position: 'relative' }} ref={profileMenuRef}>
+          <button
+            onClick={() => {
+              setShowProfileMenu(!showProfileMenu);
+              setShowNotifMenu(false);
+            }}
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: '50%',
-              background: '#0b3b60',
-              color: 'white',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 12,
-              fontWeight: 700,
+              gap: 10,
+              padding: '4px 10px 4px 8px',
+              borderLeft: '1px solid var(--border-subtle)',
+              background: showProfileMenu ? '#f1f5f9' : 'transparent',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              textAlign: 'left',
+              transition: 'background 0.15s ease',
             }}
           >
-            {user?.displayName ? user.displayName[0].toUpperCase() : 'U'}
-          </div>
-          <div style={{ lineHeight: 1.2 }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{user?.displayName}</div>
-            <div style={{ fontSize: 11, color: '#64748b' }}>{user?.role}</div>
-          </div>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: '#0b3b60',
+                color: 'white',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 13,
+                fontWeight: 700,
+                flexShrink: 0,
+              }}
+            >
+              {userInitial}
+            </div>
+            <div style={{ lineHeight: 1.25 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a' }}>{user?.displayName || 'User'}</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>{user?.email || ''}</div>
+            </div>
+            <ChevronDown size={14} color="#64748b" style={{ marginLeft: 2 }} />
+          </button>
+
+          {/* Profile Dropdown Menu */}
+          {showProfileMenu && (
+            <div
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: '115%',
+                width: 260,
+                background: 'white',
+                border: '1px solid var(--border-medium)',
+                borderRadius: 'var(--radius-lg)',
+                boxShadow: 'var(--shadow-lg)',
+                zIndex: 1000,
+                overflow: 'hidden',
+              }}
+            >
+              {/* Menu User Header */}
+              <div
+                style={{
+                  padding: '14px 16px',
+                  background: '#f8fafc',
+                  borderBottom: '1px solid var(--border-subtle)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                }}
+              >
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: '50%',
+                    background: '#0b3b60',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  {userInitial}
+                </div>
+                <div style={{ overflow: 'hidden' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {user?.displayName || 'Authenticated User'}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+                    {user?.email || ''}
+                  </div>
+                </div>
+              </div>
+
+              {/* Menu Actions */}
+              <div style={{ padding: '6px' }}>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: '#b91c1c',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#fef2f2')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <LogOut size={15} color="#b91c1c" />
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>
   );
 };
+

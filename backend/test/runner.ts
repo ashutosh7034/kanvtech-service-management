@@ -292,8 +292,8 @@ async function runAllTests() {
     assert.strictEqual(status.status, 'BREACHED', 'Past deadline ticket must be BREACHED');
   });
 
-  // 14. Manager Approval & Reopen
-  await test('14. Manager Approval - Resolution, Review Queue, and Decision Logging', async () => {
+  // 14. Direct Resolution & Reopen Workflow
+  await test('14. Direct Resolution - Technical completion transitions directly to Customer Verification', async () => {
     await approvalsService.submitForReview({
       ticketId: createdTicketId,
       employeeId: 'EMP-005',
@@ -302,17 +302,18 @@ async function runAllTests() {
     });
 
     let ticket = await ticketsService.getTicketById(createdTicketId);
-    assert.strictEqual(ticket.status, 'MANAGER_REVIEW');
+    assert.strictEqual(ticket.status, 'CUSTOMER_FEEDBACK', 'Direct transition to CUSTOMER_FEEDBACK without mandatory manager approval gate');
 
-    // Manager tests reopen
+    // Customer / Manager tests reopen
     await approvalsService.reopenResolution({
       ticketId: createdTicketId,
-      managerUserId: 2,
+      userId: 7,
       reason: 'Please attach the SAN diagnostic verification logs.',
+      isCustomer: true,
     });
 
     ticket = await ticketsService.getTicketById(createdTicketId);
-    assert.strictEqual(ticket.status, 'IN_PROGRESS');
+    assert.strictEqual(ticket.status, 'IN_PROGRESS', 'Reopened ticket returned to IN_PROGRESS');
 
     // L3 re-submits
     await approvalsService.submitForReview({
@@ -322,15 +323,8 @@ async function runAllTests() {
       actorUserId: 6,
     });
 
-    // Manager approves
-    await approvalsService.approveResolution({
-      ticketId: createdTicketId,
-      managerUserId: 2,
-      notes: 'Resolution verified and approved.',
-    });
-
     ticket = await ticketsService.getTicketById(createdTicketId);
-    assert.strictEqual(ticket.status, 'CUSTOMER_FEEDBACK');
+    assert.strictEqual(ticket.status, 'CUSTOMER_FEEDBACK', 'Re-resolved ticket ready for customer verification');
   });
 
   // 15. Customer Feedback
@@ -384,7 +378,7 @@ async function runAllTests() {
   });
 
   // 19. Full End-to-End Lifecycle Journey
-  await test('19. Master End-to-End Journey (Customer -> L1 -> L2 -> L3 -> Manager -> Feedback -> Closed)', async () => {
+  await test('19. Master End-to-End Journey (Customer -> L1 -> L2 -> L3 -> Direct Resolution -> Customer Feedback -> Closed)', async () => {
     // 1. Customer creates ticket
     const e2eTicket = await ticketsService.createTicket({
       companyId: 'CMP-0002',
@@ -454,7 +448,7 @@ async function runAllTests() {
     t = await ticketsService.getTicketById(e2eTicket.id);
     assert.strictEqual(t.assigned_level, 'L3', 'Step 6: Level is L3');
 
-    // 7. L3 resolves
+    // 7. L3 resolves (Directly transitions to CUSTOMER_FEEDBACK without blocking on manager review)
     await approvalsService.submitForReview({
       ticketId: e2eTicket.id,
       employeeId: 'EMP-005',
@@ -462,18 +456,9 @@ async function runAllTests() {
       actorUserId: 6,
     });
     t = await ticketsService.getTicketById(e2eTicket.id);
-    assert.strictEqual(t.status, 'MANAGER_REVIEW', 'Step 7: Status is MANAGER_REVIEW');
+    assert.strictEqual(t.status, 'CUSTOMER_FEEDBACK', 'Step 7: Status is CUSTOMER_FEEDBACK');
 
-    // 8. Manager reviews & approves
-    await approvalsService.approveResolution({
-      ticketId: e2eTicket.id,
-      managerUserId: 2,
-      notes: 'Fix verified in telemetry. No deadlocks detected in post-run batch.',
-    });
-    t = await ticketsService.getTicketById(e2eTicket.id);
-    assert.strictEqual(t.status, 'CUSTOMER_FEEDBACK', 'Step 8: Status is CUSTOMER_FEEDBACK');
-
-    // 9. Customer submits 5-star feedback
+    // 8. Customer submits 5-star feedback
     await feedbackService.submitFeedback({
       ticketId: e2eTicket.id,
       customerUserId: 7,
@@ -481,12 +466,12 @@ async function runAllTests() {
       remarks: 'Flawless resolution. Settlement run completed without delays.',
     });
 
-    // 10. Complete verification of closed ticket
+    // 9. Complete verification of closed ticket
     t = await ticketsService.getTicketById(e2eTicket.id);
-    assert.strictEqual(t.status, 'CLOSED', 'Step 10: Ticket is CLOSED');
-    assert.strictEqual(t.feedback.rating, 5, 'Step 10: Feedback is 5 stars');
-    assert(t.timeline.length >= 8, 'Step 10: Complete chronological timeline exists');
-    assert(t.sla_status === 'MET' || t.sla_status === 'ON_TRACK', 'Step 10: SLA is MET');
+    assert.strictEqual(t.status, 'CLOSED', 'Step 9: Ticket is CLOSED');
+    assert.strictEqual(t.feedback.rating, 5, 'Step 9: Feedback is 5 stars');
+    assert(t.timeline.length >= 7, 'Step 9: Complete chronological timeline exists');
+    assert(t.sla_status === 'MET' || t.sla_status === 'ON_TRACK', 'Step 9: SLA is MET');
   });
 
   // 20. Product Master Management
@@ -676,10 +661,6 @@ async function runAllTests() {
       employeeId: 'EMP-002',
       resolutionNotes: 'Applied index hints and isolation level adjustment.',
       actorUserId: 3,
-    });
-    await approvalsService.approveResolution({
-      ticketId: ticket.id,
-      managerUserId: 2,
     });
 
     // 5. Customer submits feedback and closes

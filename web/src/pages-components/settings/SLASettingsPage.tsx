@@ -18,9 +18,11 @@ export const SLASettingsPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.getSLASettings();
-      setConfigs(res.configs);
+      const list = res?.configs || res?.configurations || (Array.isArray(res) ? res : []);
+      setConfigs(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error(err);
+      setConfigs([]);
     } finally {
       setLoading(false);
     }
@@ -46,7 +48,7 @@ export const SLASettingsPage: React.FC = () => {
 
   const handleFieldChange = (priority: string, field: string, val: number) => {
     setConfigs((prev) =>
-      prev.map((c) => (c.priority === priority ? { ...c, [field]: val } : c))
+      (prev || []).map((c) => (c.priority === priority ? { ...c, [field]: val } : c))
     );
   };
 
@@ -68,7 +70,7 @@ export const SLASettingsPage: React.FC = () => {
           <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>Loading configurations...</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {configs.map((cfg) => (
+            {(configs || []).map((cfg) => (
               <div
                 key={cfg.priority}
                 style={{

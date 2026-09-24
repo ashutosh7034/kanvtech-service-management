@@ -30,13 +30,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .then((res) => {
           if (res.user) {
             setUser({
-              id: res.user.id,
+              id: res.user.id || res.user.userId,
               email: res.user.email,
               role: res.user.role,
-              displayName: res.user.employee?.name || res.user.companyContact?.name || res.user.email.split('@')[0],
-              employeeId: res.user.employee?.id,
-              companyId: res.user.companyContact?.companyId,
-              contactId: res.user.companyContact?.id,
+              displayName: res.user.name || res.user.displayName || res.user.employee?.name || res.user.companyContact?.name || res.user.email.split('@')[0],
+              employeeId: res.user.employeeId || res.user.employee?.id,
+              companyId: res.user.companyId || res.user.companyContact?.companyId,
+              contactId: res.user.contactId || res.user.companyContact?.id,
             });
           }
         })
@@ -59,10 +59,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('kanvtech_token', res.token);
         setToken(res.token);
         setUser({
-          id: res.user.id,
+          id: res.user.id || res.user.userId,
           email: res.user.email,
           role: res.user.role,
-          displayName: res.user.employeeName || res.user.contactName || res.user.email.split('@')[0],
+          displayName: res.user.name || res.user.displayName || res.user.employeeName || res.user.contactName || res.user.email.split('@')[0],
           employeeId: res.user.employeeId,
           companyId: res.user.companyId,
           contactId: res.user.contactId,

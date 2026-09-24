@@ -15,6 +15,7 @@ import {
   Building,
   CheckCircle,
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 import { formatDate } from '../../utils/date';
 
@@ -110,7 +111,24 @@ export const CustomerMobileView: React.FC = () => {
     }
   };
 
-  const activeCount = tickets.filter((t) => ['OPEN', 'IN_PROGRESS', 'MANAGER_REVIEW', 'CUSTOMER_FEEDBACK'].includes(t.status)).length;
+  const handleMobileReopen = async () => {
+    if (!selectedTicket) return;
+    const reason = window.prompt('Please enter the reason for reopening this ticket:');
+    if (!reason || !reason.trim()) return;
+    try {
+      await api.reopenTicket(selectedTicket.id, { reason: reason.trim() });
+      showToast('Ticket reopened and returned to active support.', 'info');
+      const res = await api.getTicket(selectedTicket.id);
+      setSelectedTicket(res.ticket);
+      loadMyTickets();
+    } catch (err: any) {
+      showToast(err.message, 'danger');
+    }
+  };
+
+  const activeCount = tickets.filter((t) =>
+    ['OPEN', 'IN_PROGRESS', 'REOPENED', 'RESOLVED', 'MANAGER_REVIEW', 'CUSTOMER_FEEDBACK'].includes(t.status),
+  ).length;
 
   return (
     <div className="mobile-simulator-wrapper">
@@ -423,18 +441,59 @@ export const CustomerMobileView: React.FC = () => {
                         fontWeight: 600,
                         fontSize: 11,
                         cursor: 'pointer',
+                        marginBottom: 6,
                       }}
                     >
                       {submittingFeedback ? 'Submitting...' : 'Submit & Close Ticket'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleMobileReopen}
+                      style={{
+                        width: '100%',
+                        background: '#fee2e2',
+                        color: '#b91c1c',
+                        padding: 6,
+                        border: '1px solid #fecaca',
+                        borderRadius: 4,
+                        fontWeight: 600,
+                        fontSize: 11,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 4,
+                      }}
+                    >
+                      <RotateCcw size={12} /> Not Solved? Reopen Ticket
                     </button>
                   </form>
                 </div>
               )}
 
-              {/* Closed feedback note */}
+              {/* Closed state with Reopen action */}
               {selectedTicket.status === 'CLOSED' && (
-                <div style={{ background: '#f8fafc', padding: 8, borderRadius: 6, fontSize: 11, color: '#64748b' }}>
-                  ✓ This ticket has been closed. Thank you for partnering with Kanvtech.
+                <div style={{ background: '#f8fafc', padding: 10, borderRadius: 6, fontSize: 11, color: '#64748b', border: '1px solid #e2e8f0' }}>
+                  <div style={{ marginBottom: 6 }}>✓ This ticket has been closed. Thank you for partnering with Kanvtech.</div>
+                  <button
+                    type="button"
+                    onClick={handleMobileReopen}
+                    style={{
+                      background: 'white',
+                      color: '#b91c1c',
+                      padding: '4px 8px',
+                      border: '1px solid #fecaca',
+                      borderRadius: 4,
+                      fontWeight: 600,
+                      fontSize: 10,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    <RotateCcw size={11} /> Reopen Ticket
+                  </button>
                 </div>
               )}
             </div>

@@ -15,7 +15,6 @@ import {
   Settings,
   ShieldAlert,
   Smartphone,
-  LogOut,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -25,7 +24,7 @@ interface Props {
 }
 
 export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const role = user?.role || 'CUSTOMER';
 
   const isAccessible = (allowed: string[]) => {
@@ -206,24 +205,13 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
       </div>
 
       <div className="sidebar-footer">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: 'white' }}>{user?.displayName}</div>
-            <div style={{ fontSize: 11, color: '#94a3b8' }}>{role.replace('_', ' ')}</div>
+        <div style={{ overflow: 'hidden' }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'white', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {user?.displayName || 'User'}
           </div>
-          <button
-            onClick={logout}
-            title="Sign Out"
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#94a3b8',
-              cursor: 'pointer',
-              padding: 4,
-            }}
-          >
-            <LogOut size={16} />
-          </button>
+          <div style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
+            {user?.email || ''}
+          </div>
         </div>
       </div>
     </aside>

@@ -9,6 +9,7 @@ import {
   UseInterceptors,
   UploadedFile,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
@@ -143,15 +144,16 @@ export class TicketsController {
 
   @Post(':id/resolve')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
-  @ApiOperation({ summary: 'Submit ticket resolution for manager review' })
+  @ApiOperation({ summary: 'Complete technical work and move ticket to Customer Verification' })
   async resolveTicket(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     await this.approvalsService.submitForReview({
       ticketId: id,
       employeeId: req.user.employeeId || 'EMP-001',
-      resolutionNotes: body.resolutionNotes || body.resolution_notes || body.notes || 'Resolution completed',
+      resolutionNotes: body.resolutionNotes || body.resolution_notes || body.notes || 'Technical resolution completed',
       actorUserId: req.user.userId,
     });
-    return { success: true, message: 'Ticket submitted for manager review' };
+    const resolvedTicket = await this.ticketsService.getTicketById(id);
+    return { success: true, ticket: resolvedTicket, message: 'Technical resolution completed. Ticket moved to Customer Verification.' };
   }
 
   @Post(':id/approve')
@@ -173,7 +175,7 @@ export class TicketsController {
     if (req.user.role === 'CUSTOMER') {
       const ticket = await this.ticketsService.getTicketById(id);
       if (!ticket || ticket.company_id !== req.user.companyId) {
-        return { success: false, error: 'Unauthorized ticket access' };
+        throw new ForbiddenException('Unauthorized: You can only reopen tickets for your own company');
       }
     }
     await this.approvalsService.reopenResolution({
@@ -187,14 +189,15 @@ export class TicketsController {
   }
 
   @Post(':id/feedback')
-  @Roles('ADMIN', 'CUSTOMER')
+  @Roles('CUSTOMER')
   @ApiOperation({ summary: 'Customer submits CSAT rating and remarks (auto-closes ticket)' })
   async submitFeedback(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    if (req.user.role === 'CUSTOMER') {
-      const ticket = await this.ticketsService.getTicketById(id);
-      if (!ticket || ticket.company_id !== req.user.companyId) {
-        return { success: false, error: 'Unauthorized ticket access' };
-      }
+    if (req.user.role !== 'CUSTOMER') {
+      throw new ForbiddenException('Only the customer associated with this ticket can submit CSAT feedback');
+    }
+    const ticket = await this.ticketsService.getTicketById(id);
+    if (!ticket || ticket.company_id !== req.user.companyId) {
+      throw new ForbiddenException('Unauthorized: You can only submit feedback for your own company tickets');
     }
     await this.feedbackService.submitFeedback({
       ticketId: id,
@@ -213,7 +216,7 @@ export class TicketsController {
     if (req.user.role === 'CUSTOMER') {
       const ticket = await this.ticketsService.getTicketById(id);
       if (!ticket || ticket.company_id !== req.user.companyId) {
-        return { success: false, error: 'Unauthorized ticket access' };
+        throw new ForbiddenException('Unauthorized: You can only close tickets for your own company');
       }
     }
     await this.feedbackService.closeTicket({

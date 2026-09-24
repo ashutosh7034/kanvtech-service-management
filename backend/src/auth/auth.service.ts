@@ -68,7 +68,7 @@ export class AuthService {
         employeeId,
         companyId,
         contactId,
-        name: user.employee?.name || (user.companyContacts?.[0]?.name ?? user.email),
+        name: user.employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
       },
     };
   }
@@ -88,7 +88,7 @@ export class AuthService {
       employeeId: user.employee?.id || null,
       companyId: user.companyContacts?.[0]?.companyId || null,
       contactId: user.companyContacts?.[0]?.id || null,
-      name: user.employee?.name || (user.companyContacts?.[0]?.name ?? user.email),
+      name: user.employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
     };
   }
 }

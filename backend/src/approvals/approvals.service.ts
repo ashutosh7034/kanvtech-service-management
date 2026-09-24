@@ -20,23 +20,32 @@ export class ApprovalsService {
     resolutionNotes: string;
     actorUserId: number;
   }): Promise<void> {
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: params.ticketId } });
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: params.ticketId },
+      include: { customerContact: true },
+    });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    if (ticket.status !== TicketStatus.IN_PROGRESS) {
+    const allowableStatuses: TicketStatus[] = [
+      TicketStatus.IN_PROGRESS,
+      TicketStatus.REOPENED,
+      TicketStatus.OPEN,
+    ];
+
+    if (!allowableStatuses.includes(ticket.status)) {
       throw new BadRequestException(
-        `Cannot resolve ticket in '${ticket.status}' status. Ticket must be IN_PROGRESS.`,
+        `Cannot resolve ticket in '${ticket.status}' status. Ticket must be IN_PROGRESS or REOPENED.`,
       );
     }
 
     // 1. Stop active work session
     await this.timerService.stopActiveSession(params.ticketId);
 
-    // 2. Update ticket status
+    // 2. Update ticket status directly to CUSTOMER_FEEDBACK for Customer Verification
     await this.prisma.ticket.update({
       where: { id: params.ticketId },
       data: {
-        status: TicketStatus.MANAGER_REVIEW,
+        status: TicketStatus.CUSTOMER_FEEDBACK,
         resolutionEndedAt: new Date(),
       },
     });
@@ -47,7 +56,7 @@ export class ApprovalsService {
         ticketId: params.ticketId,
         authorUserId: params.actorUserId,
         commentType: CommentType.INTERNAL_NOTE,
-        message: `Resolution Notes: ${params.resolutionNotes}`,
+        message: `Technical Resolution Notes: ${params.resolutionNotes}`,
       },
     });
 
@@ -57,7 +66,7 @@ export class ApprovalsService {
         ticketId: params.ticketId,
         actorUserId: params.actorUserId,
         actionType: 'RESOLVED',
-        title: 'Ticket Resolved by Specialist',
+        title: 'Technical Resolution Completed by Specialist',
         description: params.resolutionNotes,
         metadataJson: JSON.stringify({
           employeeId: params.employeeId,
@@ -66,7 +75,20 @@ export class ApprovalsService {
       },
     });
 
-    // 5. Notify managers
+    // 5. Notify customer for verification and CSAT feedback
+    if (ticket.customerContact) {
+      await this.notificationsService.broadcastTicketEvent({
+        eventType: 'FEEDBACK_REQUESTED',
+        ticketId: params.ticketId,
+        title: `Your Ticket is Resolved: ${params.ticketId}`,
+        message: `Technical work on ticket ${params.ticketId} has been completed. Please verify the solution and submit your feedback or reopen if needed.`,
+        recipientUserId: ticket.customerContact.userId || undefined,
+        recipientEmail: ticket.customerContact.email,
+        linkUrl: `/tickets/${params.ticketId}`,
+      });
+    }
+
+    // 6. Notify managers for operational reporting/dashboard oversight
     const managers = await this.prisma.employee.findMany({
       where: { managerId: null, status: 'ACTIVE' },
       include: { user: true },
@@ -74,22 +96,23 @@ export class ApprovalsService {
 
     for (const m of managers) {
       await this.notificationsService.broadcastTicketEvent({
-        eventType: 'TICKET_REVIEW_REQUIRED',
+        eventType: 'TICKET_RESOLVED_INFO',
         ticketId: params.ticketId,
-        title: `Manager Review Required: ${params.ticketId}`,
-        message: `Ticket ${params.ticketId} has been resolved and is pending manager review.`,
+        title: `Ticket Resolved: ${params.ticketId}`,
+        message: `Ticket ${params.ticketId} has been resolved by specialist and transitioned to customer verification.`,
         recipientUserId: m.userId,
         recipientEmail: m.email,
-        linkUrl: `/approvals`,
+        linkUrl: `/tickets/${params.ticketId}`,
       });
     }
 
+    // 7. Audit log
     await this.auditService.log({
       actorUserId: params.actorUserId,
-      action: 'TICKET_RESOLVED_SUBMITTED_FOR_REVIEW',
+      action: 'TICKET_RESOLVED',
       entityType: 'TICKET',
       entityId: params.ticketId,
-      newValues: { resolutionNotes: params.resolutionNotes },
+      newValues: { resolutionNotes: params.resolutionNotes, status: 'CUSTOMER_FEEDBACK' },
     });
   }
 
@@ -104,16 +127,18 @@ export class ApprovalsService {
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
-    if (ticket.status !== TicketStatus.MANAGER_REVIEW) {
+    if (ticket.status !== TicketStatus.MANAGER_REVIEW && ticket.status !== TicketStatus.CUSTOMER_FEEDBACK) {
       throw new BadRequestException(
-        `Ticket is not in MANAGER_REVIEW state (Current: ${ticket.status})`,
+        `Ticket is not in an approvable state (Current: ${ticket.status})`,
       );
     }
 
-    await this.prisma.ticket.update({
-      where: { id: params.ticketId },
-      data: { status: TicketStatus.CUSTOMER_FEEDBACK },
-    });
+    if (ticket.status === TicketStatus.MANAGER_REVIEW) {
+      await this.prisma.ticket.update({
+        where: { id: params.ticketId },
+        data: { status: TicketStatus.CUSTOMER_FEEDBACK },
+      });
+    }
 
     await this.prisma.ticketHistory.create({
       data: {

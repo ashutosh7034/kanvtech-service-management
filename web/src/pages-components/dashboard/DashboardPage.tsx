@@ -85,7 +85,7 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
         <div>
           <h2 className="page-title">Service Operations Dashboard</h2>
           <div className="page-subtitle">
-            Role scope: <strong>{user?.role.replace('_', ' ')}</strong> • Real-time operational state
+            Real-time service operations and enterprise support intelligence
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
