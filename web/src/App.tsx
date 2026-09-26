@@ -23,9 +23,38 @@ import { MaintenancePage } from './pages-components/maintenance/MaintenancePage'
 import { ImplementationsPage } from './pages-components/implementations/ImplementationsPage';
 import { DepartmentsPage } from './pages-components/departments/DepartmentsPage';
 
-export const App: React.FC = () => {
+export interface AppProps {
+  initialView?: string;
+}
+
+export const App: React.FC<AppProps> = ({ initialView }) => {
   const { user, loading } = useAuth();
-  const [currentView, setCurrentView] = useState<string>('dashboard');
+  
+  const getViewFromPath = (): string => {
+    if (initialView) return initialView;
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.replace(/^\//, '');
+      if (path === 'companies' || path === 'customers') return 'companies';
+      if (path === 'departments') return 'departments';
+      if (path === 'employees') return 'employees';
+      if (path === 'tickets') return 'tickets';
+      if (path === 'task_allotment' || path === 'tasks' || path === 'assignments') return 'task_allotment';
+      if (path === 'escalations') return 'escalations';
+      if (path === 'approvals') return 'approvals';
+      if (path === 'products') return 'products';
+      if (path === 'implementations') return 'implementations';
+      if (path === 'maintenance' || path === 'annual-maintenance') return 'maintenance';
+      if (path === 'reports') return 'reports';
+      if (path === 'import') return 'import';
+      if (path === 'sla_settings' || path === 'sla-settings') return 'sla_settings';
+      if (path === 'audit_logs' || path === 'audit-logs') return 'audit_logs';
+      if (path === 'customer_mobile' || path === 'customer-mobile') return 'customer_mobile';
+      if (path === 'employee_mobile' || path === 'employee-mobile') return 'employee_mobile';
+    }
+    return 'dashboard';
+  };
+
+  const [currentView, setCurrentView] = useState<string>(getViewFromPath);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
 
   if (loading) {
@@ -43,6 +72,31 @@ export const App: React.FC = () => {
   const navigateTo = (view: string, id?: string) => {
     if (id) setActiveTicketId(id);
     setCurrentView(view);
+    if (typeof window !== 'undefined') {
+      const pathToViewMap: Record<string, string> = {
+        dashboard: '/dashboard',
+        companies: '/companies',
+        departments: '/departments',
+        employees: '/employees',
+        tickets: '/tickets',
+        task_allotment: '/assignments',
+        escalations: '/escalations',
+        approvals: '/approvals',
+        products: '/products',
+        implementations: '/implementations',
+        maintenance: '/annual-maintenance',
+        reports: '/reports',
+        import: '/import',
+        sla_settings: '/sla-settings',
+        audit_logs: '/audit-logs',
+        customer_mobile: '/customer-mobile',
+        employee_mobile: '/employee-mobile',
+      };
+      const newPath = pathToViewMap[view] || '/dashboard';
+      if (window.location.pathname !== newPath) {
+        window.history.pushState({}, '', newPath);
+      }
+    }
   };
 
   const getPageTitle = () => {
