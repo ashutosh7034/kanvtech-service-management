@@ -20,6 +20,7 @@ import { HealthModule } from './health/health.module';
 import { ProductsModule } from './products/products.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { ImplementationsModule } from './implementations/implementations.module';
+import { DepartmentsModule } from './departments/departments.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { ImplementationsModule } from './implementations/implementations.module'
     ProductsModule,
     SubscriptionsModule,
     ImplementationsModule,
+    DepartmentsModule,
     ImportModule,
     ReportsModule,
     JobsModule,

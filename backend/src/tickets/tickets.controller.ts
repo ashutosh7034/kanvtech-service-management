@@ -47,7 +47,12 @@ export class TicketsController {
     let contactId = query.contactId;
 
     if (req.user.role === 'CUSTOMER') {
-      companyId = req.user.companyId;
+      let custCompanyId = req.user.companyId;
+      if (!custCompanyId) {
+        const contact = await this.ticketsService.findContactForCustomer(req.user.email, req.user.userId || req.user.id);
+        custCompanyId = contact?.companyId;
+      }
+      companyId = custCompanyId || 'NO_COMPANY_ACCESS';
     }
 
     const result = await this.ticketsService.getTickets({
@@ -74,8 +79,15 @@ export class TicketsController {
       return { success: false, error: 'Ticket not found' };
     }
 
-    if (req.user.role === 'CUSTOMER' && ticket.company_id !== req.user.companyId) {
-      return { success: false, error: 'Unauthorized ticket access' };
+    if (req.user.role === 'CUSTOMER') {
+      let custCompanyId = req.user.companyId;
+      if (!custCompanyId) {
+        const contact = await this.ticketsService.findContactForCustomer(req.user.email, req.user.userId || req.user.id);
+        custCompanyId = contact?.companyId;
+      }
+      if (ticket.company_id !== custCompanyId) {
+        throw new ForbiddenException('Unauthorized ticket access');
+      }
     }
 
     return { success: true, ticket };
@@ -90,15 +102,17 @@ export class TicketsController {
     const ticket = await this.ticketsService.createTicket({
       companyId,
       customerContactId: Number(customerContactId),
+      productId: body.productId || body.product_id,
+      branchId: body.branchId || body.branch_id,
       problemType: body.problemType || body.problem_type,
       priority: body.priority,
       category: body.category,
       description: body.description,
-      createdByUserId: req.user.userId,
+      createdByUserId: req.user?.id || req.user?.userId || 1,
       assignedEmployeeId: body.assignedEmployeeId || body.assigned_employee_id || null,
     });
 
-    return { success: true, ticketId: ticket.id, ticket, message: 'Ticket created successfully' };
+    return { success: true, ticketId: ticket?.id, id: ticket?.id, ticket, message: 'Ticket created successfully' };
   }
 
   @Post(':id/assign')
@@ -109,7 +123,7 @@ export class TicketsController {
       ticketId: id,
       employeeId: body.employeeId || body.employee_id,
       level: (body.level as TicketLevel) || TicketLevel.L1,
-      assignedByUserId: req.user.userId,
+      assignedByUserId: req.user?.id || req.user?.userId || 1,
       assignmentType: body.assignmentType || 'MANUAL',
       notes: body.notes,
     });
@@ -119,10 +133,16 @@ export class TicketsController {
   @Post(':id/start')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Start technical work and activate resolution session timer' })
-  async startWork(@Param('id') id: string, @Request() req: any) {
-    const employeeId = req.user.employeeId;
-    await this.ticketsService.startWork(id, employeeId, req.user.userId);
+  async startWork(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const employeeId = req.user?.employeeId || body?.employeeId || body?.employee_id;
+    await this.ticketsService.startWork(id, employeeId, req.user?.id || req.user?.userId || 1);
     return { success: true, message: 'Resolution work and session timer started' };
+  }
+
+  @Post(':id/start-work')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  async startWorkAlias(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.startWork(id, body, req);
   }
 
   @Post(':id/escalate')
@@ -132,12 +152,12 @@ export class TicketsController {
     await this.escalationsService.escalateTicket({
       ticketId: id,
       fromLevel: body.fromLevel || body.from_level,
-      toLevel: body.toLevel || body.to_level,
-      escalatedByEmployeeId: req.user.employeeId || body.escalatedByEmployeeId,
-      assignedToEmployeeId: body.assignedToEmployeeId || body.assigned_to_employee_id || null,
+      toLevel: body.toLevel || body.to_level || body.targetLevel || body.target_level || body.level,
+      escalatedByEmployeeId: req.user?.employeeId || body.escalatedByEmployeeId || body.escalated_by_employee_id,
+      assignedToEmployeeId: body.assignedToEmployeeId || body.assigned_to_employee_id || body.employeeId || body.employee_id || null,
       reason: body.reason,
       notes: body.notes,
-      actorUserId: req.user.userId,
+      actorUserId: req.user?.id || req.user?.userId || 1,
     });
     return { success: true, message: 'Ticket successfully escalated' };
   }

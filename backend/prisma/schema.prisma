@@ -18,6 +18,7 @@ enum UserRole {
 }
 
 enum EmployeeLevel {
+  MANAGER
   L1
   L2
   L3
@@ -141,6 +142,7 @@ model User {
   attachments       TicketAttachment[]
   feedback          TicketFeedback[]
   reopenedTickets   TicketReopenHistory[]
+  completedTasks    ImplementationTask[]      @relation("TaskCompletedBy")
   notifications     Notification[]
   auditLogs         AuditLog[]
 
@@ -149,27 +151,29 @@ model User {
   @@map("users")
 }
 
-// 3. Companies Master
+// 3. Companies / Customer Master
 model Company {
-  id                     String   @id @db.VarChar(50) // CMP-0001
-  companyName            String   @map("company_name") @db.VarChar(255)
-  address                String   @db.Text
-  gstn                   String?  @db.VarChar(50)
-  primaryEmail           String   @map("primary_email") @db.VarChar(191)
-  alternateEmails        String?  @map("alternate_emails") @db.Text
-  contactPerson          String   @map("contact_person") @db.VarChar(150)
-  contactPhone           String   @map("contact_phone") @db.VarChar(50)
-  contactAddress         String?  @map("contact_address") @db.Text
-  contactStatus          String   @default("ACTIVE") @map("contact_status") @db.VarChar(50)
-  alternateContact       String?  @map("alternate_contact") @db.VarChar(150)
-  alternateContactPhone  String?  @map("alternate_contact_phone") @db.VarChar(50)
-  alternateContactAddress String? @map("alternate_contact_address") @db.Text
-  alternateContactEmail  String?  @map("alternate_contact_email") @db.VarChar(191)
-  isActive               Boolean  @default(true) @map("is_active")
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @default(now()) @updatedAt @map("updated_at")
+  id                      String   @id @db.VarChar(50) // CMP-0001
+  companyName             String   @map("company_name") @db.VarChar(255)
+  address                 String   @db.Text
+  gstn                    String?  @db.VarChar(50)
+  primaryEmail            String   @map("primary_email") @db.VarChar(191)
+  alternateEmails         String?  @map("alternate_emails") @db.Text
+  contactPerson           String   @map("contact_person") @db.VarChar(150)
+  contactPhone            String   @map("contact_phone") @db.VarChar(50)
+  contactAddress          String?  @map("contact_address") @db.Text
+  contactStatus           String   @default("ACTIVE") @map("contact_status") @db.VarChar(50)
+  alternateContact        String?  @map("alternate_contact") @db.VarChar(150)
+  alternateContactPhone   String?  @map("alternate_contact_phone") @db.VarChar(50)
+  alternateContactAddress String?  @map("alternate_contact_address") @db.Text
+  alternateContactEmail   String?  @map("alternate_contact_email") @db.VarChar(191)
+  isActive                Boolean  @default(true) @map("is_active")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @default(now()) @updatedAt @map("updated_at")
 
   contacts        CompanyContact[]
+  products        CompanyProduct[]
+  branches        CompanyBranch[]
   tickets         Ticket[]
   subscriptions   Subscription[]
   implementations Implementation[]
@@ -201,7 +205,93 @@ model CompanyContact {
   @@map("company_contacts")
 }
 
-// 5. Employees Master
+// 5. Customer Purchased Products
+model CompanyProduct {
+  id          Int      @id @default(autoincrement())
+  companyId   String   @map("company_id") @db.VarChar(50)
+  productId   String   @map("product_id") @db.VarChar(50)
+  purchasedAt DateTime @default(now()) @map("purchased_at")
+  isActive    Boolean  @default(true) @map("is_active")
+  notes       String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([companyId, productId], name: "uq_company_product")
+  @@index([companyId], name: "idx_company_products_company")
+  @@index([productId], name: "idx_company_products_product")
+  @@map("company_products")
+}
+
+// 6. Customer Branches
+model CompanyBranch {
+  id            String   @id @db.VarChar(50) // BR-0001
+  companyId     String   @map("company_id") @db.VarChar(50)
+  branchName    String   @map("branch_name") @db.VarChar(150)
+  address       String   @db.Text
+  city          String   @db.VarChar(100)
+  state         String   @db.VarChar(100)
+  pincode       String?  @db.VarChar(20)
+  contactPerson String   @map("contact_person") @db.VarChar(150)
+  contactPhone  String   @map("contact_phone") @db.VarChar(50)
+  contactEmail  String?  @map("contact_email") @db.VarChar(191)
+  status        String   @default("ACTIVE") @db.VarChar(50)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+
+  company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  branchProducts BranchProduct[]
+  tickets        Ticket[]
+
+  @@index([companyId], name: "idx_branches_company")
+  @@index([status], name: "idx_branches_status")
+  @@map("company_branches")
+}
+
+// 7. Branch-Level Products (Branch Products must be a subset of Customer Products)
+model BranchProduct {
+  id         Int      @id @default(autoincrement())
+  branchId   String   @map("branch_id") @db.VarChar(50)
+  productId  String   @map("product_id") @db.VarChar(50)
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
+
+  branch  CompanyBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@unique([branchId, productId], name: "uq_branch_product")
+  @@index([branchId], name: "idx_branch_products_branch")
+  @@index([productId], name: "idx_branch_products_product")
+  @@map("branch_products")
+}
+
+// 8. Department Master (Product-specialized operational support teams)
+model Department {
+  id          String   @id @db.VarChar(50) // DEP-0001
+  name        String   @unique @db.VarChar(100)
+  code        String   @unique @db.VarChar(50)
+  description String?  @db.Text
+  productId   String?  @unique @map("product_id") @db.VarChar(50)
+  managerId   String?  @map("manager_id") @db.VarChar(50)
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  product   Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+  manager   Employee?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  employees Employee[] @relation("EmployeeDepartment")
+  tickets   Ticket[]
+
+  @@index([code], name: "idx_departments_code")
+  @@index([isActive], name: "idx_departments_active")
+  @@map("departments")
+}
+
+// 9. Employees Master (1 Employee = Exactly 1 Department)
 model Employee {
   id           String               @id @db.VarChar(50) // EMP-001
   userId       Int                  @unique @map("user_id")
@@ -209,6 +299,7 @@ model Employee {
   email        String               @unique @db.VarChar(191)
   phone        String               @db.VarChar(50)
   department   String               @db.VarChar(100)
+  departmentId String?              @map("department_id") @db.VarChar(50)
   designation  String               @db.VarChar(100)
   level        EmployeeLevel
   managerId    String?              @map("manager_id") @db.VarChar(50)
@@ -220,6 +311,8 @@ model Employee {
   user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager              Employee?                 @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
   subordinates         Employee[]                @relation("EmployeeManager")
+  departmentRel        Department?               @relation("EmployeeDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  managedDepartments   Department[]              @relation("DepartmentManager")
   attendance           EmployeeAttendance[]
   assignedTickets      Ticket[]                  @relation("AssignedEmployee")
   assignments          TicketAssignment[]
@@ -232,10 +325,11 @@ model Employee {
   @@index([level], name: "idx_employees_level")
   @@index([status], name: "idx_employees_status")
   @@index([availability], name: "idx_employees_avail")
+  @@index([departmentId], name: "idx_employees_department_id")
   @@map("employees")
 }
 
-// 6. Employee Attendance
+// 10. Employee Attendance
 model EmployeeAttendance {
   id              Int              @id @default(autoincrement())
   employeeId      String           @map("employee_id") @db.VarChar(50)
@@ -253,11 +347,14 @@ model EmployeeAttendance {
   @@map("employee_attendance")
 }
 
-// 7. Tickets Core
+// 11. Tickets Core
 model Ticket {
   id                     String         @id @db.VarChar(50) // KT-2026-000001
   companyId              String         @map("company_id") @db.VarChar(50)
   customerContactId      Int            @map("customer_contact_id")
+  productId              String?        @map("product_id") @db.VarChar(50)
+  branchId               String?        @map("branch_id") @db.VarChar(50)
+  departmentId           String?        @map("department_id") @db.VarChar(50)
   problemType            String         @map("problem_type") @db.VarChar(150)
   priority               TicketPriority
   category               String         @db.VarChar(100)
@@ -280,6 +377,9 @@ model Ticket {
 
   company            Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   customerContact    CompanyContact            @relation(fields: [customerContactId], references: [id], onDelete: Restrict)
+  product            Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  branch             CompanyBranch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  department         Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   creator            User                      @relation("TicketCreator", fields: [createdBy], references: [id], onDelete: Restrict)
   assignedEmployee   Employee?                 @relation("AssignedEmployee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
   closer             User?                     @relation("TicketCloser", fields: [closedBy], references: [id], onDelete: SetNull)
@@ -295,13 +395,16 @@ model Ticket {
   @@index([status], name: "idx_tickets_status")
   @@index([companyId], name: "idx_tickets_company")
   @@index([customerContactId], name: "idx_tickets_contact")
+  @@index([productId], name: "idx_tickets_product")
+  @@index([branchId], name: "idx_tickets_branch")
+  @@index([departmentId], name: "idx_tickets_department")
   @@index([assignedEmployeeId], name: "idx_tickets_assigned")
   @@index([priority], name: "idx_tickets_priority")
   @@index([createdAt], name: "idx_tickets_created_at")
   @@map("tickets")
 }
 
-// 8. Ticket Assignments History
+// 12. Ticket Assignments History
 model TicketAssignment {
   id             Int            @id @default(autoincrement())
   ticketId       String         @map("ticket_id") @db.VarChar(50)
@@ -321,7 +424,7 @@ model TicketAssignment {
   @@map("ticket_assignments")
 }
 
-// 9. Chronological Ticket History
+// 13. Chronological Ticket History
 model TicketHistory {
   id           Int      @id @default(autoincrement())
   ticketId     String   @map("ticket_id") @db.VarChar(50)
@@ -339,17 +442,17 @@ model TicketHistory {
   @@map("ticket_history")
 }
 
-// 10. Ticket Escalations
+// 14. Ticket Escalations
 model TicketEscalation {
-  id                     Int           @id @default(autoincrement())
-  ticketId               String        @map("ticket_id") @db.VarChar(50)
-  fromLevel              EmployeeLevel @map("from_level")
-  toLevel                TicketLevel   @map("to_level")
+  id                    Int           @id @default(autoincrement())
+  ticketId              String        @map("ticket_id") @db.VarChar(50)
+  fromLevel             EmployeeLevel @map("from_level")
+  toLevel               TicketLevel   @map("to_level")
   escalatedByEmployeeId String        @map("escalated_by_employee_id") @db.VarChar(50)
-  assignedToEmployeeId   String?       @map("assigned_to_employee_id") @db.VarChar(50)
-  reason                 String        @db.VarChar(255)
-  notes                  String?       @db.Text
-  createdAt              DateTime      @default(now()) @map("created_at")
+  assignedToEmployeeId  String?       @map("assigned_to_employee_id") @db.VarChar(50)
+  reason                String        @db.VarChar(255)
+  notes                 String?       @db.Text
+  createdAt             DateTime      @default(now()) @map("created_at")
 
   ticket      Ticket    @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   escalatedBy Employee  @relation("EscalatedBy", fields: [escalatedByEmployeeId], references: [id], onDelete: Restrict)
@@ -359,7 +462,7 @@ model TicketEscalation {
   @@map("ticket_escalations")
 }
 
-// 11. Ticket Resolution Sessions
+// 15. Ticket Resolution Sessions
 model TicketResolutionSession {
   id              Int         @id @default(autoincrement())
   ticketId        String      @map("ticket_id") @db.VarChar(50)
@@ -376,14 +479,14 @@ model TicketResolutionSession {
   @@map("ticket_resolution_sessions")
 }
 
-// 12. Ticket Comments & Notes
+// 16. Ticket Comments & Notes
 model TicketComment {
-  id            Int         @id @default(autoincrement())
-  ticketId      String      @map("ticket_id") @db.VarChar(50)
-  authorUserId  Int         @map("author_user_id")
-  commentType   CommentType @default(INTERNAL_NOTE) @map("comment_type")
-  message       String      @db.Text
-  createdAt     DateTime    @default(now()) @map("created_at")
+  id           Int         @id @default(autoincrement())
+  ticketId     String      @map("ticket_id") @db.VarChar(50)
+  authorUserId Int         @map("author_user_id")
+  commentType  CommentType @default(INTERNAL_NOTE) @map("comment_type")
+  message      String      @db.Text
+  createdAt    DateTime    @default(now()) @map("created_at")
 
   ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   author User   @relation(fields: [authorUserId], references: [id], onDelete: Restrict)
@@ -392,7 +495,7 @@ model TicketComment {
   @@map("ticket_comments")
 }
 
-// 13. Ticket Attachments
+// 17. Ticket Attachments
 model TicketAttachment {
   id         Int      @id @default(autoincrement())
   ticketId   String   @map("ticket_id") @db.VarChar(50)
@@ -410,7 +513,7 @@ model TicketAttachment {
   @@map("ticket_attachments")
 }
 
-// 14. Customer Feedback (CSAT)
+// 18. Customer Feedback (CSAT)
 model TicketFeedback {
   id             Int      @id @default(autoincrement())
   ticketId       String   @unique @map("ticket_id") @db.VarChar(50)
@@ -425,20 +528,20 @@ model TicketFeedback {
   @@map("ticket_feedback")
 }
 
-// 15. SLA Configurations
+// 19. SLA Configurations
 model SlaConfiguration {
-  id                       Int            @id @default(autoincrement())
-  priority                 TicketPriority @unique
-  responseTimeHours        Float          @map("response_time_hours")
-  resolutionTimeHours      Float          @map("resolution_time_hours")
-  warningThresholdPercent  Int            @default(75) @map("warning_threshold_percent")
-  isActive                 Boolean        @default(true) @map("is_active")
-  updatedAt                DateTime       @default(now()) @updatedAt @map("updated_at")
+  id                      Int            @id @default(autoincrement())
+  priority                TicketPriority @unique
+  responseTimeHours       Float          @map("response_time_hours")
+  resolutionTimeHours     Float          @map("resolution_time_hours")
+  warningThresholdPercent Int            @default(75) @map("warning_threshold_percent")
+  isActive                Boolean        @default(true) @map("is_active")
+  updatedAt               DateTime       @default(now()) @updatedAt @map("updated_at")
 
   @@map("sla_configurations")
 }
 
-// 16. User In-App Notifications
+// 20. User In-App Notifications
 model Notification {
   id        Int      @id @default(autoincrement())
   userId    Int      @map("user_id")
@@ -455,7 +558,7 @@ model Notification {
   @@map("notifications")
 }
 
-// 17. Multi-Channel Notification Logs
+// 21. Multi-Channel Notification Logs
 model NotificationLog {
   id           Int                 @id @default(autoincrement())
   channel      NotificationChannel
@@ -471,17 +574,17 @@ model NotificationLog {
   @@map("notification_logs")
 }
 
-// 18. Audit Logs
+// 22. Audit Logs
 model AuditLog {
-  id             Int      @id @default(autoincrement())
-  actorUserId    Int?     @map("actor_user_id")
-  action         String   @db.VarChar(100)
-  entityType     String   @map("entity_type") @db.VarChar(50)
-  entityId       String   @map("entity_id") @db.VarChar(50)
-  oldValuesJson  String?  @map("old_values_json") @db.Text
-  newValuesJson  String?  @map("new_values_json") @db.Text
-  ipAddress      String?  @map("ip_address") @db.VarChar(45)
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            Int      @id @default(autoincrement())
+  actorUserId   Int?     @map("actor_user_id")
+  action        String   @db.VarChar(100)
+  entityType    String   @map("entity_type") @db.VarChar(50)
+  entityId      String   @map("entity_id") @db.VarChar(50)
+  oldValuesJson String?  @map("old_values_json") @db.Text
+  newValuesJson String?  @map("new_values_json") @db.Text
+  ipAddress     String?  @map("ip_address") @db.VarChar(45)
+  createdAt     DateTime @default(now()) @map("created_at")
 
   actor User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
@@ -490,7 +593,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// 19. System Settings
+// 23. System Settings
 model SystemSetting {
   settingKey   String   @id @map("setting_key") @db.VarChar(100)
   settingValue String   @map("setting_value") @db.Text
@@ -500,16 +603,16 @@ model SystemSetting {
   @@map("system_settings")
 }
 
-// 20. Monotonic Sequence Generator (Guaranteed Collision-Safe ID Allocation)
+// 24. Monotonic Sequence Generator
 model SequenceTracker {
-  name         String   @id @db.VarChar(50) // e.g. 'TICKET_SEQ', 'COMPANY_SEQ'
+  name         String   @id @db.VarChar(50) // 'TICKET_SEQ', 'COMPANY_SEQ', 'BRANCH_SEQ', 'DEPARTMENT_SEQ'
   currentValue Int      @default(0) @map("current_value")
   updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("sequence_trackers")
 }
 
-// 21. Product Master
+// 25. Product Master
 model Product {
   id          String   @id @db.VarChar(50) // PROD-0001
   code        String   @unique @db.VarChar(50)
@@ -520,8 +623,12 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
+  department      Department?
+  companyProducts CompanyProduct[]
+  branchProducts  BranchProduct[]
   subscriptions   Subscription[]
   implementations Implementation[]
+  tickets         Ticket[]
 
   @@index([code], name: "idx_products_code")
   @@index([category], name: "idx_products_category")
@@ -529,7 +636,7 @@ model Product {
   @@map("products")
 }
 
-// 22. Annual Maintenance / Subscriptions
+// 26. Annual Maintenance / Subscriptions
 model Subscription {
   id                String             @id @db.VarChar(50) // SUB-0001
   companyId         String             @map("company_id") @db.VarChar(50)
@@ -558,7 +665,12 @@ model Subscription {
   @@map("subscriptions")
 }
 
-// 23. New Implementations
+enum TaskStatus {
+  PENDING
+  COMPLETED
+}
+
+// 27. New Implementations
 model Implementation {
   id                 String               @id @db.VarChar(50) // IMP-0001
   companyId          String               @map("company_id") @db.VarChar(50)
@@ -577,10 +689,11 @@ model Implementation {
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @default(now()) @updatedAt @map("updated_at")
 
-  company       Company       @relation(fields: [companyId], references: [id], onDelete: Restrict)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
-  subscription  Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  ownerEmployee Employee?     @relation(fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  company       Company              @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  product       Product              @relation(fields: [productId], references: [id], onDelete: Restrict)
+  subscription  Subscription?        @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  ownerEmployee Employee?            @relation(fields: [ownerEmployeeId], references: [id], onDelete: SetNull)
+  tasks         ImplementationTask[]
 
   @@index([companyId], name: "idx_implementations_company")
   @@index([productId], name: "idx_implementations_product")
@@ -588,7 +701,7 @@ model Implementation {
   @@map("implementations")
 }
 
-// 24. Ticket Reopen History
+// 28. Ticket Reopen History
 model TicketReopenHistory {
   id             Int          @id @default(autoincrement())
   ticketId       String       @map("ticket_id") @db.VarChar(50)
@@ -604,3 +717,24 @@ model TicketReopenHistory {
   @@map("ticket_reopen_history")
 }
 
+// 29. Implementation Tasks (Checklist & Dynamic Progress)
+model ImplementationTask {
+  id               String      @id @db.VarChar(50) // TSK-0001
+  implementationId String      @map("implementation_id") @db.VarChar(50)
+  taskName         String      @map("task_name") @db.VarChar(255)
+  description      String?     @db.Text
+  priority         String?     @default("MEDIUM") @db.VarChar(50)
+  status           TaskStatus  @default(PENDING)
+  orderIndex       Int         @default(0) @map("order_index")
+  completedBy      Int?        @map("completed_by")
+  completedAt      DateTime?   @map("completed_at")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at")
+
+  implementation  Implementation @relation(fields: [implementationId], references: [id], onDelete: Cascade)
+  completedByUser User?          @relation("TaskCompletedBy", fields: [completedBy], references: [id], onDelete: SetNull)
+
+  @@index([implementationId], name: "idx_impl_tasks_impl")
+  @@index([status], name: "idx_impl_tasks_status")
+  @@map("implementation_tasks")
+}

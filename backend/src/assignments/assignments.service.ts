@@ -12,16 +12,35 @@ export class AssignmentsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async findBestAvailableEmployee(targetLevel: EmployeeLevel = EmployeeLevel.L1) {
+  async findBestAvailableEmployee(targetLevel: EmployeeLevel = EmployeeLevel.L1, departmentId?: string) {
+    const where: any = {
+      level: targetLevel,
+      status: 'ACTIVE',
+    };
+
+    if (departmentId) {
+      where.OR = [
+        { departmentId: departmentId },
+        { departmentRel: { id: departmentId } },
+        { departmentRel: { name: departmentId } },
+        { departmentRel: { code: departmentId } },
+      ];
+    }
+
+    const activeStatuses: TicketStatus[] = [
+      TicketStatus.OPEN,
+      TicketStatus.IN_PROGRESS,
+      TicketStatus.REOPENED,
+      TicketStatus.CUSTOMER_FEEDBACK,
+      TicketStatus.MANAGER_REVIEW,
+    ];
+
     const employees = await this.prisma.employee.findMany({
-      where: {
-        level: targetLevel,
-        status: 'ACTIVE',
-        availability: 'AVAILABLE',
-      },
+      where,
       include: {
+        departmentRel: true,
         assignedTickets: {
-          where: { status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] } },
+          where: { status: { in: activeStatuses } },
           select: { id: true },
         },
       },
@@ -30,22 +49,50 @@ export class AssignmentsService {
 
     if (employees.length === 0) return null;
 
-    employees.sort((a, b) => a.assignedTickets.length - b.assignedTickets.length);
+    // Prioritize AVAILABLE over BUSY if any available, but always sort by lowest real active workload
+    employees.sort((a, b) => {
+      if (a.assignedTickets.length !== b.assignedTickets.length) {
+        return a.assignedTickets.length - b.assignedTickets.length;
+      }
+      if (a.availability === 'AVAILABLE' && b.availability !== 'AVAILABLE') return -1;
+      if (b.availability === 'AVAILABLE' && a.availability !== 'AVAILABLE') return 1;
+      return 0;
+    });
+
     const best = employees[0];
 
     return {
       ...best,
       active_workload: best.assignedTickets.length,
+      activeWorkload: best.assignedTickets.length,
     };
   }
 
-  async getEligibleEmployees() {
+  async getEligibleEmployees(departmentId?: string) {
+    const where: any = { status: 'ACTIVE' };
+    if (departmentId) {
+      where.OR = [
+        { departmentId: departmentId },
+        { departmentRel: { id: departmentId } },
+        { departmentRel: { name: departmentId } },
+      ];
+    }
+
+    const activeStatuses: TicketStatus[] = [
+      TicketStatus.OPEN,
+      TicketStatus.IN_PROGRESS,
+      TicketStatus.REOPENED,
+      TicketStatus.CUSTOMER_FEEDBACK,
+      TicketStatus.MANAGER_REVIEW,
+    ];
+
     const employees = await this.prisma.employee.findMany({
-      where: { status: 'ACTIVE' },
+      where,
       include: {
         user: { select: { id: true, email: true, role: true } },
+        departmentRel: { select: { id: true, name: true, code: true } },
         assignedTickets: {
-          where: { status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED'] } },
+          where: { status: { in: activeStatuses } },
           select: { id: true },
         },
       },
@@ -58,7 +105,9 @@ export class AssignmentsService {
       name: e.name,
       email: e.email,
       phone: e.phone,
-      department: e.department,
+      department: e.departmentRel?.name || e.department,
+      department_id: e.departmentId || e.departmentRel?.id || null,
+      department_code: e.departmentRel?.code || null,
       designation: e.designation,
       level: e.level,
       availability: e.availability,
@@ -77,7 +126,7 @@ export class AssignmentsService {
   }): Promise<any> {
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: params.ticketId },
-      include: { assignedEmployee: true },
+      include: { assignedEmployee: true, department: true },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
@@ -86,20 +135,20 @@ export class AssignmentsService {
     if (rawId.startsWith('EMP-')) {
       employee = await this.prisma.employee.findUnique({
         where: { id: rawId },
-        include: { user: true },
+        include: { user: true, departmentRel: true },
       });
     } else {
       const numericId = Number(params.employeeId);
       if (!isNaN(numericId) && numericId > 0) {
         employee = await this.prisma.employee.findUnique({
           where: { userId: numericId },
-          include: { user: true },
+          include: { user: true, departmentRel: true },
         });
       }
       if (!employee) {
         employee = await this.prisma.employee.findUnique({
           where: { id: rawId },
-          include: { user: true },
+          include: { user: true, departmentRel: true },
         });
       }
     }
@@ -112,8 +161,20 @@ export class AssignmentsService {
       );
     }
 
+    // DEPARTMENT INTEGRITY CHECK:
+    // If ticket is attached to a department, ensure assigned employee belongs to that department (unless authorized override)
+    if (ticket.departmentId && employee.departmentId && ticket.departmentId !== employee.departmentId) {
+      // Check if department names match or throw cross-department assignment rejection
+      const dept = await this.prisma.department.findUnique({ where: { id: ticket.departmentId } });
+      const empDept = await this.prisma.department.findUnique({ where: { id: employee.departmentId } });
+      if (dept && empDept && dept.id !== empDept.id) {
+        throw new BadRequestException(
+          `Cannot assign ${dept.name} ticket to employee ${employee.name} who belongs to the ${empDept.name} department.`,
+        );
+      }
+    }
+
     const employeeId = employee.id;
-    // Map level to employee level if not provided or to ensure tier accuracy
     const targetLevel = (params.level || (employee.level as unknown as TicketLevel)) as TicketLevel;
     const isReassignment = !!ticket.assignedEmployeeId && ticket.assignedEmployeeId !== employeeId;
     const previousEmployeeName = ticket.assignedEmployee?.name || 'Unassigned';
@@ -144,7 +205,7 @@ export class AssignmentsService {
       },
     });
 
-    // 4. Log to history (separate from escalation)
+    // 4. Log to history
     const actionType = isReassignment ? 'REASSIGNED' : 'ASSIGNED';
     const title = isReassignment
       ? `Reassigned to ${employee.name} (${targetLevel})`
@@ -169,6 +230,7 @@ export class AssignmentsService {
           newEmployeeName: employee.name,
           level: targetLevel,
           type: params.assignmentType,
+          department: employee.departmentRel?.name || employee.department,
           notes: params.notes,
         }),
       },
@@ -195,6 +257,7 @@ export class AssignmentsService {
         employeeId,
         level: targetLevel,
         type: params.assignmentType,
+        department: employee.departmentRel?.name || employee.department,
         notes: params.notes,
       },
     });
@@ -214,6 +277,7 @@ export class AssignmentsService {
     status?: string;
     priority?: string;
     assignedStatus?: 'ASSIGNED' | 'UNASSIGNED' | 'ALL';
+    departmentId?: string;
     search?: string;
     page?: number;
     limit?: number;
@@ -232,6 +296,10 @@ export class AssignmentsService {
 
     if (params.priority && params.priority !== 'ALL') {
       where.priority = params.priority;
+    }
+
+    if (params.departmentId && params.departmentId !== 'ALL') {
+      where.departmentId = params.departmentId;
     }
 
     if (params.assignedStatus === 'UNASSIGNED') {
@@ -260,6 +328,9 @@ export class AssignmentsService {
         orderBy: [{ priority: 'asc' }, { createdAt: 'desc' }],
         include: {
           company: { select: { id: true, companyName: true } },
+          product: { select: { id: true, code: true, name: true } },
+          branch: { select: { id: true, branchName: true } },
+          department: { select: { id: true, name: true, code: true } },
           customerContact: { select: { id: true, name: true, phone: true } },
           assignedEmployee: { select: { id: true, name: true, level: true, email: true, department: true } },
           assignments: {
@@ -278,6 +349,12 @@ export class AssignmentsService {
       id: t.id,
       company_id: t.companyId,
       company_name: t.company?.companyName || null,
+      product_id: t.productId,
+      product_name: t.product?.name || null,
+      branch_id: t.branchId,
+      branch_name: t.branch?.branchName || null,
+      department_id: t.departmentId,
+      department_name: t.department?.name || null,
       contact_name: t.customerContact?.name || null,
       problem_type: t.problemType,
       priority: t.priority,

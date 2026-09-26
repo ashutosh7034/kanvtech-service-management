@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCircle2, LogOut, ChevronDown, User as UserIcon } from 'lucide-react';
+import { Bell, CheckCircle2, LogOut, ChevronDown, KeyRound, User as UserIcon } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { api } from '../../api/client';
 import { formatTime } from '../../utils/date';
+import { ChangePasswordModal } from '../auth/ChangePasswordModal';
 
 interface Props {
   pageTitle: string;
@@ -14,6 +15,7 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
   const { notifications, unreadCount, markAsRead, markAllAsRead, showToast } = useNotifications();
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
 
   const notifMenuRef = useRef<HTMLDivElement>(null);
@@ -279,6 +281,35 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
               {/* Menu Actions */}
               <div style={{ padding: '6px' }}>
                 <button
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    setShowChangePassword(true);
+                  }}
+                  style={{
+                    width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    padding: '9px 12px',
+                    background: 'transparent',
+                    border: 'none',
+                    borderRadius: 6,
+                    color: '#334155',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    transition: 'background 0.15s ease',
+                    marginBottom: 2,
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.background = '#f1f5f9')}
+                  onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                >
+                  <KeyRound size={15} color="#0284c7" />
+                  <span>Change Password</span>
+                </button>
+
+                <button
                   onClick={handleLogout}
                   style={{
                     width: '100%',
@@ -307,6 +338,12 @@ export const Header: React.FC<Props> = ({ pageTitle }) => {
           )}
         </div>
       </div>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+      />
     </header>
   );
 };

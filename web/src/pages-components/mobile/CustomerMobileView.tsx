@@ -27,6 +27,12 @@ export const CustomerMobileView: React.FC = () => {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [loading, setLoading] = useState(false);
 
+  // Customer Products & Branches State
+  const [myProducts, setMyProducts] = useState<any[]>([]);
+  const [myBranches, setMyBranches] = useState<any[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+
   // Form State
   const [problemType, setProblemType] = useState('');
   const [priority, setPriority] = useState<'HIGH' | 'MEDIUM' | 'LOW'>('MEDIUM');
@@ -42,7 +48,26 @@ export const CustomerMobileView: React.FC = () => {
 
   useEffect(() => {
     loadMyTickets();
+    loadCustomerData();
   }, [user]);
+
+  const loadCustomerData = async () => {
+    const compId = user?.companyId || 'CMP-0001';
+    try {
+      const [compRes, branchRes] = await Promise.all([
+        api.getCompany(compId),
+        api.getCustomerBranches(compId),
+      ]);
+      const prods = compRes.company?.products || [];
+      setMyProducts(prods);
+      setMyBranches(branchRes.branches || []);
+      if (prods.length > 0 && !selectedProductId) {
+        setSelectedProductId(prods[0].product_id || prods[0].productId);
+      }
+    } catch (err) {
+      console.error('Failed to load customer products/branches', err);
+    }
+  };
 
   const loadMyTickets = async () => {
     setLoading(true);
@@ -59,12 +84,18 @@ export const CustomerMobileView: React.FC = () => {
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
+    if (!selectedProductId) {
+      setCreateError('Please select a purchased product for this ticket.');
+      return;
+    }
     setCreating(true);
 
     try {
       const res = await api.createTicket({
         companyId: user?.companyId || 'CMP-0001',
         customerContactId: user?.contactId || 1,
+        branchId: selectedBranchId || undefined,
+        productId: selectedProductId,
         problemType,
         priority,
         category,
@@ -256,6 +287,48 @@ export const CustomerMobileView: React.FC = () => {
               )}
 
               <form onSubmit={handleCreateSubmit}>
+                {myBranches.length > 0 && (
+                  <div className="form-group" style={{ marginBottom: 10 }}>
+                    <label className="form-label" style={{ fontSize: 12 }}>Branch Location</label>
+                    <select
+                      className="form-control"
+                      style={{ padding: '6px 8px', fontSize: 12 }}
+                      value={selectedBranchId}
+                      disabled={activeCount >= 2}
+                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                    >
+                      <option value="">Headquarters / Main Organization</option>
+                      {myBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.branch_name || b.branchName} ({b.city})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="form-group" style={{ marginBottom: 10 }}>
+                  <label className="form-label" style={{ fontSize: 12 }}>Purchased Product <span className="required">*</span></label>
+                  <select
+                    className="form-control"
+                    style={{ padding: '6px 8px', fontSize: 12 }}
+                    required
+                    value={selectedProductId}
+                    disabled={activeCount >= 2}
+                    onChange={(e) => setSelectedProductId(e.target.value)}
+                  >
+                    <option value="">Select Product</option>
+                    {(selectedBranchId
+                      ? (myBranches.find((b) => b.id === selectedBranchId)?.branchProducts || myBranches.find((b) => b.id === selectedBranchId)?.products || myProducts)
+                      : myProducts
+                    ).map((p: any) => (
+                      <option key={p.product_id || p.productId || p.id} value={p.product_id || p.productId || p.id}>
+                        {p.product_name || p.product?.name || p.productCode || p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div className="form-group" style={{ marginBottom: 10 }}>
                   <label className="form-label" style={{ fontSize: 12 }}>Problem Summary <span className="required">*</span></label>
                   <input

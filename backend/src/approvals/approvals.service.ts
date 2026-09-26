@@ -178,6 +178,10 @@ export class ApprovalsService {
     reason: string;
     isCustomer?: boolean;
   }): Promise<void> {
+    if (!params.reason || !params.reason.trim()) {
+      throw new BadRequestException('A valid reopening reason is required.');
+    }
+
     const actorId = params.userId || params.managerUserId || 1;
     const ticket = await this.prisma.ticket.findUnique({
       where: { id: params.ticketId },
@@ -194,6 +198,32 @@ export class ApprovalsService {
 
     if (!allowableStatuses.includes(ticket.status)) {
       throw new BadRequestException(`Ticket cannot be reopened from '${ticket.status}'.`);
+    }
+
+    // When reopening from CLOSED, verify the customer does not exceed the 2-active-ticket limit
+    if (ticket.status === TicketStatus.CLOSED) {
+      const activeStatuses: TicketStatus[] = [
+        TicketStatus.OPEN,
+        TicketStatus.IN_PROGRESS,
+        TicketStatus.REOPENED,
+        TicketStatus.RESOLVED,
+        TicketStatus.MANAGER_REVIEW,
+        TicketStatus.CUSTOMER_FEEDBACK,
+      ];
+      const activeCount = await this.prisma.ticket.count({
+        where: {
+          OR: [
+            ...(ticket.customerContactId ? [{ customerContactId: ticket.customerContactId }] : []),
+            ...(ticket.companyId ? [{ companyId: ticket.companyId }] : []),
+          ],
+          status: { in: activeStatuses },
+        },
+      });
+      if (activeCount >= 2) {
+        throw new BadRequestException(
+          'Cannot reopen ticket: The organization already has 2 active tickets. Please close an active ticket first.',
+        );
+      }
     }
 
     // 1. Record in TicketReopenHistory

@@ -147,10 +147,23 @@ async function runAllTests() {
 
   // 5. Ticket Creation
   let createdTicketId = '';
+  let acmeContact = await prisma.companyContact.findFirst({ where: { companyId: 'CMP-0001', isPrimary: true } });
+  if (!acmeContact) {
+    acmeContact = await prisma.companyContact.findFirst({ where: { companyId: 'CMP-0001' } });
+  }
+  const acmeContactId = acmeContact?.id || 1;
+
+  let zenithContact = await prisma.companyContact.findFirst({ where: { companyId: 'CMP-0002', isPrimary: true } });
+  if (!zenithContact) {
+    zenithContact = await prisma.companyContact.findFirst({ where: { companyId: 'CMP-0002' } });
+  }
+  const zenithContactId = zenithContact?.id || 2;
+
   await test('5. Ticket Creation - ID sequence and customer auto-population', async () => {
     const ticket = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Server Storage Degradation',
       priority: TicketPriority.HIGH,
       category: 'Infrastructure',
@@ -169,7 +182,8 @@ async function runAllTests() {
   await test('6. Two-Ticket Restriction - Strict rejection on 3rd open ticket', async () => {
     const ticket2 = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Network Latency Spike',
       priority: TicketPriority.MEDIUM,
       category: 'Networking',
@@ -183,7 +197,8 @@ async function runAllTests() {
       async () =>
         ticketsService.createTicket({
           companyId: 'CMP-0001',
-          customerContactId: 1,
+          customerContactId: acmeContactId,
+          productId: 'PROD-0001',
           problemType: 'Email Relay Failure',
           priority: TicketPriority.LOW,
           category: 'Applications',
@@ -219,8 +234,24 @@ async function runAllTests() {
   });
 
   // 8. L1 Workflow
+  const adminUser = await prisma.user.findUnique({ where: { email: 'admin@kanvtech.com' } });
+  const managerUser = await prisma.user.findUnique({ where: { email: 'manager@kanvtech.com' } });
+  const l1User = await prisma.user.findUnique({ where: { email: 'l1.amit@kanvtech.com' } });
+  const l2User = await prisma.user.findUnique({ where: { email: 'l2.vikram@kanvtech.com' } });
+  const l3User = await prisma.user.findUnique({ where: { email: 'l3.priya@kanvtech.com' } });
+  const custUser = await prisma.user.findUnique({ where: { email: 'rajesh@acme.com' } });
+  const zenithUser = await prisma.user.findUnique({ where: { email: 'anjali@zenith.com' } });
+
+  const adminUserId = adminUser?.id || 1;
+  const managerUserId = managerUser?.id || 2;
+  const l1UserId = l1User?.id || 3;
+  const l2UserId = l2User?.id || 5;
+  const l3UserId = l3User?.id || 6;
+  const custUserId = custUser?.id || 7;
+  const zenithUserId = zenithUser?.id || 8;
+
   await test('8. L1 Workflow - Start Work and status transition', async () => {
-    await ticketsService.startWork(createdTicketId, 'EMP-002', 3);
+    await ticketsService.startWork(createdTicketId, 'EMP-002', l1UserId);
     const ticket = await ticketsService.getTicketById(createdTicketId);
     assert.strictEqual(ticket.status, 'IN_PROGRESS');
   });
@@ -236,7 +267,7 @@ async function runAllTests() {
       escalatedByEmployeeId: 'EMP-002',
       assignedToEmployeeId: 'EMP-004',
       reason: 'Requires advanced SAN RAID reconstruction permissions',
-      actorUserId: 3,
+      actorUserId: l1UserId,
     });
 
     const ticket = await ticketsService.getTicketById(createdTicketId);
@@ -254,7 +285,7 @@ async function runAllTests() {
       escalatedByEmployeeId: 'EMP-004',
       assignedToEmployeeId: 'EMP-005',
       reason: 'Firmware controller fault requiring core kernel intervention',
-      actorUserId: 5,
+      actorUserId: l2UserId,
     });
 
     const ticket = await ticketsService.getTicketById(createdTicketId);
@@ -298,7 +329,7 @@ async function runAllTests() {
       ticketId: createdTicketId,
       employeeId: 'EMP-005',
       resolutionNotes: 'Controller microcode updated, SAN logical volume parity rebuilt successfully.',
-      actorUserId: 6,
+      actorUserId: l3UserId,
     });
 
     let ticket = await ticketsService.getTicketById(createdTicketId);
@@ -307,7 +338,7 @@ async function runAllTests() {
     // Customer / Manager tests reopen
     await approvalsService.reopenResolution({
       ticketId: createdTicketId,
-      userId: 7,
+      userId: custUserId,
       reason: 'Please attach the SAN diagnostic verification logs.',
       isCustomer: true,
     });
@@ -320,7 +351,7 @@ async function runAllTests() {
       ticketId: createdTicketId,
       employeeId: 'EMP-005',
       resolutionNotes: 'Diagnostic log attached confirming 0 uncorrectable parity blocks.',
-      actorUserId: 6,
+      actorUserId: l3UserId,
     });
 
     ticket = await ticketsService.getTicketById(createdTicketId);
@@ -331,7 +362,7 @@ async function runAllTests() {
   await test('15. Customer Feedback - Rating 1-5 and Remarks', async () => {
     await feedbackService.submitFeedback({
       ticketId: createdTicketId,
-      customerUserId: 7,
+      customerUserId: custUserId,
       rating: 5,
       remarks: 'Outstanding resolution speed and technical competency by Kanvtech team.',
     });
@@ -352,12 +383,13 @@ async function runAllTests() {
   // 17. Authorization Guard
   await test('17. Authorization - Customer cross-company isolation', async () => {
     const custAcme = await authService.login('rajesh@acme.com', 'Password@123');
+    const compId = custAcme.user.companyId || 'CMP-0001';
     const foreignTickets = await prisma.ticket.findMany({
-      where: { companyId: { not: custAcme.user.companyId } },
+      where: { companyId: { not: compId } },
       take: 1,
     });
     if (foreignTickets.length > 0) {
-      assert.notStrictEqual(foreignTickets[0].companyId, custAcme.user.companyId);
+      assert.notStrictEqual(foreignTickets[0].companyId, compId);
     }
   });
 
@@ -369,7 +401,7 @@ async function runAllTests() {
       filePath: '/uploads/san_diagnostic_report.pdf',
       fileSize: 204800,
       mimeType: 'application/pdf',
-      uploadedByUserId: 6,
+      uploadedByUserId: l3UserId,
     });
 
     const ticket = await ticketsService.getTicketById(createdTicketId);
@@ -382,12 +414,13 @@ async function runAllTests() {
     // 1. Customer creates ticket
     const e2eTicket = await ticketsService.createTicket({
       companyId: 'CMP-0002',
-      customerContactId: 3,
+      customerContactId: zenithContactId,
+      productId: 'PROD-0001',
       problemType: 'Database Deadlock in Production ERP',
       priority: TicketPriority.HIGH,
       category: 'Database Services',
       description: 'Transaction locks exceeding timeout threshold during batch settlement.',
-      createdByUserId: 7,
+      createdByUserId: zenithUserId,
     });
     assert(e2eTicket.id, 'Step 1: Ticket created with ID');
 
@@ -396,12 +429,12 @@ async function runAllTests() {
       ticketId: e2eTicket.id,
       employeeId: 'EMP-002',
       level: TicketLevel.L1,
-      assignedByUserId: 1,
+      assignedByUserId: adminUserId,
       assignmentType: 'MANUAL',
     });
 
     // 3. L1 starts work
-    await ticketsService.startWork(e2eTicket.id, 'EMP-002', 3);
+    await ticketsService.startWork(e2eTicket.id, 'EMP-002', l1UserId);
     let t = await ticketsService.getTicketById(e2eTicket.id);
     assert.strictEqual(t.status, 'IN_PROGRESS', 'Step 3: Status is IN_PROGRESS');
     assert(t.timer.isRunning, 'Step 3: Timer running');
@@ -409,7 +442,7 @@ async function runAllTests() {
     // 4. L1 adds notes
     await ticketsService.addComment({
       ticketId: e2eTicket.id,
-      authorUserId: 3,
+      authorUserId: l1UserId,
       commentType: CommentType.INTERNAL_NOTE,
       message: 'Initial query plan analysis shows deadlock on table GL_BALANCES.',
     });
@@ -422,7 +455,7 @@ async function runAllTests() {
       escalatedByEmployeeId: 'EMP-002',
       assignedToEmployeeId: 'EMP-004',
       reason: 'Requires tuning of row-level lock escalation parameters',
-      actorUserId: 3,
+      actorUserId: l1UserId,
     });
     t = await ticketsService.getTicketById(e2eTicket.id);
     assert.strictEqual(t.assigned_level, 'L2', 'Step 5: Level is L2');
@@ -431,7 +464,7 @@ async function runAllTests() {
     // 6. L2 works & escalates to L3
     await ticketsService.addComment({
       ticketId: e2eTicket.id,
-      authorUserId: 5,
+      authorUserId: l2UserId,
       commentType: CommentType.INTERNAL_NOTE,
       message: 'Isolation level requires read-committed snapshot isolation configuration.',
     });
@@ -443,7 +476,7 @@ async function runAllTests() {
       escalatedByEmployeeId: 'EMP-004',
       assignedToEmployeeId: 'EMP-005',
       reason: 'Requires DB engine parameter reconfiguration and failover cluster tuning',
-      actorUserId: 5,
+      actorUserId: l2UserId,
     });
     t = await ticketsService.getTicketById(e2eTicket.id);
     assert.strictEqual(t.assigned_level, 'L3', 'Step 6: Level is L3');
@@ -453,7 +486,7 @@ async function runAllTests() {
       ticketId: e2eTicket.id,
       employeeId: 'EMP-005',
       resolutionNotes: 'Configured RCSI and tuned settlement transaction batch index ordering.',
-      actorUserId: 6,
+      actorUserId: l3UserId,
     });
     t = await ticketsService.getTicketById(e2eTicket.id);
     assert.strictEqual(t.status, 'CUSTOMER_FEEDBACK', 'Step 7: Status is CUSTOMER_FEEDBACK');
@@ -461,7 +494,7 @@ async function runAllTests() {
     // 8. Customer submits 5-star feedback
     await feedbackService.submitFeedback({
       ticketId: e2eTicket.id,
-      customerUserId: 7,
+      customerUserId: zenithUserId,
       rating: 5,
       remarks: 'Flawless resolution. Settlement run completed without delays.',
     });
@@ -507,7 +540,8 @@ async function runAllTests() {
     // 1. Create a ticket
     const ticket = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Critical Production Latency',
       priority: TicketPriority.HIGH,
       category: 'Core DB',
@@ -621,27 +655,28 @@ async function runAllTests() {
     // 1. Create a ticket
     const ticket = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Database Deadlock on Settlement',
       priority: TicketPriority.HIGH,
       category: 'Database',
       description: 'Transaction batch failing with error 1205.',
-      createdByUserId: 7, // customer rajesh@acme.com
+      createdByUserId: custUserId, // customer rajesh@acme.com
     });
 
     // 2. Specialist starts and resolves
-    await ticketsService.startWork(ticket.id, 'EMP-002', 3);
+    await ticketsService.startWork(ticket.id, 'EMP-002', l1UserId);
     await approvalsService.submitForReview({
       ticketId: ticket.id,
       employeeId: 'EMP-002',
       resolutionNotes: 'Indexes rebuilt on settlement table.',
-      actorUserId: 3,
+      actorUserId: l1UserId,
     });
 
     // 3. Customer checks and says problem is still occurring -> Customer Reopens
     await approvalsService.reopenResolution({
       ticketId: ticket.id,
-      userId: 7,
+      userId: custUserId,
       reason: 'Issue recurred during midday batch run at 11:30 AM.',
       isCustomer: true,
     });
@@ -660,13 +695,13 @@ async function runAllTests() {
       ticketId: ticket.id,
       employeeId: 'EMP-002',
       resolutionNotes: 'Applied index hints and isolation level adjustment.',
-      actorUserId: 3,
+      actorUserId: l1UserId,
     });
 
     // 5. Customer submits feedback and closes
     await feedbackService.submitFeedback({
       ticketId: ticket.id,
-      customerUserId: 7,
+      customerUserId: custUserId,
       rating: 5,
       remarks: 'Second fix resolved the issue completely. Excellent support.',
     });

@@ -90,10 +90,8 @@ export class FeedbackService {
       return;
     }
 
-    if (!['CUSTOMER_FEEDBACK', 'MANAGER_REVIEW', 'RESOLVED'].includes(ticket.status)) {
-      throw new BadRequestException(
-        `Cannot close ticket in '${ticket.status}' status. Ticket must be resolved and reviewed.`,
-      );
+    if (!params.closureReason || !params.closureReason.trim()) {
+      throw new BadRequestException('A valid closure reason is required.');
     }
 
     const slaResult = this.slaService.computeSLAStatus({

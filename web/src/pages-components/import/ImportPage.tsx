@@ -1,16 +1,44 @@
 import React, { useState } from 'react';
 import { api } from '../../api/client';
+import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
-import { FileSpreadsheet, Download, Upload, AlertTriangle, CheckCircle2, FileCheck } from 'lucide-react';
+import {
+  FileSpreadsheet,
+  Download,
+  Upload,
+  AlertTriangle,
+  CheckCircle2,
+  FileCheck,
+  Package,
+  Layers,
+  Users,
+  Building2,
+  GitBranch,
+  RotateCcw,
+  ShieldAlert,
+} from 'lucide-react';
 
 export const ImportPage: React.FC = () => {
+  const { user } = useAuth();
   const { showToast } = useNotifications();
-  const [importType, setImportType] = useState<'companies' | 'employees'>('companies');
+  const isAdmin = user?.role === 'ADMIN';
+
+  const [importType, setImportType] = useState<string>('customers');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
   const [validating, setValidating] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [summary, setSummary] = useState<any | null>(null);
+  const [resetting, setResetting] = useState(false);
+  const [showResetModal, setShowResetModal] = useState(false);
+
+  const importEntities = [
+    { id: 'products', label: '1. Products', icon: Package, templateName: 'Products' },
+    { id: 'departments', label: '2. Departments', icon: Layers, templateName: 'Departments' },
+    { id: 'employees', label: '3. Employees', icon: Users, templateName: 'Employees' },
+    { id: 'customers', label: '4. Customer Master', icon: Building2, templateName: 'Customers' },
+    { id: 'branches', label: '5. Customer Branches', icon: GitBranch, templateName: 'Branches' },
+  ];
 
   const handleDownloadTemplate = async () => {
     try {
@@ -68,63 +96,86 @@ export const ImportPage: React.FC = () => {
     }
   };
 
+  const handleDevReset = async () => {
+    setResetting(true);
+    try {
+      const res = await api.devReset();
+      setShowResetModal(false);
+      showToast(res.message || 'Demo data successfully reset.', 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to reset demo data.', 'danger');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const currentEntity = importEntities.find((e) => e.id === importType) || importEntities[3];
+
   return (
     <div>
       <div className="page-header">
         <div>
           <h2 className="page-title">Enterprise Excel & CSV Import Engine</h2>
-          <div className="page-subtitle">Batch import company masters and specialist employee rosters with strict validation</div>
+          <div className="page-subtitle">Batch import products, departments, specialist rosters, customer masters, and branch networks</div>
         </div>
-        <button className="btn btn-secondary" onClick={handleDownloadTemplate}>
-          <Download size={14} /> Download {importType === 'companies' ? 'Company' : 'Employee'} Template (.xlsx)
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {isAdmin && (
+            <button
+              className="btn btn-outline"
+              style={{ borderColor: '#ef4444', color: '#b91c1c' }}
+              onClick={() => setShowResetModal(true)}
+            >
+              <RotateCcw size={14} /> Dev Data Reset
+            </button>
+          )}
+          <button className="btn btn-secondary" onClick={handleDownloadTemplate}>
+            <Download size={14} /> Download {currentEntity.templateName} Template (.xlsx)
+          </button>
+        </div>
       </div>
 
       {/* Selector Tabs */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <button
-          className={`btn ${importType === 'companies' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => {
-            setImportType('companies');
-            setFile(null);
-            setPreview(null);
-            setSummary(null);
-          }}
-        >
-          <FileSpreadsheet size={15} /> Company Master Import
-        </button>
-        <button
-          className={`btn ${importType === 'employees' ? 'btn-primary' : 'btn-secondary'}`}
-          onClick={() => {
-            setImportType('employees');
-            setFile(null);
-            setPreview(null);
-            setSummary(null);
-          }}
-        >
-          <FileSpreadsheet size={15} /> Employee Roster Import
-        </button>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
+        {importEntities.map((ent) => {
+          const Icon = ent.icon;
+          const active = importType === ent.id;
+          return (
+            <button
+              key={ent.id}
+              className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              onClick={() => {
+                setImportType(ent.id);
+                setFile(null);
+                setPreview(null);
+                setSummary(null);
+              }}
+            >
+              <Icon size={15} /> {ent.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Upload Box */}
       <div className="card" style={{ marginBottom: 20 }}>
         <div className="card-header">
-          <div className="card-title">1. Upload Spreadsheet File (.xlsx, .xls, .csv)</div>
+          <div className="card-title">1. Upload {currentEntity.templateName} Spreadsheet (.xlsx, .xls, .csv)</div>
         </div>
 
         <div
           style={{
             border: '2px dashed #cbd5e1',
             borderRadius: 8,
-            padding: '20px 24px',
+            padding: '24px',
             textAlign: 'center',
             background: '#f8fafc',
           }}
         >
-          <Upload size={24} color="#0b3b60" style={{ margin: '0 auto 8px auto' }} />
-          <div style={{ fontWeight: 600, fontSize: 13 }}>Select Excel or CSV Spreadsheet</div>
-          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2, marginBottom: 12 }}>
-            Validates GSTN format, corporate emails, required columns, and checks for existing duplicates in the database.
+          <Upload size={28} color="#0b3b60" style={{ margin: '0 auto 8px auto' }} />
+          <div style={{ fontWeight: 600, fontSize: 14 }}>Select {currentEntity.templateName} File</div>
+          <div style={{ fontSize: 12, color: '#64748b', marginTop: 4, marginBottom: 14 }}>
+            System performs schema checks, dependency ordering, foreign key lookups, and duplicate email/GSTN detection.
           </div>
 
           <label className="btn btn-primary" style={{ cursor: 'pointer', display: 'inline-flex' }}>
@@ -213,7 +264,7 @@ export const ImportPage: React.FC = () => {
                     {preview.previewRows.map((row: any, idx: number) => (
                       <tr key={idx}>
                         {Object.values(row).map((val: any, vIdx: number) => (
-                          <td key={vIdx}>{val || '—'}</td>
+                          <td key={vIdx}>{typeof val === 'object' ? JSON.stringify(val) : (val || '—')}</td>
                         ))}
                       </tr>
                     ))}
@@ -237,6 +288,41 @@ export const ImportPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Safe Dev Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 500, padding: 24, background: 'white', borderRadius: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <ShieldAlert size={24} color="#ef4444" />
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+                Confirm Development Data Reset
+              </h3>
+            </div>
+            <p style={{ fontSize: 13, color: '#475569', lineHeight: 1.6 }}>
+              This will clear all demo customers, branches, tickets, implementations, and demo specialist records.
+              Database schemas, migrations, product definitions, and your administrative login credentials will remain intact.
+            </p>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: 12, borderRadius: 6, fontSize: 12, color: '#991b1b', marginBottom: 20 }}>
+              <strong>Safety Notice:</strong> This operation is strictly rejected in production environments.
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button className="btn btn-secondary" onClick={() => setShowResetModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                style={{ background: '#dc2626', color: 'white' }}
+                onClick={handleDevReset}
+                disabled={resetting}
+              >
+                {resetting ? 'Resetting...' : 'Confirm Demo Reset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+

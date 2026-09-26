@@ -364,7 +364,10 @@ async function runQASuite() {
     const res = await api('/tickets', { token: tokens['CUSTOMER'] });
     if (res.status === 200) {
       const tickets = Array.isArray(res.data) ? res.data : (res.data?.tickets || res.data?.data || []);
-      const leakedGlobex = tickets.find((t: any) => t.companyId === globexCompany?.id || t.id === globexTicketId || t.company_id === globexCompany?.id);
+      const globexCompId = globexCompany?.id;
+      const leakedGlobex = globexCompId
+        ? tickets.find((t: any) => (t.companyId && t.companyId === globexCompId) || (t.company_id && t.company_id === globexCompId) || (globexTicketId && t.id === globexTicketId))
+        : (globexTicketId ? tickets.find((t: any) => t.id === globexTicketId) : null);
       if (!leakedGlobex) {
         record('Customer Isolation', 'Customer Ticket List Isolation', 'PASS', `All ${tickets.length} returned tickets belong to Acme`);
       } else {

@@ -28,11 +28,8 @@ export class ImportController {
 
   @Get('template/:type')
   @Roles('ADMIN', 'MANAGER')
-  @ApiOperation({ summary: 'Download standard Excel template for companies or employees' })
+  @ApiOperation({ summary: 'Download standard Excel template for importable entity' })
   downloadTemplate(@Param('type') type: string, @Res() res: Response) {
-    if (type !== 'companies' && type !== 'employees') {
-      throw new BadRequestException("Invalid import type. Expected 'companies' or 'employees'.");
-    }
     const buffer = this.importService.generateTemplate(type);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename=kanvtech_${type}_template.xlsx`);
@@ -48,12 +45,19 @@ export class ImportController {
     if (!file) throw new BadRequestException('No Excel file uploaded');
 
     let preview;
-    if (type === 'companies') {
+    const normalizedType = type.toLowerCase();
+    if (normalizedType === 'products') {
+      preview = await this.importService.validateProductImport(file.buffer);
+    } else if (normalizedType === 'departments') {
+      preview = await this.importService.validateDepartmentImport(file.buffer);
+    } else if (normalizedType === 'companies' || normalizedType === 'customers') {
       preview = await this.importService.validateCompanyImport(file.buffer);
-    } else if (type === 'employees') {
+    } else if (normalizedType === 'employees') {
       preview = await this.importService.validateEmployeeImport(file.buffer);
+    } else if (normalizedType === 'branches') {
+      preview = await this.importService.validateBranchImport(file.buffer);
     } else {
-      throw new BadRequestException("Invalid import type. Expected 'companies' or 'employees'.");
+      throw new BadRequestException(`Unsupported preview type '${type}'`);
     }
 
     return { success: true, preview };
@@ -67,15 +71,33 @@ export class ImportController {
       throw new BadRequestException('No rows provided for import commit.');
     }
 
-    let result;
-    if (type === 'companies') {
-      result = await this.importService.commitCompanyImport(body.rows, req.user.userId);
-    } else if (type === 'employees') {
-      result = await this.importService.commitEmployeeImport(body.rows, req.user.userId);
+    let result: { importedCount: number };
+    const normalizedType = type.toLowerCase();
+    const actorUserId = req.user?.userId || req.user?.id;
+
+    if (normalizedType === 'products') {
+      result = await this.importService.commitProductImport(body.rows, actorUserId);
+    } else if (normalizedType === 'departments') {
+      result = await this.importService.commitDepartmentImport(body.rows, actorUserId);
+    } else if (normalizedType === 'companies' || normalizedType === 'customers') {
+      result = await this.importService.commitCompanyImport(body.rows, actorUserId);
+    } else if (normalizedType === 'employees') {
+      result = await this.importService.commitEmployeeImport(body.rows, actorUserId);
+    } else if (normalizedType === 'branches') {
+      result = await this.importService.commitBranchImport(body.rows, actorUserId);
     } else {
-      throw new BadRequestException("Invalid import type. Expected 'companies' or 'employees'.");
+      throw new BadRequestException(`Unsupported commit type '${type}'`);
     }
 
     return { success: true, ...result, message: `Successfully committed ${result.importedCount} records.` };
   }
+
+  @Post('dev-reset')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Safely reset demo/staging data (Development and Staging only)' })
+  async devReset(@Request() req: any) {
+    const result = await this.importService.devReset(req.user?.userId || req.user?.id);
+    return { success: true, ...result };
+  }
 }
+

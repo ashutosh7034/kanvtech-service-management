@@ -11,8 +11,12 @@ export class ImplementationsService {
   ) {}
 
   async generateImplementationId(): Promise<string> {
-    const nextSeq = await this.prisma.getNextSequence('IMPLEMENTATION_SEQ');
-    return `IMP-${String(nextSeq).padStart(4, '0')}`;
+    while (true) {
+      const nextSeq = await this.prisma.getNextSequence('IMPLEMENTATION_SEQ');
+      const id = `IMP-${String(nextSeq).padStart(4, '0')}`;
+      const exists = await this.prisma.implementation.findUnique({ where: { id } });
+      if (!exists) return id;
+    }
   }
 
   async getImplementations(params: {
@@ -106,10 +110,38 @@ export class ImplementationsService {
         product: true,
         subscription: true,
         ownerEmployee: true,
+        tasks: {
+          orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+          include: {
+            completedByUser: {
+              select: {
+                id: true,
+                email: true,
+                employee: { select: { id: true, name: true, designation: true } },
+              },
+            },
+          },
+        },
       },
     });
 
     if (!imp) return null;
+
+    const formattedTasks = (imp.tasks || []).map((t) => ({
+      id: t.id,
+      implementation_id: t.implementationId,
+      task_name: t.taskName,
+      taskName: t.taskName,
+      description: t.description,
+      priority: t.priority,
+      status: t.status,
+      order_index: t.orderIndex,
+      completed_by: t.completedBy,
+      completed_by_name: t.completedByUser?.employee?.name || t.completedByUser?.email || null,
+      completed_at: t.completedAt,
+      created_at: t.createdAt,
+      updated_at: t.updatedAt,
+    }));
 
     return {
       id: imp.id,
@@ -137,6 +169,7 @@ export class ImplementationsService {
       completed_at: imp.completedAt,
       created_at: imp.createdAt,
       updated_at: imp.updatedAt,
+      tasks: formattedTasks,
     };
   }
 
@@ -177,7 +210,7 @@ export class ImplementationsService {
       const emp = await this.prisma.employee.findFirst({ where: { userId: Number(ownerEmployeeId) } });
       if (emp) ownerEmployeeId = emp.id;
     }
-    const rawStartDate = data.startDate || data.start_date;
+    const rawStartDate = data.startDate || data.start_date || new Date().toISOString();
     const rawTargetDate = data.targetGoLiveDate || data.target_go_live_date;
 
     if (!companyId || !productId || !rawStartDate || !rawTargetDate) {
@@ -218,6 +251,26 @@ export class ImplementationsService {
         notes: data.notes || null,
       },
     });
+
+    if (Array.isArray((data as any).tasks) && (data as any).tasks.length > 0) {
+      for (let i = 0; i < (data as any).tasks.length; i++) {
+        const taskItem = (data as any).tasks[i];
+        const taskName = typeof taskItem === 'string' ? taskItem : taskItem.taskName || taskItem.task_name || `Task ${i + 1}`;
+        const taskId = await this.generateTaskId();
+        await this.prisma.implementationTask.create({
+          data: {
+            id: taskId,
+            implementationId: imp.id,
+            taskName,
+            description: typeof taskItem === 'object' ? taskItem.description : null,
+            priority: typeof taskItem === 'object' && taskItem.priority ? taskItem.priority : 'MEDIUM',
+            status: 'PENDING',
+            orderIndex: i + 1,
+          },
+        });
+      }
+      await this.recalculateProgress(imp.id);
+    }
 
     await this.auditService.log({
       actorUserId,
@@ -310,6 +363,250 @@ export class ImplementationsService {
     });
 
     return this.getImplementationById(id);
+  }
+
+  async getImplementationTasks(implementationId: string) {
+    const tasks = await this.prisma.implementationTask.findMany({
+      where: { implementationId },
+      orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
+      include: {
+        completedByUser: {
+          select: {
+            id: true,
+            email: true,
+            employee: { select: { id: true, name: true, designation: true } },
+          },
+        },
+      },
+    });
+
+    return tasks.map((t) => ({
+      id: t.id,
+      implementation_id: t.implementationId,
+      task_name: t.taskName,
+      description: t.description,
+      priority: t.priority,
+      status: t.status,
+      order_index: t.orderIndex,
+      completed_by: t.completedBy,
+      completed_by_name: t.completedByUser?.employee?.name || t.completedByUser?.email || null,
+      completed_at: t.completedAt,
+      created_at: t.createdAt,
+      updated_at: t.updatedAt,
+    }));
+  }
+
+  async recalculateProgress(implementationId: string): Promise<number> {
+    const tasks = await this.prisma.implementationTask.findMany({
+      where: { implementationId },
+      select: { status: true },
+    });
+
+    const total = tasks.length;
+    const completed = tasks.filter((t) => t.status === 'COMPLETED').length;
+    const progressPercentage = total === 0 ? 0 : Math.round((completed / total) * 100);
+
+    const updateData: any = { progressPercentage };
+    if (progressPercentage === 100 && total > 0) {
+      updateData.completedAt = new Date();
+    } else {
+      updateData.completedAt = null;
+    }
+
+    await this.prisma.implementation.update({
+      where: { id: implementationId },
+      data: updateData,
+    });
+
+    return progressPercentage;
+  }
+
+  async generateTaskId(): Promise<string> {
+    const allTasks = await this.prisma.implementationTask.findMany({ select: { id: true } });
+    let maxNum = 0;
+    for (const t of allTasks) {
+      const m = t.id.match(/^TSK-(\d+)$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
+    const nextSeq = await this.prisma.getNextSequence('TASK_SEQ');
+    const safeNum = Math.max(nextSeq, maxNum + 1);
+    return `TSK-${String(safeNum).padStart(4, '0')}`;
+  }
+
+  async addTask(
+    implementationId: string,
+    data: { taskName?: string; description?: string; priority?: string },
+    actorUserId: number,
+  ) {
+    const imp = await this.prisma.implementation.findUnique({ where: { id: implementationId } });
+    if (!imp) throw new NotFoundException('Implementation not found');
+
+    const taskName = (data.taskName || '').trim();
+    if (!taskName) throw new BadRequestException('Task name is required');
+
+    const lastTask = await this.prisma.implementationTask.findFirst({
+      where: { implementationId },
+      orderBy: { orderIndex: 'desc' },
+    });
+    const orderIndex = lastTask ? lastTask.orderIndex + 1 : 0;
+    const id = await this.generateTaskId();
+
+    const task = await this.prisma.implementationTask.create({
+      data: {
+        id,
+        implementationId,
+        taskName,
+        description: data.description?.trim() || null,
+        priority: data.priority?.trim() || 'MEDIUM',
+        status: 'PENDING',
+        orderIndex,
+      },
+    });
+
+    const newProgress = await this.recalculateProgress(implementationId);
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'IMPLEMENTATION_TASK_ADDED',
+      entityType: 'IMPLEMENTATION_TASK',
+      entityId: task.id,
+      newValues: { id: task.id, implementationId, taskName, newProgress },
+    });
+
+    return {
+      task: {
+        id: task.id,
+        implementation_id: task.implementationId,
+        task_name: task.taskName,
+        description: task.description,
+        priority: task.priority,
+        status: task.status,
+        order_index: task.orderIndex,
+        completed_by: task.completedBy,
+        completed_at: task.completedAt,
+        created_at: task.createdAt,
+      },
+      progressPercentage: newProgress,
+    };
+  }
+
+  async updateTask(
+    taskId: string,
+    data: { taskName?: string; description?: string; priority?: string },
+    actorUserId: number,
+  ) {
+    const existing = await this.prisma.implementationTask.findUnique({ where: { id: taskId } });
+    if (!existing) throw new NotFoundException('Task not found');
+
+    const updated = await this.prisma.implementationTask.update({
+      where: { id: taskId },
+      data: {
+        taskName: data.taskName !== undefined ? data.taskName.trim() : undefined,
+        description: data.description !== undefined ? data.description.trim() : undefined,
+        priority: data.priority !== undefined ? data.priority.trim() : undefined,
+      },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'IMPLEMENTATION_TASK_EDITED',
+      entityType: 'IMPLEMENTATION_TASK',
+      entityId: taskId,
+      oldValues: { taskName: existing.taskName, description: existing.description, priority: existing.priority },
+      newValues: data,
+    });
+
+    return updated;
+  }
+
+  async toggleTaskCompletion(taskId: string, isCompleted: boolean, actorUserId: number) {
+    const existing = await this.prisma.implementationTask.findUnique({ where: { id: taskId } });
+    if (!existing) throw new NotFoundException('Task not found');
+
+    const updateData: any = {};
+    if (isCompleted) {
+      updateData.status = 'COMPLETED';
+      updateData.completedBy = actorUserId;
+      updateData.completedAt = new Date();
+    } else {
+      updateData.status = 'PENDING';
+      updateData.completedBy = null;
+      updateData.completedAt = null;
+    }
+
+    const updated = await this.prisma.implementationTask.update({
+      where: { id: taskId },
+      data: updateData,
+    });
+
+    const newProgress = await this.recalculateProgress(existing.implementationId);
+
+    await this.auditService.log({
+      actorUserId,
+      action: isCompleted ? 'IMPLEMENTATION_TASK_COMPLETED' : 'IMPLEMENTATION_TASK_REOPENED',
+      entityType: 'IMPLEMENTATION_TASK',
+      entityId: taskId,
+      newValues: { taskId, implementationId: existing.implementationId, isCompleted, newProgress },
+    });
+
+    return {
+      task: updated,
+      progressPercentage: newProgress,
+    };
+  }
+
+  async removeTask(taskId: string, actorUserId: number) {
+    const existing = await this.prisma.implementationTask.findUnique({ where: { id: taskId } });
+    if (!existing) throw new NotFoundException('Task not found');
+
+    const implementationId = existing.implementationId;
+    const wasCompleted = existing.status === 'COMPLETED';
+
+    await this.prisma.implementationTask.delete({ where: { id: taskId } });
+    const newProgress = await this.recalculateProgress(implementationId);
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'IMPLEMENTATION_TASK_REMOVED',
+      entityType: 'IMPLEMENTATION_TASK',
+      entityId: taskId,
+      oldValues: {
+        id: taskId,
+        taskName: existing.taskName,
+        implementationId,
+        wasCompleted,
+      },
+      newValues: { newProgress },
+    });
+
+    return {
+      success: true,
+      progressPercentage: newProgress,
+      wasCompleted,
+      message: 'Task removed successfully',
+    };
+  }
+
+  async reorderTasks(implementationId: string, taskIds: string[], actorUserId: number) {
+    for (let i = 0; i < taskIds.length; i++) {
+      await this.prisma.implementationTask.updateMany({
+        where: { id: taskIds[i], implementationId },
+        data: { orderIndex: i },
+      });
+    }
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'IMPLEMENTATION_TASKS_REORDERED',
+      entityType: 'IMPLEMENTATION',
+      entityId: implementationId,
+      newValues: { taskIds },
+    });
+
+    return this.getImplementationTasks(implementationId);
   }
 
   async getStats() {

@@ -13,8 +13,12 @@ export class SubscriptionsService {
   ) {}
 
   async generateSubscriptionId(): Promise<string> {
-    const nextSeq = await this.prisma.getNextSequence('SUBSCRIPTION_SEQ');
-    return `SUB-${String(nextSeq).padStart(4, '0')}`;
+    while (true) {
+      const nextSeq = await this.prisma.getNextSequence('SUBSCRIPTION_SEQ');
+      const id = `SUB-${String(nextSeq).padStart(4, '0')}`;
+      const exists = await this.prisma.subscription.findUnique({ where: { id } });
+      if (!exists) return id;
+    }
   }
 
   computeStatus(expiryDate: Date, currentStatus: SubscriptionStatus): SubscriptionStatus {

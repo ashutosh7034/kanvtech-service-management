@@ -17,6 +17,7 @@ export class EmployeesService {
     status?: string;
     availability?: string;
     department?: string;
+    departmentId?: string;
     search?: string;
   }) {
     const where: any = {};
@@ -30,8 +31,15 @@ export class EmployeesService {
     if (params.availability) {
       where.availability = params.availability as EmployeeAvailability;
     }
+    if (params.departmentId) {
+      where.departmentId = params.departmentId;
+    }
     if (params.department) {
-      where.department = params.department;
+      where.OR = [
+        { department: params.department },
+        { departmentRel: { name: params.department } },
+        { departmentRel: { code: params.department } },
+      ];
     }
     if (params.search && params.search.trim()) {
       const q = params.search.trim();
@@ -40,6 +48,7 @@ export class EmployeesService {
         { email: { contains: q, mode: 'insensitive' } },
         { id: { contains: q, mode: 'insensitive' } },
         { department: { contains: q, mode: 'insensitive' } },
+        { departmentRel: { name: { contains: q, mode: 'insensitive' } } },
       ];
     }
 
@@ -48,8 +57,9 @@ export class EmployeesService {
       orderBy: [{ level: 'asc' }, { name: 'asc' }],
       include: {
         manager: { select: { id: true, name: true } },
+        departmentRel: { select: { id: true, name: true, code: true, productId: true } },
         assignedTickets: {
-          where: { status: { in: ['OPEN', 'IN_PROGRESS'] } },
+          where: { status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED', 'CUSTOMER_FEEDBACK', 'MANAGER_REVIEW'] } },
           select: { id: true },
         },
         attendance: {
@@ -66,7 +76,9 @@ export class EmployeesService {
       name: e.name,
       email: e.email,
       phone: e.phone,
-      department: e.department,
+      department: e.departmentRel?.name || e.department,
+      department_id: e.departmentId || e.departmentRel?.id || null,
+      department_code: e.departmentRel?.code || null,
       designation: e.designation,
       level: e.level,
       manager_id: e.managerId,
@@ -85,6 +97,7 @@ export class EmployeesService {
       where: { id },
       include: {
         manager: { select: { id: true, name: true } },
+        departmentRel: { select: { id: true, name: true, code: true, productId: true } },
         assignedTickets: {
           take: 10,
           orderBy: { updatedAt: 'desc' },
@@ -106,7 +119,7 @@ export class EmployeesService {
     const activeCount = await this.prisma.ticket.count({
       where: {
         assignedEmployeeId: id,
-        status: { in: ['OPEN', 'IN_PROGRESS'] },
+        status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED', 'CUSTOMER_FEEDBACK', 'MANAGER_REVIEW'] },
       },
     });
 
@@ -116,7 +129,9 @@ export class EmployeesService {
       name: e.name,
       email: e.email,
       phone: e.phone,
-      department: e.department,
+      department: e.departmentRel?.name || e.department,
+      department_id: e.departmentId || e.departmentRel?.id || null,
+      department_code: e.departmentRel?.code || null,
       designation: e.designation,
       level: e.level,
       manager_id: e.managerId,
@@ -143,9 +158,11 @@ export class EmployeesService {
       name: string;
       email: string;
       phone: string;
-      department: string;
+      department?: string;
+      department_id?: string;
+      departmentId?: string;
       designation: string;
-      level: 'L1' | 'L2' | 'L3';
+      level: 'MANAGER' | 'L1' | 'L2' | 'L3';
       manager_id?: string;
       password?: string;
     },
@@ -158,9 +175,37 @@ export class EmployeesService {
       throw new BadRequestException(`A user with email ${email} already exists.`);
     }
 
+    // RESOLVE EXACT DEPARTMENT (1 Employee = Exactly 1 Department)
+    let deptRecord = null;
+    const requestedDeptId = data.department_id || data.departmentId;
+    if (requestedDeptId) {
+      deptRecord = await this.prisma.department.findUnique({ where: { id: requestedDeptId } });
+    } else if (data.department) {
+      deptRecord = await this.prisma.department.findFirst({
+        where: {
+          OR: [
+            { name: { equals: data.department.trim(), mode: 'insensitive' } },
+            { code: { equals: data.department.trim(), mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+
+    // If no department found and text is provided, fallback or create department for backward compatibility
+    let departmentName = data.department ? data.department.trim() : 'General Support';
+    let departmentId: string | null = null;
+
+    if (deptRecord) {
+      departmentId = deptRecord.id;
+      departmentName = deptRecord.name;
+    } else if (requestedDeptId) {
+      throw new BadRequestException(`Department '${requestedDeptId}' not found.`);
+    }
+
     let role: UserRole = UserRole.L1_EMPLOYEE;
-    if (data.level === 'L2') role = UserRole.L2_EMPLOYEE;
-    if (data.level === 'L3') role = UserRole.L3_EMPLOYEE;
+    if (data.level === 'MANAGER') role = UserRole.MANAGER;
+    else if (data.level === 'L2') role = UserRole.L2_EMPLOYEE;
+    else if (data.level === 'L3') role = UserRole.L3_EMPLOYEE;
 
     const rawPassword =
       data.password && data.password.trim() !== ''
@@ -178,7 +223,7 @@ export class EmployeesService {
       },
     });
 
-    // Monotonic collision-safe employee ID generation (strictly avoid COUNT(*) + 1)
+    // Monotonic collision-safe employee ID generation
     const allEmps = await this.prisma.employee.findMany({ select: { id: true } });
     let maxNum = 0;
     for (const emp of allEmps) {
@@ -199,7 +244,8 @@ export class EmployeesService {
         name: data.name.trim(),
         email,
         phone: data.phone.trim(),
-        department: data.department.trim(),
+        department: departmentName,
+        departmentId,
         designation: data.designation.trim(),
         level: data.level as EmployeeLevel,
         managerId: data.manager_id || null,
@@ -213,7 +259,7 @@ export class EmployeesService {
       action: 'EMPLOYEE_CREATED',
       entityType: 'EMPLOYEE',
       entityId: employeeId,
-      newValues: { employeeId, name: data.name, level: data.level },
+      newValues: { employeeId, name: data.name, level: data.level, departmentId, department: departmentName },
     });
 
     return employeeId;
@@ -223,12 +269,36 @@ export class EmployeesService {
     const existing = await this.prisma.employee.findUnique({ where: { id } });
     if (!existing) throw new NotFoundException('Employee not found');
 
+    let departmentName = data.department !== undefined ? data.department.trim() : undefined;
+    let departmentId = data.department_id !== undefined ? data.department_id : (data.departmentId !== undefined ? data.departmentId : undefined);
+
+    if (departmentId) {
+      const dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
+      if (dept) {
+        departmentName = dept.name;
+      }
+    } else if (departmentName) {
+      const dept = await this.prisma.department.findFirst({
+        where: {
+          OR: [
+            { name: { equals: departmentName, mode: 'insensitive' } },
+            { code: { equals: departmentName, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (dept) {
+        departmentId = dept.id;
+        departmentName = dept.name;
+      }
+    }
+
     await this.prisma.employee.update({
       where: { id },
       data: {
         name: data.name !== undefined ? data.name.trim() : undefined,
         phone: data.phone !== undefined ? data.phone.trim() : undefined,
-        department: data.department !== undefined ? data.department.trim() : undefined,
+        department: departmentName,
+        departmentId,
         designation: data.designation !== undefined ? data.designation.trim() : undefined,
         level: data.level ? (data.level as EmployeeLevel) : undefined,
         managerId: data.manager_id !== undefined ? data.manager_id : undefined,
@@ -239,8 +309,9 @@ export class EmployeesService {
 
     if (data.level) {
       let role: UserRole = UserRole.L1_EMPLOYEE;
-      if (data.level === 'L2') role = UserRole.L2_EMPLOYEE;
-      if (data.level === 'L3') role = UserRole.L3_EMPLOYEE;
+      if (data.level === 'MANAGER') role = UserRole.MANAGER;
+      else if (data.level === 'L2') role = UserRole.L2_EMPLOYEE;
+      else if (data.level === 'L3') role = UserRole.L3_EMPLOYEE;
       await this.prisma.user.update({
         where: { id: existing.userId },
         data: { role },
@@ -254,6 +325,96 @@ export class EmployeesService {
       entityId: id,
       newValues: data,
     });
+  }
+
+  async promoteEmployee(id: string, actorUserId?: number) {
+    const existing = await this.prisma.employee.findUnique({
+      where: { id },
+      include: { departmentRel: true },
+    });
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    let nextLevel: EmployeeLevel;
+    let nextRole: UserRole;
+
+    if (existing.level === 'L1') {
+      nextLevel = EmployeeLevel.L2;
+      nextRole = UserRole.L2_EMPLOYEE;
+    } else if (existing.level === 'L2') {
+      nextLevel = EmployeeLevel.L3;
+      nextRole = UserRole.L3_EMPLOYEE;
+    } else {
+      throw new BadRequestException(`Cannot promote employee with current level '${existing.level}'.`);
+    }
+
+    await this.prisma.employee.update({
+      where: { id },
+      data: {
+        level: nextLevel,
+        designation: `${nextLevel} Support Specialist`,
+      },
+    });
+
+    await this.prisma.user.update({
+      where: { id: existing.userId },
+      data: { role: nextRole },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'EMPLOYEE_PROMOTED',
+      entityType: 'EMPLOYEE',
+      entityId: id,
+      oldValues: { level: existing.level, department: existing.department },
+      newValues: { level: nextLevel, department: existing.department, role: nextRole },
+    });
+
+    return this.getEmployeeById(id);
+  }
+
+  async demoteEmployee(id: string, actorUserId?: number) {
+    const existing = await this.prisma.employee.findUnique({
+      where: { id },
+      include: { departmentRel: true },
+    });
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    let prevLevel: EmployeeLevel;
+    let prevRole: UserRole;
+
+    if (existing.level === 'L3') {
+      prevLevel = EmployeeLevel.L2;
+      prevRole = UserRole.L2_EMPLOYEE;
+    } else if (existing.level === 'L2') {
+      prevLevel = EmployeeLevel.L1;
+      prevRole = UserRole.L1_EMPLOYEE;
+    } else {
+      throw new BadRequestException(`Cannot demote employee with current level '${existing.level}'.`);
+    }
+
+    await this.prisma.employee.update({
+      where: { id },
+      data: {
+        level: prevLevel,
+        designation: `${prevLevel} Support Specialist`,
+      },
+    });
+
+    await this.prisma.user.update({
+      where: { id: existing.userId },
+      data: { role: prevRole },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'EMPLOYEE_DEMOTED',
+      entityType: 'EMPLOYEE',
+      entityId: id,
+      oldValues: { level: existing.level, department: existing.department },
+      newValues: { level: prevLevel, department: existing.department, role: prevRole },
+    });
+
+    return this.getEmployeeById(id);
   }
 
   async checkIn(params: { employeeId: string; lat?: number; lng?: number; address?: string }) {

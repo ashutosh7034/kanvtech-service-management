@@ -3,6 +3,8 @@ import {
   Get,
   Post,
   Put,
+  Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -65,7 +67,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new customer implementation project' })
   async createImplementation(@Body() body: any, @Request() req: any) {
-    const imp = await this.implementationsService.createImplementation(body, req.user.userId);
+    const imp = await this.implementationsService.createImplementation(body, req.user.userId || req.user.id);
     return { success: true, implementation: imp, message: 'Implementation project created successfully' };
   }
 
@@ -73,7 +75,73 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Update implementation status, milestones, or team progress' })
   async updateImplementation(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const imp = await this.implementationsService.updateImplementation(id, body, req.user.userId);
+    const imp = await this.implementationsService.updateImplementation(id, body, req.user.userId || req.user.id);
     return { success: true, implementation: imp, message: 'Implementation project updated successfully' };
   }
+
+  // --- IMPLEMENTATION TASK CHECKLIST ENDPOINTS (Updates #4 & #7) ---
+
+  @Get(':id/tasks')
+  @ApiOperation({ summary: 'Get all task checklist items for an implementation project' })
+  async getTasks(@Param('id') id: string, @Request() req: any) {
+    if (req.user.role === 'CUSTOMER') {
+      const imp = await this.implementationsService.getImplementationById(id);
+      if (!imp || imp.company_id !== req.user.companyId) {
+        return { success: false, error: 'Unauthorized access to implementation tasks' };
+      }
+    }
+    const tasks = await this.implementationsService.getImplementationTasks(id);
+    return { success: true, data: tasks, tasks };
+  }
+
+  @Post(':id/tasks')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Add a new task checklist item to an implementation' })
+  async addTask(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const result = await this.implementationsService.addTask(id, body, req.user.userId || req.user.id);
+    return { success: true, ...result, message: 'Task added successfully' };
+  }
+
+  @Put('tasks/:taskId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Edit implementation task details' })
+  async updateTask(@Param('taskId') taskId: string, @Body() body: any, @Request() req: any) {
+    const task = await this.implementationsService.updateTask(taskId, body, req.user.userId || req.user.id);
+    return { success: true, task, message: 'Task updated successfully' };
+  }
+
+  @Post('tasks/:taskId/toggle')
+  @Patch('tasks/:taskId/toggle')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @ApiOperation({ summary: 'Toggle completion status of a task checklist item' })
+  async toggleTask(@Param('taskId') taskId: string, @Body() body: any, @Request() req: any) {
+    const isCompleted = body.isCompleted !== undefined ? Boolean(body.isCompleted) : (body.status === 'COMPLETED');
+    const result = await this.implementationsService.toggleTaskCompletion(taskId, isCompleted, req.user.userId || req.user.id);
+    return { success: true, ...result, message: isCompleted ? 'Task marked as completed' : 'Task reopened' };
+  }
+
+  @Post('tasks/:taskId/reopen')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @ApiOperation({ summary: 'Reopen a completed implementation task' })
+  async reopenTask(@Param('taskId') taskId: string, @Request() req: any) {
+    const result = await this.implementationsService.toggleTaskCompletion(taskId, false, req.user.userId || req.user.id);
+    return { success: true, ...result, message: 'Task reopened successfully' };
+  }
+
+  @Delete('tasks/:taskId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Remove an implementation task' })
+  async removeTask(@Param('taskId') taskId: string, @Request() req: any) {
+    const result = await this.implementationsService.removeTask(taskId, req.user.userId || req.user.id);
+    return { ...result };
+  }
+
+  @Post(':id/tasks/reorder')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Reorder tasks for an implementation project' })
+  async reorderTasks(@Param('id') id: string, @Body() body: { taskIds: string[] }, @Request() req: any) {
+    const tasks = await this.implementationsService.reorderTasks(id, body.taskIds || [], req.user.userId || req.user.id);
+    return { success: true, tasks, message: 'Tasks reordered successfully' };
+  }
 }
+

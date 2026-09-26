@@ -9,7 +9,6 @@ import {
   Search,
   Filter,
   RefreshCw,
-  Clock,
   CheckCircle2,
   AlertOctagon,
   Calendar,
@@ -20,8 +19,27 @@ import {
   User,
   Users,
   TrendingUp,
+  CheckSquare,
+  Square,
+  Trash2,
+  Edit3,
+  ListTodo,
 } from 'lucide-react';
 import { formatDate } from '../../utils/date';
+
+interface ImplementationTask {
+  id: string;
+  implementation_id: string;
+  task_name: string;
+  description?: string | null;
+  priority?: string | null;
+  status: 'PENDING' | 'COMPLETED';
+  order_index: number;
+  completed_by?: number | null;
+  completed_by_name?: string | null;
+  completed_at?: string | null;
+  created_at: string;
+}
 
 interface Implementation {
   id: string;
@@ -46,6 +64,7 @@ interface Implementation {
   notes: string | null;
   completed_at: string | null;
   created_at: string;
+  tasks?: ImplementationTask[];
 }
 
 export const ImplementationsPage: React.FC = () => {
@@ -63,7 +82,7 @@ export const ImplementationsPage: React.FC = () => {
   const [companyFilter, setCompanyFilter] = useState('ALL');
   const [error, setError] = useState<string | null>(null);
 
-  // Add Modal
+  // Add Project Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [formData, setFormData] = useState({
     companyId: '',
@@ -73,17 +92,28 @@ export const ImplementationsPage: React.FC = () => {
     startDate: new Date().toISOString().split('T')[0],
     targetGoLiveDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     status: 'PLANNING',
-    progressPercentage: 10,
     pendingActivities: '',
     notes: '',
   });
 
-  // Update Progress Modal
+  // Manage / Update Modal
   const [selectedImp, setSelectedImp] = useState<Implementation | null>(null);
+  const [tasks, setTasks] = useState<ImplementationTask[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<any>('IN_PROGRESS');
-  const [updateProgress, setUpdateProgress] = useState(0);
   const [updatePending, setUpdatePending] = useState('');
   const [updateNotes, setUpdateNotes] = useState('');
+
+  // Add Task inside modal
+  const [newTaskName, setNewTaskName] = useState('');
+  const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskPriority, setNewTaskPriority] = useState('MEDIUM');
+  const [addingTask, setAddingTask] = useState(false);
+
+  // Editing Task
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTaskName, setEditTaskName] = useState('');
+  const [editTaskDesc, setEditTaskDesc] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -155,14 +185,121 @@ export const ImplementationsPage: React.FC = () => {
     }
   };
 
-  const handleUpdate = async (e: React.FormEvent) => {
+  const openManageModal = async (imp: Implementation) => {
+    setSelectedImp(imp);
+    setUpdateStatus(imp.status);
+    setUpdatePending(imp.pending_activities || '');
+    setUpdateNotes(imp.notes || '');
+    setNewTaskName('');
+    setNewTaskDesc('');
+    setEditingTaskId(null);
+
+    setLoadingTasks(true);
+    try {
+      const res = await api.getImplementationTasks(imp.id);
+      setTasks(res.tasks || res.data || []);
+    } catch (err) {
+      setTasks([]);
+    } finally {
+      setLoadingTasks(false);
+    }
+  };
+
+  const handleToggleTask = async (task: ImplementationTask) => {
+    const isCompleted = task.status !== 'COMPLETED';
+    try {
+      const res = await api.toggleImplementationTask(task.id, isCompleted);
+      // Update local task state
+      setTasks((prev) =>
+        prev.map((t) => (t.id === task.id ? { ...t, status: isCompleted ? 'COMPLETED' : 'PENDING' } : t))
+      );
+      if (selectedImp && res.progressPercentage !== undefined) {
+        setSelectedImp({ ...selectedImp, progress_percentage: res.progressPercentage });
+        setImplementations((prev) =>
+          prev.map((i) => (i.id === selectedImp.id ? { ...i, progress_percentage: res.progressPercentage } : i))
+        );
+      }
+    } catch (err: any) {
+      alert(`Failed to update task: ${err.message}`);
+    }
+  };
+
+  const handleAddTask = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedImp || !newTaskName.trim()) return;
+    setAddingTask(true);
+    try {
+      const res = await api.addImplementationTask(selectedImp.id, {
+        taskName: newTaskName.trim(),
+        description: newTaskDesc.trim() || undefined,
+        priority: newTaskPriority,
+      });
+      setTasks((prev) => [...prev, res.task]);
+      setNewTaskName('');
+      setNewTaskDesc('');
+      if (res.progressPercentage !== undefined) {
+        setSelectedImp({ ...selectedImp, progress_percentage: res.progressPercentage });
+        setImplementations((prev) =>
+          prev.map((i) => (i.id === selectedImp.id ? { ...i, progress_percentage: res.progressPercentage } : i))
+        );
+      }
+    } catch (err: any) {
+      alert(`Failed to add task: ${err.message}`);
+    } finally {
+      setAddingTask(false);
+    }
+  };
+
+  const handleRemoveTask = async (task: ImplementationTask) => {
+    if (task.status === 'COMPLETED') {
+      const ok = window.confirm(
+        'This task is already completed. Removing it will change the implementation progress calculation and historical record. Are you sure you want to delete it?'
+      );
+      if (!ok) return;
+    } else {
+      const ok = window.confirm(`Remove task "${task.task_name}"?`);
+      if (!ok) return;
+    }
+
+    try {
+      const res = await api.removeImplementationTask(task.id);
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      if (selectedImp && res.progressPercentage !== undefined) {
+        setSelectedImp({ ...selectedImp, progress_percentage: res.progressPercentage });
+        setImplementations((prev) =>
+          prev.map((i) => (i.id === selectedImp.id ? { ...i, progress_percentage: res.progressPercentage } : i))
+        );
+      }
+    } catch (err: any) {
+      alert(`Failed to remove task: ${err.message}`);
+    }
+  };
+
+  const handleSaveEditTask = async (taskId: string) => {
+    if (!editTaskName.trim()) return;
+    try {
+      await api.updateImplementationTask(taskId, {
+        taskName: editTaskName.trim(),
+        description: editTaskDesc.trim() || undefined,
+      });
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, task_name: editTaskName.trim(), description: editTaskDesc.trim() || null } : t
+        )
+      );
+      setEditingTaskId(null);
+    } catch (err: any) {
+      alert(`Failed to edit task: ${err.message}`);
+    }
+  };
+
+  const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedImp) return;
     setSubmitting(true);
     try {
       await api.updateImplementation(selectedImp.id, {
         status: updateStatus,
-        progressPercentage: updateProgress,
         pendingActivities: updatePending,
         notes: updateNotes,
       });
@@ -175,13 +312,9 @@ export const ImplementationsPage: React.FC = () => {
     }
   };
 
-  const openUpdateModal = (imp: Implementation) => {
-    setSelectedImp(imp);
-    setUpdateStatus(imp.status);
-    setUpdateProgress(imp.progress_percentage);
-    setUpdatePending(imp.pending_activities || '');
-    setUpdateNotes(imp.notes || '');
-  };
+  const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
+  const totalCount = tasks.length;
+  const computedProgress = totalCount === 0 ? (selectedImp?.progress_percentage || 0) : Math.round((completedCount / totalCount) * 100);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -213,7 +346,7 @@ export const ImplementationsPage: React.FC = () => {
             New Customer Implementations
           </h1>
           <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0' }}>
-            Track client onboarding, architecture configuration, milestones, and go-live readiness
+            Track client onboarding, architecture configuration, task milestones, and automatic go-live readiness
           </p>
         </div>
         {isAdminOrManager && (
@@ -228,7 +361,6 @@ export const ImplementationsPage: React.FC = () => {
                 startDate: new Date().toISOString().split('T')[0],
                 targetGoLiveDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
                 status: 'PLANNING',
-                progressPercentage: 15,
                 pendingActivities: '',
                 notes: '',
               });
@@ -272,7 +404,7 @@ export const ImplementationsPage: React.FC = () => {
             <input
               type="text"
               className="form-control"
-              placeholder="Search by ID, company name, product, or pending activities..."
+              placeholder="Search by ID, customer name, product, or pending activities..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               style={{ paddingLeft: 32 }}
@@ -340,7 +472,7 @@ export const ImplementationsPage: React.FC = () => {
                 <th style={{ padding: '12px 16px' }}>CUSTOMER COMPANY</th>
                 <th style={{ padding: '12px 16px' }}>PRODUCT</th>
                 <th style={{ padding: '12px 16px' }}>LEAD & TEAM</th>
-                <th style={{ padding: '12px 16px' }}>PROGRESS</th>
+                <th style={{ padding: '12px 16px' }}>AUTO PROGRESS</th>
                 <th style={{ padding: '12px 16px' }}>TARGET GO-LIVE</th>
                 <th style={{ padding: '12px 16px' }}>STATUS</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTIONS</th>
@@ -396,9 +528,11 @@ export const ImplementationsPage: React.FC = () => {
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     <button
                       className="btn btn-outline btn-xs"
-                      onClick={() => openUpdateModal(imp)}
+                      onClick={() => openManageModal(imp)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                     >
-                      Update
+                      <ListTodo size={13} />
+                      Tasks & Progress
                     </button>
                   </td>
                 </tr>
@@ -537,82 +671,283 @@ export const ImplementationsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Update Progress Modal */}
+      {/* Task Checklist & Management Modal (Updates #4 & #7) */}
       {selectedImp && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 520, padding: 24, background: 'white', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', padding: 24, background: 'white', borderRadius: 8 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#0f172a' }}>
-                  Update Implementation Progress • {selectedImp.id}
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+                  Implementation Checklist & Progress • {selectedImp.id}
                 </h3>
-                <div style={{ fontSize: 12, color: '#64748b' }}>
-                  {selectedImp.company_name} ({selectedImp.product_name})
+                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
+                  {selectedImp.company_name} • <strong>{selectedImp.product_name}</strong>
                 </div>
               </div>
               <button onClick={() => setSelectedImp(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={18} color="#64748b" />
+                <X size={20} color="#64748b" />
               </button>
             </div>
 
-            <form onSubmit={handleUpdate}>
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Lifecycle Status</label>
-                <select
-                  className="form-control"
-                  value={updateStatus}
-                  onChange={(e) => setUpdateStatus(e.target.value)}
-                >
-                  {statuses.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, margin: 0 }}>Progress Percentage</label>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: '#0284c7' }}>{updateProgress}%</span>
+            {/* Dynamic Progress Indicator */}
+            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 20 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                  AUTOMATIC TASK-BASED PROGRESS
                 </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  step="5"
-                  value={updateProgress}
-                  onChange={(e) => setUpdateProgress(Number(e.target.value))}
-                  style={{ width: '100%', accentColor: '#0284c7' }}
+                <div style={{ fontSize: 14, fontWeight: 700, color: computedProgress === 100 ? '#16a34a' : '#0284c7' }}>
+                  {totalCount > 0 ? `${completedCount} / ${totalCount} Tasks (${computedProgress}%)` : `${computedProgress}% (No Tasks)`}
+                </div>
+              </div>
+              <div style={{ width: '100%', height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${computedProgress}%`,
+                    height: '100%',
+                    background: computedProgress === 100 ? '#16a34a' : (updateStatus === 'BLOCKED' ? '#ef4444' : '#0284c7'),
+                    transition: 'width 0.3s ease',
+                  }}
                 />
               </div>
+            </div>
 
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Pending Activities / Next Deliverables</label>
-                <textarea
-                  className="form-control"
-                  rows={2}
-                  value={updatePending}
-                  onChange={(e) => setUpdatePending(e.target.value)}
-                  placeholder="e.g. UAT sign-off scheduled for Friday."
-                />
+            {/* Interactive Task Checklist */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ListTodo size={16} color="#0284c7" />
+                  Implementation Tasks
+                </h4>
+                <span style={{ fontSize: 11, color: '#64748b' }}>
+                  Check off tasks as completed to update progress
+                </span>
               </div>
 
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Progress Notes & Status Updates</label>
-                <textarea
-                  className="form-control"
-                  rows={2}
-                  value={updateNotes}
-                  onChange={(e) => setUpdateNotes(e.target.value)}
-                />
-              </div>
+              {loadingTasks ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
+                  <RefreshCw size={18} className="animate-spin" style={{ margin: '0 auto 6px auto', display: 'block' }} />
+                  Loading tasks...
+                </div>
+              ) : tasks.length === 0 ? (
+                <div style={{ padding: 20, background: '#f8fafc', borderRadius: 6, textAlign: 'center', border: '1px dashed #cbd5e1' }}>
+                  <div style={{ fontSize: 13, color: '#64748b' }}>No tasks assigned yet. Add tasks below to start tracking.</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {tasks.map((task) => (
+                    <div
+                      key={task.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: 12,
+                        padding: '10px 14px',
+                        background: task.status === 'COMPLETED' ? '#f0fdf4' : '#ffffff',
+                        border: `1px solid ${task.status === 'COMPLETED' ? '#bbf7d0' : '#e2e8f0'}`,
+                        borderRadius: 6,
+                        transition: 'all 0.2s ease',
+                      }}
+                    >
+                      {/* Checkbox Toggle */}
+                      <button
+                        type="button"
+                        onClick={() => handleToggleTask(task)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          marginTop: 2,
+                          color: task.status === 'COMPLETED' ? '#16a34a' : '#94a3b8',
+                        }}
+                      >
+                        {task.status === 'COMPLETED' ? <CheckSquare size={18} /> : <Square size={18} />}
+                      </button>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                <button type="button" className="btn btn-secondary" onClick={() => setSelectedImp(null)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Updating...' : 'Save Progress'}
-                </button>
+                      {/* Task Content / Inline Edit */}
+                      <div style={{ flex: 1 }}>
+                        {editingTaskId === task.id ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            <input
+                              type="text"
+                              className="form-control"
+                              value={editTaskName}
+                              onChange={(e) => setEditTaskName(e.target.value)}
+                              style={{ fontSize: 13, padding: '4px 8px' }}
+                            />
+                            <input
+                              type="text"
+                              className="form-control"
+                              placeholder="Description (optional)"
+                              value={editTaskDesc}
+                              onChange={(e) => setEditTaskDesc(e.target.value)}
+                              style={{ fontSize: 12, padding: '4px 8px' }}
+                            />
+                            <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-xs"
+                                onClick={() => handleSaveEditTask(task.id)}
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-xs"
+                                onClick={() => setEditingTaskId(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <div
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                color: task.status === 'COMPLETED' ? '#166534' : '#1e293b',
+                                textDecoration: task.status === 'COMPLETED' ? 'line-through' : 'none',
+                              }}
+                            >
+                              {task.task_name}
+                            </div>
+                            {task.description && (
+                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{task.description}</div>
+                            )}
+                            {task.completed_by_name && (
+                              <div style={{ fontSize: 10, color: '#15803d', marginTop: 3 }}>
+                                Completed by: {task.completed_by_name}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Admin Task Actions */}
+                      {isAdminOrManager && editingTaskId !== task.id && (
+                        <div style={{ display: 'flex', gap: 4 }}>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingTaskId(task.id);
+                              setEditTaskName(task.task_name);
+                              setEditTaskDesc(task.description || '');
+                            }}
+                            title="Edit Task"
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', padding: 2 }}
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveTask(task)}
+                            title="Remove Task"
+                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 2 }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Admin Add Task Form */}
+              {isAdminOrManager && (
+                <form
+                  onSubmit={handleAddTask}
+                  style={{
+                    marginTop: 12,
+                    display: 'flex',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    background: '#f8fafc',
+                    padding: 12,
+                    borderRadius: 6,
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="+ Task Name (e.g. Configure Client Firewall)"
+                    value={newTaskName}
+                    onChange={(e) => setNewTaskName(e.target.value)}
+                    style={{ flex: 2, minWidth: 200, fontSize: 13 }}
+                    required
+                  />
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Description (Optional)"
+                    value={newTaskDesc}
+                    onChange={(e) => setNewTaskDesc(e.target.value)}
+                    style={{ flex: 2, minWidth: 160, fontSize: 13 }}
+                  />
+                  <select
+                    className="form-control"
+                    value={newTaskPriority}
+                    onChange={(e) => setNewTaskPriority(e.target.value)}
+                    style={{ width: 100, fontSize: 12 }}
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                  </select>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={addingTask}>
+                    {addingTask ? 'Adding...' : '+ Add Task'}
+                  </button>
+                </form>
+              )}
+            </div>
+
+            {/* Lifecycle Details & Notes */}
+            <form onSubmit={handleSaveDetails}>
+              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Lifecycle Status</label>
+                  <select
+                    className="form-control"
+                    value={updateStatus}
+                    onChange={(e) => setUpdateStatus(e.target.value)}
+                  >
+                    {statuses.map((s) => (
+                      <option key={s.value} value={s.value}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 14 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Pending Activities / Next Deliverables</label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    value={updatePending}
+                    onChange={(e) => setUpdatePending(e.target.value)}
+                    placeholder="e.g. UAT sign-off scheduled for Friday."
+                  />
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 20 }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Progress Notes & Status Updates</label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    value={updateNotes}
+                    onChange={(e) => setUpdateNotes(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setSelectedImp(null)}>
+                    Close
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={submitting}>
+                    {submitting ? 'Saving...' : 'Save Project Updates'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -621,3 +956,4 @@ export const ImplementationsPage: React.FC = () => {
     </div>
   );
 };
+

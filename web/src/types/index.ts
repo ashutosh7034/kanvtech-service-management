@@ -108,6 +108,8 @@ export interface Company {
   resolved_ticket_count?: number;
   closed_ticket_count?: number;
   contacts?: any[];
+  products?: any[];
+  branches?: any[];
   ticketSummary?: {
     total: number;
     open: number;
@@ -125,8 +127,9 @@ export interface Employee {
   email: string;
   phone: string;
   department: string;
+  department_id?: string | null;
   designation: string;
-  level: 'L1' | 'L2' | 'L3';
+  level: 'MANAGER' | 'L1' | 'L2' | 'L3';
   manager_id?: string | null;
   manager_name?: string;
   availability: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
@@ -147,11 +150,86 @@ export interface NotificationItem {
   created_at: string;
 }
 
-export interface SLAConfig {
+export interface Product {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  description: string;
+  isActive: boolean;
+  is_active?: boolean;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
+  description?: string | null;
+  productId?: string | null;
+  product_id?: string | null;
+  product_name?: string | null;
+  managerId?: string | null;
+  manager_id?: string | null;
+  manager_name?: string | null;
+  manager?: { id: string; name: string; email: string };
+  isActive: boolean;
+  is_active?: boolean;
+  specialist_count?: number;
+  active_ticket_count?: number;
+  employees?: Employee[];
+}
+
+export interface BranchProduct {
   id: number;
-  priority: TicketPriority;
-  response_time_hours: number;
-  resolution_time_hours: number;
-  warning_threshold_percent: number;
-  is_active: number;
+  branchId: string;
+  productId: string;
+  productName?: string;
+  productCode?: string;
+  product?: Product;
+}
+
+export interface Branch {
+  id: string;
+  company_id: string;
+  companyId?: string;
+  branch_name: string;
+  branchName?: string;
+  address: string;
+  city: string;
+  state: string;
+  pincode: string;
+  contact_person: string;
+  contactPerson?: string;
+  contact_phone: string;
+  contactPhone?: string;
+  contact_email: string;
+  contactEmail?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  created_at: string;
+  products?: BranchProduct[];
+  branchProducts?: BranchProduct[];
+}
+
+export interface CompanyProduct {
+  id: number;
+  companyId: string;
+  productId: string;
+  product_id?: string;
+  product_name?: string;
+  product_code?: string;
+  category?: string;
+  product?: Product;
+}
+
+export interface SLAConfig {
+  id?: number;
+  priority?: TicketPriority;
+  response_time_hours?: number;
+  resolution_time_hours?: number;
+  warning_threshold_percent?: number;
+  is_active?: number;
+  HIGH?: number;
+  MEDIUM?: number;
+  LOW?: number;
+  warningThresholdPercent?: number;
 }

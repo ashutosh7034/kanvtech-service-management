@@ -30,18 +30,30 @@ export class EscalationsService {
 
   async escalateTicket(params: {
     ticketId: string;
-    fromLevel: 'L1' | 'L2' | 'L3';
-    toLevel: 'L2' | 'L3' | 'PARENT_COMPANY';
-    escalatedByEmployeeId: string;
+    fromLevel?: 'L1' | 'L2' | 'L3' | string;
+    toLevel?: 'L2' | 'L3' | 'PARENT_COMPANY' | string;
+    escalatedByEmployeeId?: string;
     assignedToEmployeeId?: string | null;
     reason: string;
     notes?: string;
     actorUserId: number;
   }): Promise<void> {
-    this.validateHierarchy(params.fromLevel, params.toLevel);
-
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: params.ticketId } });
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: params.ticketId },
+      include: { department: true, product: true },
+    });
     if (!ticket) throw new NotFoundException('Ticket not found');
+
+    const effectiveFromLevel = params.fromLevel || (ticket.assignedLevel as any) || 'L1';
+    let effectiveToLevel = params.toLevel;
+    if (!effectiveToLevel) {
+      if (effectiveFromLevel === 'L1') effectiveToLevel = 'L2';
+      else if (effectiveFromLevel === 'L2') effectiveToLevel = 'L3';
+      else if (effectiveFromLevel === 'L3') effectiveToLevel = 'PARENT_COMPANY';
+      else effectiveToLevel = 'L2';
+    }
+
+    this.validateHierarchy(effectiveFromLevel, effectiveToLevel);
 
     if (ticket.status !== 'IN_PROGRESS' && ticket.status !== 'OPEN') {
       throw new BadRequestException(
@@ -51,22 +63,39 @@ export class EscalationsService {
 
     let targetEmployeeId = params.assignedToEmployeeId;
 
-    // Validate designated specialist or auto-assign best at toLevel
-    if (targetEmployeeId && params.toLevel !== 'PARENT_COMPANY') {
-      const targetEmp = await this.prisma.employee.findUnique({ where: { id: targetEmployeeId } });
+    // Validate designated specialist or auto-assign best at toLevel within the same department
+    if (targetEmployeeId && effectiveToLevel !== 'PARENT_COMPANY') {
+      const targetEmp = await this.prisma.employee.findUnique({
+        where: { id: targetEmployeeId },
+        include: { departmentRel: true },
+      });
       if (!targetEmp) throw new NotFoundException('Designated escalation specialist not found.');
       if (targetEmp.status !== 'ACTIVE') {
         throw new BadRequestException(
           `Cannot escalate to employee ${targetEmp.name} because their status is ${targetEmp.status}.`,
         );
       }
-      if (targetEmp.level !== params.toLevel) {
+      if (targetEmp.level !== effectiveToLevel) {
         throw new BadRequestException(
-          `Tier mismatch: Cannot assign ticket escalated to ${params.toLevel} to employee ${targetEmp.name} who is configured at ${targetEmp.level}.`,
+          `Tier mismatch: Cannot assign ticket escalated to ${effectiveToLevel} to employee ${targetEmp.name} who is configured at ${targetEmp.level}.`,
         );
       }
-    } else if (!targetEmployeeId && params.toLevel !== 'PARENT_COMPANY') {
-      const bestEmp = await this.assignmentsService.findBestAvailableEmployee(params.toLevel as EmployeeLevel);
+
+      // STRICT DEPARTMENT ISOLATION DURING ESCALATION:
+      // Tally escalates to Tally, Spine escalates to Spine, etc.
+      if (ticket.departmentId && targetEmp.departmentId && ticket.departmentId !== targetEmp.departmentId) {
+        const ticketDeptName = ticket.department?.name || 'Assigned Department';
+        const empDeptName = targetEmp.departmentRel?.name || targetEmp.department;
+        throw new BadRequestException(
+          `Cannot escalate across departments. Ticket belongs to '${ticketDeptName}', but employee '${targetEmp.name}' is in '${empDeptName}'.`,
+        );
+      }
+    } else if (!targetEmployeeId && effectiveToLevel !== 'PARENT_COMPANY') {
+      // Auto-assign to lowest workload engineer at target level strictly within the same department
+      const bestEmp = await this.assignmentsService.findBestAvailableEmployee(
+        effectiveToLevel as EmployeeLevel,
+        ticket.departmentId || undefined,
+      );
       if (bestEmp) {
         targetEmployeeId = bestEmp.id;
       }
@@ -75,7 +104,7 @@ export class EscalationsService {
     let escalatedByEmployeeId = params.escalatedByEmployeeId || ticket.assignedEmployeeId;
     if (!escalatedByEmployeeId) {
       const fallbackEmp = await this.prisma.employee.findFirst({
-        where: { level: params.fromLevel as any, status: 'ACTIVE' },
+        where: { level: effectiveFromLevel as any, status: 'ACTIVE' },
       });
       escalatedByEmployeeId = fallbackEmp?.id || 'EMP-001';
     }
@@ -84,11 +113,11 @@ export class EscalationsService {
     await this.prisma.ticketEscalation.create({
       data: {
         ticket: { connect: { id: params.ticketId } },
-        fromLevel: params.fromLevel as EmployeeLevel,
-        toLevel: params.toLevel as TicketLevel,
+        fromLevel: effectiveFromLevel as EmployeeLevel,
+        toLevel: effectiveToLevel as TicketLevel,
         escalatedBy: { connect: { id: escalatedByEmployeeId } },
         assignedTo: targetEmployeeId ? { connect: { id: targetEmployeeId } } : undefined,
-        reason: params.reason.trim(),
+        reason: (params.reason || 'Escalated to next support tier').trim(),
         notes: params.notes?.trim() || null,
       },
     });
@@ -144,6 +173,8 @@ export class EscalationsService {
           toLevel: params.toLevel,
           escalatedBy: params.escalatedByEmployeeId,
           assignedTo: targetEmployeeId,
+          departmentId: ticket.departmentId,
+          departmentName: ticket.department?.name,
         }),
       },
     });
@@ -169,7 +200,12 @@ export class EscalationsService {
       action: 'TICKET_ESCALATED',
       entityType: 'TICKET',
       entityId: params.ticketId,
-      newValues: { fromLevel: params.fromLevel, toLevel: params.toLevel, reason: params.reason },
+      newValues: {
+        fromLevel: params.fromLevel,
+        toLevel: params.toLevel,
+        reason: params.reason,
+        departmentId: ticket.departmentId,
+      },
     });
   }
 }

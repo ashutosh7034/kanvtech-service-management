@@ -53,13 +53,17 @@ export const api = {
   // Auth
   login: (credentials: any) => request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
   me: () => request('/auth/me'),
+  changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword?: string }) =>
+    request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
+  adminResetPassword: (data: { userId: number; newPassword?: string }) =>
+    request('/auth/admin/reset-password', { method: 'POST', body: JSON.stringify(data) }),
 
   // Notifications
   getNotifications: () => request('/notifications'),
   markNotificationRead: (id: number) => request(`/notifications/${id}/read`, { method: 'POST' }),
   markAllNotificationsRead: () => request('/notifications/read-all', { method: 'POST' }),
 
-  // Companies
+  // Companies / Customer Master
   getCompanies: (params: any = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/companies?${qs}`);
@@ -70,6 +74,35 @@ export const api = {
   toggleCompanyStatus: (id: string, isActive: boolean) =>
     request(`/companies/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
 
+  // Customer Products
+  addCustomerProduct: (companyId: string, productId: string) =>
+    request(`/companies/${companyId}/products`, { method: 'POST', body: JSON.stringify({ productId }) }),
+  removeCustomerProduct: (companyId: string, productId: string) =>
+    request(`/companies/${companyId}/products/${productId}`, { method: 'DELETE' }),
+
+  // Branches
+  getCustomerBranches: (companyId: string) => request(`/companies/${companyId}/branches`),
+  getBranch: (companyId: string, branchId: string) => request(`/companies/${companyId}/branches/${branchId}`),
+  createBranch: (companyId: string, data: any) =>
+    request(`/companies/${companyId}/branches`, { method: 'POST', body: JSON.stringify(data) }),
+  updateBranch: (companyId: string, branchId: string, data: any) =>
+    request(`/companies/${companyId}/branches/${branchId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleBranchStatus: (companyId: string, branchId: string, status: string) =>
+    request(`/companies/${companyId}/branches/${branchId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  assignBranchProducts: (companyId: string, branchId: string, productIds: string[]) =>
+    request(`/companies/${companyId}/branches/${branchId}/products`, { method: 'POST', body: JSON.stringify({ productIds }) }),
+
+  // Departments
+  getDepartments: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/departments?${qs}`);
+  },
+  getDepartment: (id: string) => request(`/departments/${id}`),
+  createDepartment: (data: any) => request('/departments', { method: 'POST', body: JSON.stringify(data) }),
+  updateDepartment: (id: string, data: any) => request(`/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleDepartmentStatus: (id: string, isActive: boolean) =>
+    request(`/departments/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
+
   // Employees
   getEmployees: (params: any = {}) => {
     const qs = new URLSearchParams(params).toString();
@@ -78,6 +111,8 @@ export const api = {
   getEmployee: (id: string) => request(`/employees/${id}`),
   createEmployee: (data: any) => request('/employees', { method: 'POST', body: JSON.stringify(data) }),
   updateEmployee: (id: string, data: any) => request(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  promoteEmployee: (id: string) => request(`/employees/${id}/promote`, { method: 'POST' }),
+  demoteEmployee: (id: string) => request(`/employees/${id}/demote`, { method: 'POST' }),
   checkIn: (data: any) => request('/employees/attendance/check-in', { method: 'POST', body: JSON.stringify(data) }),
   checkOut: (data: any) => request('/employees/attendance/check-out', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -100,11 +135,12 @@ export const api = {
   uploadAttachment: (id: string, formData: FormData) => request(`/tickets/${id}/attachments`, { method: 'POST', body: formData }),
 
   // Import
-  downloadTemplate: (type: 'companies' | 'employees') => request(`/import/template/${type}`),
-  previewImport: (type: 'companies' | 'employees', formData: FormData) =>
+  downloadTemplate: (type: string) => request(`/import/template/${type}`),
+  previewImport: (type: string, formData: FormData) =>
     request(`/import/preview/${type}`, { method: 'POST', body: formData }),
-  commitImport: (type: 'companies' | 'employees', rows: any[]) =>
+  commitImport: (type: string, rows: any[]) =>
     request(`/import/commit/${type}`, { method: 'POST', body: JSON.stringify({ rows }) }),
+  devReset: () => request('/import/dev-reset', { method: 'POST' }),
 
   // Reports
   getDashboard: () => request('/reports/dashboard'),
@@ -151,6 +187,19 @@ export const api = {
   updateImplementation: (id: string, data: any) =>
     request(`/implementations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   getImplementationStats: () => request('/implementations/stats'),
+  getImplementationTasks: (id: string) => request(`/implementations/${id}/tasks`),
+  addImplementationTask: (id: string, data: any) =>
+    request(`/implementations/${id}/tasks`, { method: 'POST', body: JSON.stringify(data) }),
+  updateImplementationTask: (taskId: string, data: any) =>
+    request(`/implementations/tasks/${taskId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleImplementationTask: (taskId: string, isCompleted: boolean) =>
+    request(`/implementations/tasks/${taskId}/toggle`, { method: 'POST', body: JSON.stringify({ isCompleted }) }),
+  reopenImplementationTask: (taskId: string) =>
+    request(`/implementations/tasks/${taskId}/reopen`, { method: 'POST' }),
+  removeImplementationTask: (taskId: string) =>
+    request(`/implementations/tasks/${taskId}`, { method: 'DELETE' }),
+  reorderImplementationTasks: (id: string, taskIds: string[]) =>
+    request(`/implementations/${id}/tasks/reorder`, { method: 'POST', body: JSON.stringify({ taskIds }) }),
 
   // Task Allotment
   getTaskAllotmentQueue: (params: any = {}) => {

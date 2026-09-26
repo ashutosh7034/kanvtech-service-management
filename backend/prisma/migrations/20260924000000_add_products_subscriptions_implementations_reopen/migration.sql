@@ -1,8 +1,12 @@
--- CreateEnum
-CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'RENEWED');
-
--- CreateEnum
-CREATE TYPE "ImplementationStatus" AS ENUM ('NEW', 'PLANNING', 'IN_PROGRESS', 'CONFIGURATION', 'TESTING', 'READY_FOR_GO_LIVE', 'LIVE', 'COMPLETED', 'BLOCKED');
+-- CreateEnum if not exists
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SubscriptionStatus') THEN
+        CREATE TYPE "SubscriptionStatus" AS ENUM ('ACTIVE', 'EXPIRING_SOON', 'EXPIRED', 'RENEWED');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ImplementationStatus') THEN
+        CREATE TYPE "ImplementationStatus" AS ENUM ('NEW', 'PLANNING', 'IN_PROGRESS', 'CONFIGURATION', 'TESTING', 'READY_FOR_GO_LIVE', 'LIVE', 'COMPLETED', 'BLOCKED');
+    END IF;
+END $$;
 
 -- AlterEnum
 ALTER TYPE "TicketStatus" ADD VALUE IF NOT EXISTS 'REOPENED';
@@ -77,38 +81,19 @@ CREATE TABLE IF NOT EXISTS "ticket_reopen_history" (
 
 -- CreateIndex
 CREATE UNIQUE INDEX IF NOT EXISTS "products_code_key" ON "products"("code");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_products_code" ON "products"("code");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_products_category" ON "products"("category");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_products_active" ON "products"("is_active");
 
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_subscriptions_company" ON "subscriptions"("company_id");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_subscriptions_product" ON "subscriptions"("product_id");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_subscriptions_status" ON "subscriptions"("status");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_subscriptions_expiry" ON "subscriptions"("expiry_date");
 
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_implementations_company" ON "implementations"("company_id");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_implementations_product" ON "implementations"("product_id");
-
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_implementations_status" ON "implementations"("status");
 
--- CreateIndex
 CREATE INDEX IF NOT EXISTS "idx_reopen_ticket" ON "ticket_reopen_history"("ticket_id");
 
 -- AddForeignKey

@@ -79,8 +79,8 @@ export class SubscriptionsController {
   @Post(':id/warning')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Send renewal warning notification to customer company contacts' })
-  async sendWarning(@Param('id') id: string, @Body() body: { message?: string }, @Request() req: any) {
-    const result = await this.subscriptionsService.sendWarning(id, req.user.userId, body?.message);
+  async sendWarning(@Param('id') id: string, @Body() body: { message?: string; notes?: string }, @Request() req: any) {
+    const result = await this.subscriptionsService.sendWarning(id, req.user.userId, body?.message || body?.notes);
     return result;
   }
 

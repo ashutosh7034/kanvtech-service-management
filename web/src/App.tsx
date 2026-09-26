@@ -21,6 +21,7 @@ import { ProductsPage } from './pages-components/products/ProductsPage';
 import { TaskAllotmentPage } from './pages-components/task-allotment/TaskAllotmentPage';
 import { MaintenancePage } from './pages-components/maintenance/MaintenancePage';
 import { ImplementationsPage } from './pages-components/implementations/ImplementationsPage';
+import { DepartmentsPage } from './pages-components/departments/DepartmentsPage';
 
 export const App: React.FC = () => {
   const { user, loading } = useAuth();
@@ -49,7 +50,9 @@ export const App: React.FC = () => {
       case 'dashboard':
         return 'Operations Dashboard';
       case 'companies':
-        return 'Company Master Directory';
+        return 'Customer Master Directory';
+      case 'departments':
+        return 'Department Master';
       case 'employees':
         return 'Specialist Employee Directory';
       case 'tickets':
@@ -97,6 +100,7 @@ export const App: React.FC = () => {
       case 'ticket_detail':
         return true;
       case 'companies':
+      case 'departments':
       case 'employees':
       case 'approvals':
       case 'reports':
@@ -140,6 +144,7 @@ export const App: React.FC = () => {
         <>
           {currentView === 'dashboard' && <DashboardPage onNavigate={navigateTo} />}
           {currentView === 'companies' && <CompaniesPage onNavigateTicket={(id) => navigateTo('ticket_detail', id)} />}
+          {currentView === 'departments' && <DepartmentsPage />}
           {currentView === 'employees' && <EmployeesPage />}
           {currentView === 'tickets' && <TicketsPage onNavigateDetail={(id) => navigateTo('ticket_detail', id)} />}
           {currentView === 'tickets_create' && (

@@ -15,6 +15,7 @@ import {
   Settings,
   ShieldAlert,
   Smartphone,
+  Layers,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -59,7 +60,17 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
             onClick={() => onNavigate('companies')}
           >
             <Building2 size={16} />
-            <span>Company Master</span>
+            <span>Customer Master</span>
+          </button>
+        )}
+
+        {isAccessible(['MANAGER']) && (
+          <button
+            className={`nav-item ${currentView === 'departments' ? 'active' : ''}`}
+            onClick={() => onNavigate('departments')}
+          >
+            <Layers size={16} />
+            <span>Department Master</span>
           </button>
         )}
 

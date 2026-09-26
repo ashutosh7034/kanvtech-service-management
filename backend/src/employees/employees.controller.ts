@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Patch,
   Body,
   Param,
   Query,
@@ -31,6 +32,7 @@ export class EmployeesController {
       status: query.status,
       availability: query.availability,
       department: query.department,
+      departmentId: query.departmentId || query.department_id,
       search: query.search,
     });
     return { success: true, employees: list, data: list };
@@ -51,7 +53,7 @@ export class EmployeesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new employee profile and credentials' })
   async createEmployee(@Body() body: any, @Request() req: any) {
-    const id = await this.employeesService.createEmployee(body, req.user.userId);
+    const id = await this.employeesService.createEmployee(body, req.user?.id || req.user?.userId);
     return { success: true, employeeId: id, id, message: 'Employee created successfully' };
   }
 
@@ -59,14 +61,32 @@ export class EmployeesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update employee profile and availability' })
   async updateEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    await this.employeesService.updateEmployee(id, body, req.user.userId);
+    await this.employeesService.updateEmployee(id, body, req.user?.id || req.user?.userId);
     return { success: true, message: 'Employee updated successfully' };
+  }
+
+  @Post(':id/promote')
+  @Patch(':id/promote')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Promote employee to the next tier (L1 -> L2 or L2 -> L3)' })
+  async promoteEmployee(@Param('id') id: string, @Request() req: any) {
+    const updated = await this.employeesService.promoteEmployee(id, req.user?.id || req.user?.userId);
+    return { success: true, employee: updated, message: 'Employee promoted successfully' };
+  }
+
+  @Post(':id/demote')
+  @Patch(':id/demote')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Demote employee to the lower tier (L3 -> L2 or L2 -> L1)' })
+  async demoteEmployee(@Param('id') id: string, @Request() req: any) {
+    const updated = await this.employeesService.demoteEmployee(id, req.user?.id || req.user?.userId);
+    return { success: true, employee: updated, message: 'Employee demoted successfully' };
   }
 
   @Post('attendance/check-in')
   @ApiOperation({ summary: 'Employee attendance check-in' })
   async checkIn(@Body() body: any, @Request() req: any) {
-    const employeeId = req.user.employeeId || body.employeeId;
+    const employeeId = req.user?.employeeId || body.employeeId;
     const att = await this.employeesService.checkIn({
       employeeId,
       lat: body.lat,
@@ -79,7 +99,7 @@ export class EmployeesController {
   @Post('attendance/check-out')
   @ApiOperation({ summary: 'Employee attendance check-out' })
   async checkOut(@Body() body: any, @Request() req: any) {
-    const employeeId = req.user.employeeId || body.employeeId;
+    const employeeId = req.user?.employeeId || body.employeeId;
     await this.employeesService.checkOut({
       employeeId,
       lat: body.lat,

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
-import { Ticket, Company } from '../../types';
+import { Ticket, Company, Product, Branch } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { SLABadge } from '../../components/common/SLABadge';
-import { Search, Plus, Eye, Play, AlertCircle } from 'lucide-react';
+import { Search, Plus, Eye, Play, AlertCircle, Package, MapPin, Layers } from 'lucide-react';
 
 interface Props {
   onNavigateDetail: (id: string) => void;
@@ -31,6 +31,12 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
   const [selectedContactId, setSelectedContactId] = useState<number | ''>('');
   const [companyContacts, setCompanyContacts] = useState<any[]>([]);
+  const [companyBranches, setCompanyBranches] = useState<Branch[]>([]);
+  const [companyProducts, setCompanyProducts] = useState<any[]>([]);
+
+  const [selectedBranchId, setSelectedBranchId] = useState<string>('');
+  const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [derivedDepartmentName, setDerivedDepartmentName] = useState<string>('Auto-derived from product');
 
   const [formProblem, setFormProblem] = useState('');
   const [formPriority, setFormPriority] = useState<'HIGH' | 'MEDIUM' | 'LOW'>('MEDIUM');
@@ -82,28 +88,110 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
 
   const handleCompanyChange = async (compId: string) => {
     setSelectedCompanyId(compId);
+    setSelectedBranchId('');
+    setSelectedProductId('');
     try {
-      const res = await api.getCompany(compId);
-      if (res.company?.contacts) {
-        setCompanyContacts(res.company.contacts);
-        if (res.company.contacts.length > 0) {
-          setSelectedContactId(res.company.contacts[0].id);
+      const [compRes, branchRes] = await Promise.all([
+        api.getCompany(compId),
+        api.getCustomerBranches(compId),
+      ]);
+      const comp = compRes.company;
+      if (comp?.contacts) {
+        setCompanyContacts(comp.contacts);
+        if (comp.contacts.length > 0) {
+          setSelectedContactId(comp.contacts[0].id);
         }
+      }
+      const prods = comp?.products || [];
+      setCompanyProducts(prods);
+      setCompanyBranches(branchRes.branches || []);
+      if (prods.length > 0) {
+        const firstProdId = prods[0].product_id || prods[0].productId;
+        setSelectedProductId(firstProdId);
+        updateDerivedDepartment(firstProdId);
       }
     } catch (err) {
       console.error(err);
     }
   };
 
+  const handleBranchChange = (branchId: string) => {
+    setSelectedBranchId(branchId);
+    if (!branchId) {
+      // Revert to all company products
+      if (companyProducts.length > 0) {
+        const firstProdId = companyProducts[0].product_id || companyProducts[0].productId;
+        setSelectedProductId(firstProdId);
+        updateDerivedDepartment(firstProdId);
+      }
+    } else {
+      // Filter products to branch-owned products
+      const branch = companyBranches.find((b) => b.id === branchId);
+      const branchProds = branch?.branchProducts || branch?.products || [];
+      if (branchProds.length > 0) {
+        const firstBranchProdId = (branchProds[0] as any).productId || (branchProds[0] as any).product_id;
+        setSelectedProductId(firstBranchProdId);
+        updateDerivedDepartment(firstBranchProdId);
+      } else {
+        setSelectedProductId('');
+        setDerivedDepartmentName('No products assigned to this branch');
+      }
+    }
+  };
+
+  const handleProductChange = (productId: string) => {
+    setSelectedProductId(productId);
+    updateDerivedDepartment(productId);
+  };
+
+  const updateDerivedDepartment = (productId: string) => {
+    const prod = companyProducts.find((p) => (p.product_id || p.productId) === productId);
+    const prodName = prod?.product_name || prod?.product?.name || '';
+    if (prodName.toLowerCase().includes('tally')) {
+      setDerivedDepartmentName('Tally Support (DEP-0001)');
+    } else if (prodName.toLowerCase().includes('spine')) {
+      setDerivedDepartmentName('Spine Support (DEP-0002)');
+    } else if (prodName.toLowerCase().includes('bios')) {
+      setDerivedDepartmentName('BIOS 360 Support (DEP-0003)');
+    } else if (prodName.toLowerCase().includes('cyber')) {
+      setDerivedDepartmentName('CyberShield Support (DEP-0004)');
+    } else {
+      setDerivedDepartmentName('Dedicated Product Support Department');
+    }
+  };
+
+  // Get selectable products based on branch
+  const getSelectableProducts = () => {
+    if (!selectedBranchId) {
+      return companyProducts;
+    }
+    const branch = companyBranches.find((b) => b.id === selectedBranchId);
+    if (!branch) return companyProducts;
+    const branchProds = branch.branchProducts || branch.products || [];
+    return branchProds.map((bp: any) => ({
+      product_id: bp.productId || bp.product_id,
+      product_name: bp.productName || bp.product?.name || bp.productId,
+      product_code: bp.productCode || bp.product?.code || '',
+    }));
+  };
+
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(null);
+
+    if (!selectedProductId) {
+      setCreateError('Please select a valid purchased product for this ticket.');
+      return;
+    }
+
     setCreating(true);
 
     try {
       const res = await api.createTicket({
         companyId: selectedCompanyId,
         customerContactId: selectedContactId,
+        branchId: selectedBranchId || undefined,
+        productId: selectedProductId,
         problemType: formProblem,
         priority: formPriority,
         category: formCategory,
@@ -132,7 +220,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
               {total} tickets
             </span>
           </h2>
-          <div className="page-subtitle">Central queue with automatic L1 triage and continuous resolution tracking</div>
+          <div className="page-subtitle">Central queue with automatic product department routing and lowest-workload L1 assignment</div>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
           <Plus size={15} /> Log Support Ticket
@@ -145,7 +233,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
           <Search size={15} color="#94a3b8" />
           <input
             type="text"
-            placeholder="Search ticket ID (KT-2026-...), problem, company, customer..."
+            placeholder="Search ticket ID (KT-2026-...), product, company, customer..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           />
@@ -208,7 +296,8 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
           <thead>
             <tr>
               <th>Ticket ID</th>
-              <th>Company & Contact</th>
+              <th>Customer Organization</th>
+              <th>Product & Department</th>
               <th>Problem Summary</th>
               <th>Priority</th>
               <th>Tier</th>
@@ -221,13 +310,13 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
                   Loading support tickets...
                 </td>
               </tr>
             ) : tickets.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
+                <td colSpan={10} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
                   No tickets found matching your filter parameters.
                 </td>
               </tr>
@@ -239,7 +328,19 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                   </td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{t.company_name}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{t.contact_name}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>
+                      {(t as any).branch_name ? `📍 ${(t as any).branch_name} • ` : ''}{t.contact_name}
+                    </div>
+                  </td>
+                  <td>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Package size={13} color="#2563eb" />
+                      <span style={{ fontWeight: 600, color: '#0f172a' }}>{(t as any).product_name || 'General Product'}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                      <Layers size={11} color="#475569" />
+                      <span>{(t as any).department_name || 'Support Desk'}</span>
+                    </div>
                   </td>
                   <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     <div style={{ fontWeight: 500, color: '#0f172a' }}>{t.problem_type}</div>
@@ -281,10 +382,10 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
         </table>
       </div>
 
-      {/* Log Ticket Modal with 2-Open-Ticket Limit validation */}
+      {/* Log Ticket Modal with Branch, Product & Auto Department Routing */}
       {showCreateModal && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 640 }}>
+          <div className="modal-content" style={{ maxWidth: 680 }}>
             <div className="modal-header">
               <div className="modal-title">Log New Support Ticket</div>
               <button
@@ -296,7 +397,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
             </div>
 
             <form onSubmit={handleCreateSubmit}>
-              <div className="modal-body">
+              <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
                 {createError && (
                   <div
                     style={{
@@ -317,10 +418,10 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                   </div>
                 )}
 
-                {/* Company Selection */}
+                {/* Customer Organization Selection */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div className="form-group">
-                    <label className="form-label">Company Organization <span className="required">*</span></label>
+                    <label className="form-label">Customer Organization <span className="required">*</span></label>
                     <select
                       className="form-control"
                       required
@@ -352,6 +453,63 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                   </div>
                 </div>
 
+                {/* Branch and Product Selection */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Customer Branch (Optional)</label>
+                    <select
+                      className="form-control"
+                      value={selectedBranchId}
+                      onChange={(e) => handleBranchChange(e.target.value)}
+                    >
+                      <option value="">Headquarters / Main Organization</option>
+                      {companyBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.branch_name || (b as any).branchName} ({b.city})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label">Purchased Product <span className="required">*</span></label>
+                    <select
+                      className="form-control"
+                      required
+                      value={selectedProductId}
+                      onChange={(e) => handleProductChange(e.target.value)}
+                    >
+                      <option value="">Select Owned Product</option>
+                      {getSelectableProducts().map((p: any) => (
+                        <option key={p.product_id || p.id} value={p.product_id || p.id}>
+                          {p.product_name || p.name} ({p.product_code || p.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Auto-derived Department Display (Read-Only) */}
+                <div
+                  style={{
+                    background: '#eff6ff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                    marginBottom: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12,
+                    color: '#1e40af',
+                  }}
+                >
+                  <Layers size={14} color="#2563eb" />
+                  <span>
+                    <strong>Automated Routing:</strong> {derivedDepartmentName} → Lowest Workload L1 Specialist
+                  </span>
+                </div>
+
                 <div className="form-group">
                   <label className="form-label">Problem Title / Issue Summary <span className="required">*</span></label>
                   <input
@@ -360,7 +518,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                     required
                     value={formProblem}
                     onChange={(e) => setFormProblem(e.target.value)}
-                    placeholder="e.g. SAN Storage Logical Unit offline"
+                    placeholder="e.g. Tally GST e-invoice sync failure on gateway"
                   />
                 </div>
 
@@ -385,10 +543,10 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                       value={formCategory}
                       onChange={(e) => setFormCategory(e.target.value)}
                     >
-                      <option value="Hardware / Infrastructure">Hardware / Infrastructure</option>
-                      <option value="Network & Connectivity">Network & Connectivity</option>
+                      <option value="Statutory & Compliance">Statutory & Compliance</option>
+                      <option value="Hardware / Biometric Sync">Hardware / Biometric Sync</option>
                       <option value="Database Services">Database Services</option>
-                      <option value="Cloud / Virtualization">Cloud / Virtualization</option>
+                      <option value="Network & Multi-User">Network & Multi-User</option>
                       <option value="Enterprise Applications">Enterprise Applications</option>
                     </select>
                   </div>
@@ -407,7 +565,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                 </div>
 
                 <div style={{ background: '#f8fafc', padding: 10, borderRadius: 6, fontSize: 12, color: '#64748b' }}>
-                  Ticket ID will be generated centrally as <strong>KT-2026-XXXXXX</strong>. Automatic L1 routing assigns available engineers based on workload.
+                  Rule: Strict maximum 2 active tickets per customer contact. Ticket auto-assigned to lowest workload L1 specialist within the product department.
                 </div>
               </div>
 
@@ -416,7 +574,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={creating}>
-                  {creating ? 'Validating & Logging...' : 'Submit Service Ticket'}
+                  {creating ? 'Validating & Routing...' : 'Submit Service Ticket'}
                 </button>
               </div>
             </form>

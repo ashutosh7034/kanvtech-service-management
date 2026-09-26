@@ -58,7 +58,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create a new product' })
   async createProduct(@Body() body: any, @Request() req: any) {
     const product = await this.productsService.createProduct(body, req.user.userId);
-    return { success: true, product, productId: product.id, message: 'Product created successfully' };
+    return { success: true, id: product.id, productId: product.id, product, message: 'Product created successfully' };
   }
 
   @Put(':id')

@@ -1,5 +1,6 @@
 import assert from 'assert';
 import { PrismaClient, TicketLevel, TicketPriority, CommentType, TicketStatus } from '@prisma/client';
+import { seedDatabase } from '../prisma/seed';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { AuthService } from '../src/auth/auth.service';
@@ -15,7 +16,6 @@ import { TicketsService } from '../src/tickets/tickets.service';
 import { ProductsService } from '../src/products/products.service';
 import { SubscriptionsService } from '../src/subscriptions/subscriptions.service';
 import { ImplementationsService } from '../src/implementations/implementations.service';
-import { ForbiddenException, BadRequestException } from '@nestjs/common';
 
 let passed = 0;
 let failed = 0;
@@ -24,10 +24,10 @@ async function test(name: string, fn: () => Promise<void>) {
   try {
     process.stdout.write(`[TEST] ${name} ... `);
     await fn();
-    console.log('PASSED \u2714');
+    console.log('PASSED ✔');
     passed++;
   } catch (err: any) {
-    console.log('FAILED \u2718');
+    console.log('FAILED ✘');
     console.error(`       Error: ${err.message}`);
     failed++;
   }
@@ -41,6 +41,8 @@ async function runDirectWorkflowSuite() {
 
   const prisma = new PrismaService();
   await prisma.$connect();
+
+  await seedDatabase();
 
   const auditService = new AuditService(prisma);
   const notificationsService = new NotificationsService(prisma);
@@ -57,22 +59,38 @@ async function runDirectWorkflowSuite() {
   const jwtService = new JwtService({ secret: process.env.JWT_SECRET || 'kanvtech-super-secret-production-jwt-key-2026' });
   const authService = new AuthService(prisma, jwtService);
 
+  const adminUser = await prisma.user.findUnique({ where: { email: 'admin@kanvtech.com' } });
+  const l1User = await prisma.user.findUnique({ where: { email: 'l1.amit@kanvtech.com' } });
+  const custUser = await prisma.user.findUnique({ where: { email: 'rajesh@acme.com' } });
+  const zenithUser = await prisma.user.findUnique({ where: { email: 'anjali@zenith.com' } });
+
+  const adminUserId = adminUser!.id;
+  const l1UserId = l1User!.id;
+  const custUserId = custUser!.id;
+  const zenithUserId = zenithUser!.id;
+
+  let acmeContact = await prisma.companyContact.findFirst({ where: { companyId: 'CMP-0001', isPrimary: true } });
+  if (!acmeContact) {
+    acmeContact = await prisma.companyContact.findFirst({ where: { companyId: 'CMP-0001' } });
+  }
+  const acmeContactId = acmeContact!.id;
+
   // 1. Profile Display Name & Email Verification
   await test('1. Profile API - Display Name & Email extracted dynamically for all roles', async () => {
-    const adminUser = await authService.validateUserById(1);
-    assert(adminUser, 'Admin user must exist');
-    assert.strictEqual(adminUser.name, 'System Administrator');
-    assert.strictEqual(adminUser.email, 'admin@kanvtech.com');
+    const adminU = await authService.validateUserById(adminUserId);
+    assert(adminU, 'Admin user must exist');
+    assert.strictEqual(adminU.name, 'System Administrator');
+    assert.strictEqual(adminU.email, 'admin@kanvtech.com');
 
-    const l1User = await authService.validateUserById(3);
-    assert(l1User, 'L1 user must exist');
-    assert.strictEqual(l1User.name, 'Amit Sharma');
-    assert.strictEqual(l1User.email, 'l1.amit@kanvtech.com');
+    const l1U = await authService.validateUserById(l1UserId);
+    assert(l1U, 'L1 user must exist');
+    assert.strictEqual(l1U.name, 'Amit Sharma');
+    assert.strictEqual(l1U.email, 'l1.amit@kanvtech.com');
 
-    const custUser = await authService.validateUserById(7);
-    assert(custUser, 'Customer user must exist');
-    assert.strictEqual(custUser.name, 'Rajesh Mehta');
-    assert.strictEqual(custUser.email, 'rajesh@acme.com');
+    const custU = await authService.validateUserById(custUserId);
+    assert(custU, 'Customer user must exist');
+    assert.strictEqual(custU.name, 'Rajesh Mehta');
+    assert.strictEqual(custU.email, 'rajesh@acme.com');
   });
 
   // 2. Direct Employee Resolution (No Mandatory Manager Review)
@@ -80,12 +98,13 @@ async function runDirectWorkflowSuite() {
   await test('2. Direct Resolution - Technical work completion moves ticket directly to CUSTOMER_FEEDBACK', async () => {
     const ticket = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Core Switch Port Flapping',
       priority: TicketPriority.HIGH,
       category: 'Network',
       description: 'Port eth1/2 flapping on switch SW-CORE-01.',
-      createdByUserId: 7,
+      createdByUserId: custUserId,
     });
     directTicketId = ticket.id;
 
@@ -94,17 +113,17 @@ async function runDirectWorkflowSuite() {
       ticketId: ticket.id,
       employeeId: 'EMP-002',
       level: TicketLevel.L1,
-      assignedByUserId: 1,
+      assignedByUserId: adminUserId,
       assignmentType: 'MANUAL',
     });
-    await ticketsService.startWork(ticket.id, 'EMP-002', 3);
+    await ticketsService.startWork(ticket.id, 'EMP-002', l1UserId);
 
     // L1 marks resolved directly
     await approvalsService.submitForReview({
       ticketId: ticket.id,
       employeeId: 'EMP-002',
       resolutionNotes: 'SFP+ optical transceiver replaced and link stabilized.',
-      actorUserId: 3,
+      actorUserId: l1UserId,
     });
 
     const refreshed = await ticketsService.getTicketById(ticket.id);
@@ -118,7 +137,7 @@ async function runDirectWorkflowSuite() {
     // A: Customer from correct company submits rating -> Allowed
     await feedbackService.submitFeedback({
       ticketId: directTicketId,
-      customerUserId: 7, // Rajesh Mehta (Acme Technologies, CMP-0001)
+      customerUserId: custUserId, // Rajesh Mehta (Acme Technologies, CMP-0001)
       rating: 5,
       remarks: 'Super fast hardware swap. Link is 100% stable now.',
     });
@@ -132,7 +151,7 @@ async function runDirectWorkflowSuite() {
   await test('4. Customer Reopening - Reopen from CLOSED status resets closure fields and records history', async () => {
     await approvalsService.reopenResolution({
       ticketId: directTicketId,
-      userId: 7,
+      userId: custUserId,
       reason: 'Port flapping recurred on port eth1/3 after load test.',
       isCustomer: true,
     });
@@ -156,23 +175,25 @@ async function runDirectWorkflowSuite() {
     // Ticket #1
     const t1 = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Quota Test Ticket 1',
       priority: TicketPriority.LOW,
       category: 'Support',
       description: 'First active ticket.',
-      createdByUserId: 7,
+      createdByUserId: custUserId,
     });
 
     // Ticket #2
     const t2 = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Quota Test Ticket 2',
       priority: TicketPriority.LOW,
       category: 'Support',
       description: 'Second active ticket.',
-      createdByUserId: 7,
+      createdByUserId: custUserId,
     });
 
     // Attempt Ticket #3 -> MUST THROW BadRequestException
@@ -180,12 +201,13 @@ async function runDirectWorkflowSuite() {
       async () =>
         ticketsService.createTicket({
           companyId: 'CMP-0001',
-          customerContactId: 1,
+          customerContactId: acmeContactId,
+          productId: 'PROD-0001',
           problemType: 'Quota Test Ticket 3',
           priority: TicketPriority.LOW,
           category: 'Support',
           description: 'Third ticket attempt should fail.',
-          createdByUserId: 7,
+          createdByUserId: custUserId,
         }),
       (err: any) => {
         return err.message.includes('2 active tickets');
@@ -201,12 +223,13 @@ async function runDirectWorkflowSuite() {
     // Now Ticket #3 attempt MUST SUCCEED
     const t3 = await ticketsService.createTicket({
       companyId: 'CMP-0001',
-      customerContactId: 1,
+      customerContactId: acmeContactId,
+      productId: 'PROD-0001',
       problemType: 'Quota Test Ticket 3 (Allowed)',
       priority: TicketPriority.LOW,
       category: 'Support',
       description: 'Third ticket now allowed because one was closed.',
-      createdByUserId: 7,
+      createdByUserId: custUserId,
     });
     assert(t3.id, 'Ticket #3 created successfully');
 
@@ -227,12 +250,12 @@ async function runDirectWorkflowSuite() {
         description: 'Temporary product created for deletion test.',
         isActive: true,
       },
-      1,
+      adminUserId,
     );
     assert(tempProd.id);
 
     // Delete unreferenced product -> MUST SUCCEED
-    const delResult = await productsService.deleteProduct(tempProd.id, 1);
+    const delResult = await productsService.deleteProduct(tempProd.id, adminUserId);
     assert.strictEqual(delResult.success, true);
 
     const checkDel = await productsService.getProductById(tempProd.id);
@@ -240,7 +263,7 @@ async function runDirectWorkflowSuite() {
 
     // B: Attempt to delete PROD-0001 which has active subscriptions -> MUST THROW BadRequestException
     await assert.rejects(
-      async () => productsService.deleteProduct('PROD-0001', 1),
+      async () => productsService.deleteProduct('PROD-0001', adminUserId),
       (err: any) => {
         return err.message.includes('associated with active customer subscriptions') || err.message.includes('Cannot delete product');
       },
