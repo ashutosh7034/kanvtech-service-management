@@ -89,8 +89,8 @@ export const ChangePasswordModal: React.FC<Props> = ({ isOpen, onClose, onSucces
   };
 
   return (
-    <div className="modal-overlay" style={{ zIndex: 1100 }}>
-      <div className="modal-container" style={{ maxWidth: 460 }}>
+    <div className="modal-backdrop" style={{ zIndex: 1100 }}>
+      <div className="modal-content" style={{ maxWidth: 460 }}>
         {/* Header */}
         <div className="modal-header" style={{ background: '#0b3b60', color: 'white', borderRadius: '12px 12px 0 0' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
