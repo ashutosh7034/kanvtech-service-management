@@ -358,6 +358,9 @@ export class EmployeesService {
     } else if (existing.level === 'L2') {
       nextLevel = EmployeeLevel.L3;
       nextRole = UserRole.L3_EMPLOYEE;
+    } else if (existing.level === 'L3') {
+      nextLevel = EmployeeLevel.MANAGER;
+      nextRole = UserRole.MANAGER;
     } else {
       throw new BadRequestException(`Cannot promote employee with current level '${existing.level}'.`);
     }
