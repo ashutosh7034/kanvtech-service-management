@@ -36,9 +36,9 @@ export const DepartmentsPage: React.FC = () => {
         api.getProducts(),
         api.getEmployees(),
       ]);
-      setDepartments(deptRes.departments || deptRes.data || []);
-      setProducts(prodRes.products || prodRes.data || []);
-      const allEmps: Employee[] = empRes.employees || empRes.data || [];
+      setDepartments(Array.isArray(deptRes) ? deptRes : (deptRes.departments || deptRes.data || []));
+      setProducts(Array.isArray(prodRes) ? prodRes : (prodRes.products || prodRes.data || []));
+      const allEmps: Employee[] = Array.isArray(empRes) ? empRes : (empRes.employees || empRes.data || []);
       setManagers(allEmps.filter((e) => e.level === 'MANAGER' || (e as any).level === 'MANAGER' || e.designation?.toLowerCase().includes('manager')));
     } catch (err) {
       console.error('Failed to load department master data', err);
@@ -78,10 +78,14 @@ export const DepartmentsPage: React.FC = () => {
     setError(null);
     setSaving(true);
     try {
+      const payload = {
+        ...formData,
+        productIds: formData.productId ? [formData.productId] : []
+      };
       if (editingDept) {
-        await api.updateDepartment(editingDept.id, formData);
+        await api.updateDepartment(editingDept.id, payload);
       } else {
-        await api.createDepartment(formData);
+        await api.createDepartment(payload);
       }
       setShowModal(false);
       loadData();
