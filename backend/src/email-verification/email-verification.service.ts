@@ -70,11 +70,18 @@ export class EmailVerificationService {
 
     const transporter = this.createTransporter();
     let previewUrl: string | undefined;
+    let deliveryStatus = 'SENT';
+    let errorMessage: string | null = null;
 
     if (!transporter) {
-      // Log for local dev/test — no real delivery
-      this.logger.log(`[TEST MODE] Verification link for user ${userId} / ${email}: ${verificationUrl}`);
-      previewUrl = verificationUrl; // Return the URL so tests can use it
+      if (process.env.NODE_ENV === 'production') {
+        deliveryStatus = 'FAILED';
+        errorMessage = 'SMTP configuration is missing in production environment.';
+      } else {
+        // Log for local dev/test — no real delivery
+        this.logger.log(`[TEST MODE] Verification link for user ${userId} / ${email}: ${verificationUrl}`);
+        previewUrl = verificationUrl; // Return the URL so tests can use it
+      }
     } else {
       try {
         await transporter.sendMail({
@@ -92,8 +99,24 @@ export class EmailVerificationService {
         });
       } catch (err) {
         this.logger.error(`Failed to send verification email to ${email}: ${err.message}`);
-        throw new BadRequestException('Failed to send verification email. Please try again later.');
+        deliveryStatus = 'FAILED';
+        errorMessage = err.message;
       }
+    }
+
+    await this.prisma.notificationLog.create({
+      data: {
+        channel: 'EMAIL',
+        recipient: email,
+        eventType: 'EMAIL_VERIFICATION',
+        payloadJson: JSON.stringify({ userId, email }),
+        status: deliveryStatus as any,
+        errorMessage,
+      },
+    });
+
+    if (deliveryStatus === 'FAILED') {
+      throw new BadRequestException('Failed to send verification email. Please try again later.');
     }
 
     await this.auditService.log({
