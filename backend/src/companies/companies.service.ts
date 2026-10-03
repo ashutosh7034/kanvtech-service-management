@@ -708,6 +708,8 @@ export class CompaniesService {
       contact_person: b.contactPerson,
       contact_phone: b.contactPhone,
       contact_email: b.contactEmail,
+      alternate_phones: b.alternatePhones,
+      alternate_emails: b.alternateEmails,
       status: b.status,
       created_at: b.createdAt,
       updated_at: b.updatedAt,
@@ -828,6 +830,8 @@ export class CompaniesService {
     const contactPerson = data.contact_person ?? data.contactPerson;
     const contactPhone = data.contact_phone ?? data.contactPhone;
     const contactEmail = data.contact_email ?? data.contactEmail;
+    const alternatePhones = data.alternate_phones ?? data.alternatePhones;
+    const alternateEmails = data.alternate_emails ?? data.alternateEmails;
     const status = data.status;
 
     await this.prisma.companyBranch.update({
@@ -841,6 +845,8 @@ export class CompaniesService {
         contactPerson: contactPerson !== undefined ? contactPerson.trim() : undefined,
         contactPhone: contactPhone !== undefined ? contactPhone.trim() : undefined,
         contactEmail: contactEmail !== undefined ? contactEmail.trim().toLowerCase() : undefined,
+        alternatePhones: alternatePhones !== undefined ? alternatePhones.trim() : undefined,
+        alternateEmails: alternateEmails !== undefined ? alternateEmails.trim().toLowerCase() : undefined,
         status: status !== undefined ? status : undefined,
       },
     });
