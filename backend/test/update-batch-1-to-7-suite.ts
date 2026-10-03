@@ -92,11 +92,11 @@ async function runSuite() {
   assert(tallyProd && spineProd && biosProd, 'Baseline products must exist');
 
   // Ensure Departments in DB
-  let tallyDept = await prisma.department.findFirst({ where: { products: { some: { productId: tallyProd.id } } } });
-  if (!tallyDept) tallyDept = await departmentsService.createDepartment({ code: 'DEP-TALLY', name: 'Tally Support', productIds: [tallyProd.id] } as any, 1);
+  let tallyDeptProd = await prisma.departmentProduct.findFirst({ where: { productId: tallyProd.id }, include: { department: true } });
+  let tallyDept = tallyDeptProd ? tallyDeptProd.department : await departmentsService.createDepartment({ code: `DEP-TAL-${timestamp}`, name: `Tally Support ${timestamp}`, productIds: [tallyProd.id] } as any, 1);
 
-  let spineDept = await prisma.department.findFirst({ where: { products: { some: { productId: spineProd.id } } } });
-  if (!spineDept) spineDept = await departmentsService.createDepartment({ code: 'DEP-SPINE', name: 'Spine Support', productIds: [spineProd.id] } as any, 1);
+  let spineDeptProd = await prisma.departmentProduct.findFirst({ where: { productId: spineProd.id }, include: { department: true } });
+  let spineDept = spineDeptProd ? spineDeptProd.department : await departmentsService.createDepartment({ code: `DEP-SPI-${timestamp}`, name: `Spine Support ${timestamp}`, productIds: [spineProd.id] } as any, 1);
 
   testDeptTallyId = tallyDept.id;
   testDeptSpineId = spineDept.id;
