@@ -297,7 +297,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   // Remove Product from existing Customer (soft-deactivate - preserves history)
   const handleRemoveProduct = async (productId: string, productName: string) => {
     if (!selectedCompany) return;
-    const activeProducts = (selectedCompany.products || []).filter((p: any) => p.is_active !== 0);
+    const activeProducts = (selectedCompany.products || []).filter((p: any) => p.is_active !== 0 && p.is_active !== false);
     if (activeProducts.length <= 1) {
       alert('A customer must have at least one active product. Cannot remove the only remaining product.');
       return;
@@ -632,8 +632,10 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
-                  {selectedCompany.products && selectedCompany.products.length > 0 ? (
-                    selectedCompany.products.map((p: any) => (
+                  {selectedCompany.products && selectedCompany.products.filter((p: any) => p.is_active !== 0 && p.is_active !== false).length > 0 ? (
+                    selectedCompany.products
+                      .filter((p: any) => p.is_active !== 0 && p.is_active !== false)
+                      .map((p: any) => (
                       <div
                         key={p.id || p.product_id}
                         style={{

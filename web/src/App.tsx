@@ -23,6 +23,7 @@ import { MaintenancePage } from './pages-components/maintenance/MaintenancePage'
 import { ImplementationsPage } from './pages-components/implementations/ImplementationsPage';
 import { DepartmentsPage } from './pages-components/departments/DepartmentsPage';
 import { ProspectsPage } from './pages-components/prospects/ProspectsPage';
+import { TaskRemindersPage } from './pages-components/task-reminders/TaskRemindersPage';
 import { ChatPage } from './pages-components/chat/ChatPage';
 import { EmailVerificationPage } from './pages-components/email-verification/EmailVerificationPage';
 export interface AppProps {
@@ -90,6 +91,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
         products: '/products',
         implementations: '/implementations',
         prospects: '/prospects',
+        task_reminders: '/task-reminders',
         chat: '/chat',
         verify_email: '/verify-email',
         maintenance: '/annual-maintenance',
@@ -132,6 +134,10 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
         return 'Product Master Catalog';
       case 'implementations':
         return 'New Client Implementations';
+      case 'prospects':
+        return 'Prospects & Leads';
+      case 'task_reminders':
+        return 'Task Reminders';
       case 'maintenance':
         return 'Annual Maintenance & Subscriptions';
       case 'reports':
@@ -170,8 +176,11 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       case 'task_allotment':
       case 'products':
       case 'implementations':
+      case 'prospects':
       case 'maintenance':
         return userRole === 'MANAGER';
+      case 'task_reminders':
+        return userRole !== 'CUSTOMER';
       case 'escalations':
         return ['MANAGER', 'L2_EMPLOYEE', 'L3_EMPLOYEE'].includes(userRole);
       case 'sla_settings':
@@ -221,6 +230,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
           {currentView === 'products' && <ProductsPage />}
           {currentView === 'implementations' && <ImplementationsPage />}
           {currentView === 'prospects' && <ProspectsPage />}
+          {currentView === 'task_reminders' && <TaskRemindersPage />}
           {currentView === 'chat' && <ChatPage />}
           {currentView === 'verify_email' && <EmailVerificationPage />}
         {currentView === 'maintenance' && <MaintenancePage />}

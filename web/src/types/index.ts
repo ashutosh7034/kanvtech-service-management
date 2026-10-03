@@ -126,6 +126,8 @@ export interface Employee {
   name: string;
   email: string;
   phone: string;
+  alternate_emails?: string | null;
+  alternate_phones?: string | null;
   department: string;
   department_id?: string | null;
   designation: string;
@@ -177,6 +179,7 @@ export interface Department {
   specialist_count?: number;
   active_ticket_count?: number;
   employees?: Employee[];
+  products?: any[];
 }
 
 export interface BranchProduct {

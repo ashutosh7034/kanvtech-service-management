@@ -97,7 +97,7 @@ export const MaintenancePage: React.FC = () => {
       ]);
 
       setSubscriptions(subRes.data || []);
-      setCompanies(compRes.companies || []);
+      setCompanies(compRes.data || []);
       setProducts(prodRes.data || []);
       if (statsRes.stats) setStats(statsRes.stats);
     } catch (err: any) {
@@ -313,7 +313,7 @@ export const MaintenancePage: React.FC = () => {
           >
             <option value="ALL">All Customer Companies</option>
             {companies.map((c) => (
-              <option key={c.id} value={c.id}>{c.companyName}</option>
+              <option key={c.id} value={c.id}>{c.company_name || c.companyName}</option>
             ))}
           </select>
 
@@ -448,7 +448,7 @@ export const MaintenancePage: React.FC = () => {
                 >
                   <option value="">-- Choose Company --</option>
                   {companies.map((c) => (
-                    <option key={c.id} value={c.id}>{c.companyName} ({c.id})</option>
+                    <option key={c.id} value={c.id}>{c.company_name || c.companyName} ({c.id})</option>
                   ))}
                 </select>
               </div>

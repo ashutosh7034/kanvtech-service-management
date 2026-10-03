@@ -23,7 +23,7 @@ export const ProspectsPage: React.FC = () => {
   });
 
   const [products, setProducts] = useState<any[]>([]);
-  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [selectedProductIds, setSelectedProductIds] = useState<string[]>([]);
 
   useEffect(() => {
     loadProspects();

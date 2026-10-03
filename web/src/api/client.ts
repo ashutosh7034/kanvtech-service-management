@@ -248,4 +248,15 @@ export const api = {
 
   // Audit Logs
   getAuditLogs: () => request('/audit-logs'),
+
+  // Employee Tasks (Task Reminders)
+  getMyTasks: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/employee-tasks?${qs}`);
+  },
+  getDueReminders: () => request('/employee-tasks/reminders'),
+  createTask: (data: any) => request('/employee-tasks', { method: 'POST', body: JSON.stringify(data) }),
+  updateTask: (id: string, data: any) => request(`/employee-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  completeTask: (id: string) => request(`/employee-tasks/${id}/complete`, { method: 'POST' }),
+  deleteTask: (id: string) => request(`/employee-tasks/${id}`, { method: 'DELETE' }),
 };

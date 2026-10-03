@@ -19,6 +19,7 @@ import {
   Briefcase,
   MessageSquare,
   Mail,
+  Bell,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -104,6 +105,16 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
           <Ticket size={16} />
           <span>Support Tickets</span>
         </button>
+
+        {!isAccessible(['CUSTOMER']) && (
+          <button
+            className={`nav-item ${currentView === 'task_reminders' ? 'active' : ''}`}
+            onClick={() => onNavigate('task_reminders')}
+          >
+            <Bell size={16} />
+            <span>Task Reminders</span>
+          </button>
+        )}
 
         {!isAccessible(['CUSTOMER']) && (
           <button

@@ -21,6 +21,8 @@ export const EmployeesPage: React.FC = () => {
     name: '',
     email: '',
     phone: '',
+    alternate_emails: [] as string[],
+    alternate_phones: [] as string[],
     department_id: '',
     designation: 'L1 Support Specialist',
     level: 'L1' as 'MANAGER' | 'L1' | 'L2' | 'L3',
@@ -40,7 +42,7 @@ export const EmployeesPage: React.FC = () => {
   const [generatedTempPassword, setGeneratedTempPassword] = useState<string | null>(null);
 
   const handlePromote = async (emp: Employee) => {
-    const nextTier = emp.level === 'L1' ? 'L2' : 'L3';
+    const nextTier = emp.level === 'L1' ? 'L2' : emp.level === 'L2' ? 'L3' : 'MANAGER';
     if (!window.confirm(`Promote ${emp.name} from ${emp.level} to ${nextTier} in ${emp.department}?`)) return;
     try {
       await api.promoteEmployee(emp.id);
@@ -104,12 +106,19 @@ export const EmployeesPage: React.FC = () => {
     setFormError(null);
     setSaving(true);
     try {
-      await api.createEmployee(formData);
+      const payload = {
+        ...formData,
+        alternate_emails: formData.alternate_emails.filter(e => e.trim() !== '').join(','),
+        alternate_phones: formData.alternate_phones.filter(p => p.trim() !== '').join(','),
+      };
+      await api.createEmployee(payload);
       setShowCreateModal(false);
       setFormData({
         name: '',
         email: '',
         phone: '',
+        alternate_emails: [],
+        alternate_phones: [],
         department_id: departments[0]?.id || '',
         designation: 'L1 Support Specialist',
         level: 'L1',
@@ -274,7 +283,9 @@ export const EmployeesPage: React.FC = () => {
                   <td>{emp.designation}</td>
                   <td>
                     <div>{emp.email}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{emp.phone}</div>
+                    {emp.alternate_emails && <div style={{ fontSize: 11, color: '#64748b' }}>+ {emp.alternate_emails.split(',').length} email(s)</div>}
+                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{emp.phone}</div>
+                    {emp.alternate_phones && <div style={{ fontSize: 11, color: '#64748b' }}>+ {emp.alternate_phones.split(',').length} phone(s)</div>}
                   </td>
                   <td>
                     <span
@@ -363,13 +374,22 @@ export const EmployeesPage: React.FC = () => {
                           </>
                         )}
                         {emp.level === 'L3' && (
-                          <button
-                            className="btn btn-outline btn-xs"
-                            style={{ borderColor: '#b45309', color: '#b45309', fontWeight: 600 }}
-                            onClick={() => handleDemote(emp)}
-                          >
-                            Demote to L2
-                          </button>
+                          <>
+                            <button
+                              className="btn btn-outline btn-xs"
+                              style={{ borderColor: '#16a34a', color: '#16a34a', fontWeight: 600 }}
+                              onClick={() => handlePromote(emp)}
+                            >
+                              Promote to MANAGER
+                            </button>
+                            <button
+                              className="btn btn-outline btn-xs"
+                              style={{ borderColor: '#b45309', color: '#b45309', fontWeight: 600 }}
+                              onClick={() => handleDemote(emp)}
+                            >
+                              Demote to L2
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -451,6 +471,82 @@ export const EmployeesPage: React.FC = () => {
                       placeholder="+91 98765 11001"
                     />
                   </div>
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label className="form-label" style={{ margin: 0 }}>Additional Emails</label>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      onClick={() => setFormData({ ...formData, alternate_emails: [...formData.alternate_emails, ''] })}
+                    >
+                      + Add Email
+                    </button>
+                  </div>
+                  {formData.alternate_emails.map((email, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={email}
+                        onChange={(e) => {
+                          const newEmails = [...formData.alternate_emails];
+                          newEmails[idx] = e.target.value;
+                          setFormData({ ...formData, alternate_emails: newEmails });
+                        }}
+                        placeholder="Alternate email"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-xs"
+                        onClick={() => {
+                          const newEmails = formData.alternate_emails.filter((_, i) => i !== idx);
+                          setFormData({ ...formData, alternate_emails: newEmails });
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label className="form-label" style={{ margin: 0 }}>Additional Phones</label>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      onClick={() => setFormData({ ...formData, alternate_phones: [...formData.alternate_phones, ''] })}
+                    >
+                      + Add Phone
+                    </button>
+                  </div>
+                  {formData.alternate_phones.map((phone, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={phone}
+                        onChange={(e) => {
+                          const newPhones = [...formData.alternate_phones];
+                          newPhones[idx] = e.target.value;
+                          setFormData({ ...formData, alternate_phones: newPhones });
+                        }}
+                        placeholder="Alternate phone"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-xs"
+                        onClick={() => {
+                          const newPhones = formData.alternate_phones.filter((_, i) => i !== idx);
+                          setFormData({ ...formData, alternate_phones: newPhones });
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
                 </div>
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

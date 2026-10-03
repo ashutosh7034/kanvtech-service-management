@@ -147,7 +147,7 @@ export const ImplementationsPage: React.FC = () => {
       ]);
 
       setImplementations(impRes.data || []);
-      setCompanies(compRes.companies || []);
+      setCompanies(compRes.data || []);
       setProducts(prodRes.data || []);
       setEmployees(empRes.employees || []);
       if (statsRes.stats) setStats(statsRes.stats);
@@ -434,7 +434,7 @@ export const ImplementationsPage: React.FC = () => {
           >
             <option value="ALL">All Customer Companies</option>
             {companies.map((c) => (
-              <option key={c.id} value={c.id}>{c.companyName}</option>
+              <option key={c.id} value={c.id}>{c.company_name || c.companyName}</option>
             ))}
           </select>
 
@@ -565,7 +565,7 @@ export const ImplementationsPage: React.FC = () => {
                   >
                     <option value="">-- Choose Company --</option>
                     {companies.map((c) => (
-                      <option key={c.id} value={c.id}>{c.companyName}</option>
+                      <option key={c.id} value={c.id}>{c.company_name || c.companyName}</option>
                     ))}
                   </select>
                 </div>

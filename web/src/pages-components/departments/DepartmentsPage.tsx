@@ -18,7 +18,7 @@ export const DepartmentsPage: React.FC = () => {
     name: '',
     code: '',
     description: '',
-    productId: '',
+    productIds: [] as string[],
     managerId: '',
   });
   const [saving, setSaving] = useState(false);
@@ -53,7 +53,7 @@ export const DepartmentsPage: React.FC = () => {
       name: '',
       code: '',
       description: '',
-      productId: products.length > 0 ? products[0].id : '',
+      productIds: [],
       managerId: managers.length > 0 ? managers[0].id : '',
     });
     setError(null);
@@ -66,7 +66,7 @@ export const DepartmentsPage: React.FC = () => {
       name: dept.name,
       code: dept.code,
       description: dept.description || '',
-      productId: dept.productId || dept.product_id || '',
+      productIds: dept.products?.map((p: any) => p.id || p.productId) || [],
       managerId: dept.managerId || dept.manager_id || '',
     });
     setError(null);
@@ -79,8 +79,7 @@ export const DepartmentsPage: React.FC = () => {
     setSaving(true);
     try {
       const payload = {
-        ...formData,
-        productIds: formData.productId ? [formData.productId] : []
+        ...formData
       };
       if (editingDept) {
         await api.updateDepartment(editingDept.id, payload);
@@ -304,21 +303,30 @@ export const DepartmentsPage: React.FC = () => {
                     />
                   </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Product Specialization *</label>
-                    <select
-                      className="form-control"
-                      value={formData.productId}
-                      onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
-                    >
-                      <option value="">Select Associated Product</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} ({p.code})
-                        </option>
-                      ))}
-                    </select>
+                <div className="form-group">
+                  <label className="form-label">Product Specializations *</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, border: '1px solid #e2e8f0', padding: 12, borderRadius: 6, maxHeight: 150, overflowY: 'auto', background: '#f8fafc' }}>
+                    {products.map((p) => (
+                      <label key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={formData.productIds.includes(p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, productIds: [...formData.productIds, p.id] });
+                            } else {
+                              setFormData({ ...formData, productIds: formData.productIds.filter(id => id !== p.id) });
+                            }
+                          }}
+                        />
+                        <span>{p.name} ({p.code})</span>
+                      </label>
+                    ))}
+                    {products.length === 0 && (
+                      <div style={{ color: '#64748b', fontSize: 12 }}>No products available. Add products in Product Master first.</div>
+                    )}
                   </div>
+                </div>
                 </div>
 
                 <div className="form-group">

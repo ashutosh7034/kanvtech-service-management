@@ -49,8 +49,12 @@ export class AuthService {
       },
     });
 
-    if (!user || !user.isActive) {
-      throw new UnauthorizedException('Invalid email or password');
+    if (!user) {
+      throw new UnauthorizedException('User not found. Please contact Admin.');
+    }
+
+    if (!user.isActive) {
+      throw new UnauthorizedException('User account is inactive. Please contact Admin.');
     }
 
     const isMatch = await bcrypt.compare(pass, user.passwordHash);

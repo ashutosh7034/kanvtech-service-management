@@ -24,6 +24,7 @@ import { DepartmentsModule } from './departments/departments.module';
 import { ProspectsModule } from './prospects/prospects.module';
 import { ChatModule } from './chat/chat.module';
 import { EmailVerificationModule } from './email-verification/email-verification.module';
+import { EmployeeTasksModule } from './employee-tasks/employee-tasks.module';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import { EmailVerificationModule } from './email-verification/email-verification
     ProspectsModule,
     ChatModule,
     EmailVerificationModule,
+    EmployeeTasksModule,
   ],
 })
 export class AppModule {}
