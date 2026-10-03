@@ -544,6 +544,7 @@ export class CompaniesService {
 
     if (existing) {
       if (!existing.isActive) {
+        // Re-add a previously removed product — re-activate it
         const updated = await this.prisma.companyProduct.update({
           where: { id: existing.id },
           data: { 
@@ -559,10 +560,19 @@ export class CompaniesService {
              data: modules.map(mId => ({ companyProductId: existing.id, moduleId: mId }))
            });
         }
+
+        await this.auditService.log({
+          actorUserId,
+          action: 'CUSTOMER_PRODUCT_READDED',
+          entityType: 'COMPANY',
+          entityId: companyId,
+          newValues: { companyId, productId, productName: product.name },
+        });
         
         return updated;
       }
-      return existing;
+      // Already active — prevent duplicate
+      throw new BadRequestException(`Customer already has an active entitlement for product '${product.name}'. Each product can only be assigned once.`);
     }
 
     const created = await this.prisma.companyProduct.create({

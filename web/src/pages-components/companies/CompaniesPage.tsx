@@ -19,6 +19,7 @@ import {
   CheckSquare,
   Square,
   AlertCircle,
+  Save,
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 
@@ -64,6 +65,23 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   });
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Edit Customer Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCompany, setEditingCompany] = useState<any | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    company_name: '',
+    address: '',
+    gstn: '',
+    primary_email: '',
+    contact_person: '',
+    contact_phone: '',
+    alternate_contact: '',
+    alternate_contact_phone: '',
+    alternate_contact_email: '',
+  });
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Add Product to existing Customer Modal State
   const [showAddProductModal, setShowAddProductModal] = useState(false);
@@ -149,6 +167,67 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     }
   };
 
+  // Open Edit Customer Modal
+  const handleOpenEdit = (company: any) => {
+    setEditingCompany(company);
+    setEditFormData({
+      company_name: company.company_name || '',
+      address: company.address || '',
+      gstn: company.gstn || '',
+      primary_email: company.primary_email || '',
+      contact_person: company.contact_person || '',
+      contact_phone: company.contact_phone || '',
+      alternate_contact: company.alternate_contact || '',
+      alternate_contact_phone: company.alternate_contact_phone || '',
+      alternate_contact_email: company.alternate_contact_email || '',
+    });
+    setEditFormError(null);
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCompany) return;
+    setEditFormError(null);
+
+    if (!editFormData.company_name.trim()) {
+      setEditFormError('Company name is required.');
+      return;
+    }
+    if (!editFormData.address.trim()) {
+      setEditFormError('Address is required.');
+      return;
+    }
+    if (!editFormData.primary_email.trim()) {
+      setEditFormError('Primary email is required.');
+      return;
+    }
+    if (!editFormData.contact_person.trim()) {
+      setEditFormError('Contact person is required.');
+      return;
+    }
+    if (!editFormData.contact_phone.trim()) {
+      setEditFormError('Contact phone is required.');
+      return;
+    }
+
+    setSavingEdit(true);
+    try {
+      await api.updateCompany(editingCompany.id, editFormData);
+      setShowEditModal(false);
+      setEditingCompany(null);
+      loadCompanies();
+      // Refresh detail view if open
+      if (selectedCompany && selectedCompany.id === editingCompany.id) {
+        handleOpenDetail(editingCompany.id);
+      }
+    } catch (err: any) {
+      setEditFormError(err.message || 'Failed to update customer');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   // Toggle product selection in customer registration form
   const toggleProductSelection = (prodId: string) => {
     const exists = formData.product_ids.includes(prodId);
@@ -215,14 +294,15 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     }
   };
 
-  // Remove Product from existing Customer
+  // Remove Product from existing Customer (soft-deactivate - preserves history)
   const handleRemoveProduct = async (productId: string, productName: string) => {
     if (!selectedCompany) return;
-    if (selectedCompany.products && selectedCompany.products.length <= 1) {
+    const activeProducts = (selectedCompany.products || []).filter((p: any) => p.is_active !== 0);
+    if (activeProducts.length <= 1) {
       alert('A customer must have at least one active product. Cannot remove the only remaining product.');
       return;
     }
-    if (!confirm(`Are you sure you want to remove product "${productName}" from this customer?`)) return;
+    if (!confirm(`Are you sure you want to remove product "${productName}" from this customer?\n\nThis will NOT delete historical tickets, AMC records, or implementation data associated with this product.`)) return;
 
     try {
       await api.removeCustomerProduct(selectedCompany.id, productId);
@@ -406,7 +486,8 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                               border: '1px solid #bfdbfe',
                             }}
                           >
-                            {p.product_name || p.product?.name || p.product_code || 'Product'}
+                            {/* Fix: use p.name (list API) or p.product_name (detail API) */}
+                            {p.name || p.product_name || p.product?.name || p.code || 'Product'}
                           </span>
                         ))
                       ) : (
@@ -459,6 +540,14 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       </button>
                       <button
                         className="btn btn-secondary btn-sm"
+                        onClick={() => handleOpenEdit(c)}
+                        title="Edit Customer"
+                        style={{ color: '#2563eb' }}
+                      >
+                        <Edit2 size={13} /> Edit
+                      </button>
+                      <button
+                        className="btn btn-secondary btn-sm"
                         onClick={() => handleToggleStatus(c.id, c.is_active)}
                         title={c.is_active ? 'Deactivate' : 'Activate'}
                       >
@@ -487,12 +576,21 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                   </div>
                 </div>
               </div>
-              <button
-                onClick={() => setSelectedCompany(null)}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
-              >
-                ✕
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => { setSelectedCompany(null); handleOpenEdit(selectedCompany); }}
+                  style={{ color: '#2563eb' }}
+                >
+                  <Edit2 size={13} /> Edit Customer
+                </button>
+                <button
+                  onClick={() => setSelectedCompany(null)}
+                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
             </div>
 
             <div className="modal-body">
@@ -545,13 +643,31 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                           padding: 10,
                           display: 'flex',
                           justifyContent: 'space-between',
-                          alignItems: 'center',
+                          alignItems: 'flex-start',
                         }}
                       >
-                        <div>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: '#0b3b60' }}>{p.product_name || p.product?.name}</div>
-                          <div style={{ fontSize: 11, color: '#64748b' }}>Code: {p.product_code || p.product?.code}</div>
-                          {p.category && <div style={{ fontSize: 11, color: '#2563eb' }}>{p.category}</div>}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {/* Product Name — clearly labeled */}
+                          <div style={{ fontWeight: 700, fontSize: 13, color: '#0b3b60', marginBottom: 2 }}>
+                            {p.name || p.product_name || p.product?.name || '—'}
+                          </div>
+                          {/* Product Code — clearly labeled */}
+                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>
+                            Product Code: <span style={{ fontWeight: 600, color: '#475569' }}>{p.code || p.product_code || p.product?.code || '—'}</span>
+                          </div>
+                          {/* Category */}
+                          {(p.category || p.product?.category) && (
+                            <div style={{ fontSize: 11, color: '#2563eb', marginBottom: 4 }}>
+                              {p.category || p.product?.category}
+                            </div>
+                          )}
+                          {/* Purchase type */}
+                          {p.purchase_type && (
+                            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
+                              Entitlement: {p.purchase_type}
+                            </div>
+                          )}
+                          {/* Modules / Submodules entitlement */}
                           {p.modules && p.modules.length > 0 && (
                             <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: '2px solid #e2e8f0' }}>
                               <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>PURCHASED MODULES</div>
@@ -572,9 +688,9 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                         </div>
                         <button
                           className="btn btn-secondary btn-sm"
-                          style={{ padding: '4px 6px', color: '#b91c1c' }}
-                          title="Remove Product"
-                          onClick={() => handleRemoveProduct(p.product_id || p.productId, p.product_name || p.product?.name)}
+                          style={{ padding: '4px 6px', color: '#b91c1c', marginLeft: 8, flexShrink: 0 }}
+                          title="Remove Product Entitlement (preserves historical data)"
+                          onClick={() => handleRemoveProduct(p.product_id || p.productId, p.name || p.product_name || p.product?.name)}
                         >
                           <Trash2 size={13} />
                         </button>
@@ -665,7 +781,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                                     border: '1px solid #bbf7d0',
                                   }}
                                 >
-                                  {bp.productName || bp.product?.name || bp.productId}
+                                  {bp.productName || bp.name || bp.product?.name || bp.productId}
                                 </span>
                               ))
                             ) : (
@@ -718,6 +834,179 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 Close
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT CUSTOMER MODAL */}
+      {showEditModal && editingCompany && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: 650 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Edit2 size={20} color="#2563eb" />
+                <div>
+                  <div className="modal-title">Edit Customer</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>ID: {editingCompany.id} — Product mappings and branches are managed separately</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+                {editFormError && (
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      background: '#fef2f2',
+                      color: '#b91c1c',
+                      borderRadius: 6,
+                      marginBottom: 14,
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <AlertCircle size={16} />
+                    <span>{editFormError}</span>
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label">Company / Organization Name *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    required
+                    value={editFormData.company_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Primary Corporate Email *</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      required
+                      value={editFormData.primary_email}
+                      onChange={(e) => setEditFormData({ ...editFormData, primary_email: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">GST Number (Optional)</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editFormData.gstn}
+                      onChange={(e) => setEditFormData({ ...editFormData, gstn: e.target.value.toUpperCase() })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Full Corporate Address *</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    required
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Primary Contact Person *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required
+                      value={editFormData.contact_person}
+                      onChange={(e) => setEditFormData({ ...editFormData, contact_person: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Contact Phone *</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required
+                      value={editFormData.contact_phone}
+                      onChange={(e) => setEditFormData({ ...editFormData, contact_phone: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 10 }}>
+                    ALTERNATE CONTACT (Optional)
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Alternate Contact Name</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editFormData.alternate_contact}
+                        onChange={(e) => setEditFormData({ ...editFormData, alternate_contact: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label">Alternate Contact Phone</label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        value={editFormData.alternate_contact_phone}
+                        onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_phone: e.target.value })}
+                      />
+                    </div>
+                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                      <label className="form-label">Alternate Contact Email</label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={editFormData.alternate_contact_email}
+                        onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_email: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: 14,
+                    padding: '10px 14px',
+                    background: '#eff6ff',
+                    borderRadius: 6,
+                    fontSize: 12,
+                    color: '#1d4ed8',
+                    border: '1px solid #bfdbfe',
+                  }}
+                >
+                  ℹ️ Customer ID (<strong>{editingCompany.id}</strong>), product entitlements, and branch mappings are preserved and managed separately.
+                  Tickets, AMC records, and implementation history remain unaffected.
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={savingEdit}>
+                  <Save size={14} />
+                  {savingEdit ? 'Saving Changes...' : 'Save Customer Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
@@ -927,7 +1216,9 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                             />
                             <div>
                               <div style={{ fontWeight: 600, fontSize: 13, color: '#0b3b60' }}>{p.name}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>Code: {p.code} • {p.category}</div>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>
+                                Product Code: {p.code} • {p.category}
+                              </div>
                               <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>{p.description}</div>
                             </div>
                           </div>
@@ -973,7 +1264,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                                 border: '1px solid #bfdbfe',
                               }}
                             >
-                              {prod ? prod.name : pid}
+                              {prod ? `${prod.name} (${prod.code})` : pid}
                             </span>
                           );
                         })}
@@ -1035,9 +1326,12 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       {/* ADD PRODUCT MODAL */}
       {showAddProductModal && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 450 }}>
+          <div className="modal-content" style={{ maxWidth: 480 }}>
             <div className="modal-header">
-              <div className="modal-title">Purchase Additional Product</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Package size={20} color="#2563eb" />
+                <div className="modal-title">Purchase Additional Product</div>
+              </div>
               <button
                 onClick={() => setShowAddProductModal(false)}
                 style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
@@ -1060,13 +1354,22 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 >
                   <option value="">Choose a product from Product Master</option>
                   {products
-                    .filter((p) => !selectedCompany?.products?.some((cp: any) => (cp.product_id || cp.productId) === p.id))
+                    .filter((p) => {
+                      // Filter out products already actively owned by this customer
+                      const owned = selectedCompany?.products?.some(
+                        (cp: any) => (cp.product_id || cp.productId || cp.id) === p.id && cp.is_active !== 0
+                      );
+                      return !owned;
+                    })
                     .map((p) => (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({p.code})
+                        {p.name} — Code: {p.code} ({p.category})
                       </option>
                     ))}
                 </select>
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+                Previously removed products can be re-added. Historical tickets and AMC records are always preserved.
               </div>
             </div>
             <div className="modal-footer">
@@ -1221,7 +1524,8 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                     {selectedCompany?.products?.map((cp: any) => {
                       const pId = cp.product_id || cp.productId;
-                      const pName = cp.product_name || cp.product?.name;
+                      const pName = cp.name || cp.product_name || cp.product?.name;
+                      const pCode = cp.code || cp.product_code || cp.product?.code;
                       const selected = branchForm.product_ids.includes(pId);
                       return (
                         <button
@@ -1251,7 +1555,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                             cursor: 'pointer',
                           }}
                         >
-                          {selected ? '✓ ' : '+ '} {pName}
+                          {selected ? '✓ ' : '+ '} {pName} {pCode ? `(${pCode})` : ''}
                         </button>
                       );
                     })}
