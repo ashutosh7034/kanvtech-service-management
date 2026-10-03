@@ -873,6 +873,8 @@ export class ImportService {
         select: { id: true },
       });
       const nonAdminUserIds = nonAdminUsers.map((u) => u.id);
+      
+      await tx.employeeTask.deleteMany();
 
       await tx.employee.deleteMany({
         where: { userId: { in: nonAdminUserIds } },
