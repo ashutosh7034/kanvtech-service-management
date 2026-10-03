@@ -98,6 +98,26 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
     }
   };
 
+  const handlePauseWork = async () => {
+    try {
+      await api.pauseWork(ticketId);
+      showToast('Resolution session paused.', 'success');
+      loadTicket();
+    } catch (err: any) {
+      showToast(err.message, 'danger');
+    }
+  };
+
+  const handleResumeWork = async () => {
+    try {
+      await api.resumeWork(ticketId);
+      showToast('Resolution session resumed.', 'success');
+      loadTicket();
+    } catch (err: any) {
+      showToast(err.message, 'danger');
+    }
+  };
+
   const handleEscalate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ticket) return;
@@ -245,8 +265,20 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
           )}
 
           {canWork && ticket.status === 'OPEN' && (
-            <button className="btn btn-primary" onClick={handleStartWork}>
+            <button className="btn btn-primary btn-sm" onClick={handleStartWork}>
               <Play size={14} /> Start Work
+            </button>
+          )}
+
+          {canWork && ticket.status === 'PAUSED' && (
+            <button className="btn btn-success btn-sm" onClick={handleResumeWork}>
+              <Play size={14} /> Resume Work
+            </button>
+          )}
+
+          {canWork && ticket.status === 'IN_PROGRESS' && (
+            <button className="btn btn-warning btn-sm" onClick={handlePauseWork}>
+              <RotateCcw size={14} /> Pause Work
             </button>
           )}
 
@@ -739,6 +771,8 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             sessions={ticket.timer?.sessions || []}
             canControl={canWork}
             onStart={handleStartWork}
+            onPause={handlePauseWork}
+            onResume={handleResumeWork}
           />
 
           {/* Reopen History Card (if any reopens occurred) */}

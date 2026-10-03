@@ -84,9 +84,68 @@ export class ProductsController {
 
   @Delete(':id')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Delete a product (Only permitted if not referenced by subscriptions/implementations)' })
+  @ApiOperation({ summary: 'Delete a product' })
   async deleteProduct(@Param('id') id: string, @Request() req: any) {
     const result = await this.productsService.deleteProduct(id, req.user.userId);
+    return result;
+  }
+
+  // --- Module Endpoints ---
+
+  @Get(':id/modules')
+  @ApiOperation({ summary: 'Get all modules for a product' })
+  async getModules(@Param('id') id: string) {
+    const result = await this.productsService.getModules(id);
+    return { success: true, ...result };
+  }
+
+  @Post(':id/modules')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Create a module for a product' })
+  async createModule(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const module = await this.productsService.createModule(id, body, req.user.userId);
+    return { success: true, module, message: 'Module created successfully' };
+  }
+
+  @Put('modules/:moduleId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Update a module' })
+  async updateModule(@Param('moduleId') moduleId: string, @Body() body: any, @Request() req: any) {
+    const module = await this.productsService.updateModule(moduleId, body, req.user.userId);
+    return { success: true, module, message: 'Module updated successfully' };
+  }
+
+  @Delete('modules/:moduleId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Delete a module and its submodules' })
+  async deleteModule(@Param('moduleId') moduleId: string, @Request() req: any) {
+    const result = await this.productsService.deleteModule(moduleId, req.user.userId);
+    return result;
+  }
+
+  // --- Submodule Endpoints ---
+
+  @Post('modules/:moduleId/submodules')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Create a submodule' })
+  async createSubmodule(@Param('moduleId') moduleId: string, @Body() body: any, @Request() req: any) {
+    const submodule = await this.productsService.createSubmodule(moduleId, body, req.user.userId);
+    return { success: true, submodule, message: 'Submodule created successfully' };
+  }
+
+  @Put('submodules/:submoduleId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Update a submodule' })
+  async updateSubmodule(@Param('submoduleId') submoduleId: string, @Body() body: any, @Request() req: any) {
+    const submodule = await this.productsService.updateSubmodule(submoduleId, body, req.user.userId);
+    return { success: true, submodule, message: 'Submodule updated successfully' };
+  }
+
+  @Delete('submodules/:submoduleId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Delete a submodule' })
+  async deleteSubmodule(@Param('submoduleId') submoduleId: string, @Request() req: any) {
+    const result = await this.productsService.deleteSubmodule(submoduleId, req.user.userId);
     return result;
   }
 }

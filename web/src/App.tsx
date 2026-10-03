@@ -22,7 +22,9 @@ import { TaskAllotmentPage } from './pages-components/task-allotment/TaskAllotme
 import { MaintenancePage } from './pages-components/maintenance/MaintenancePage';
 import { ImplementationsPage } from './pages-components/implementations/ImplementationsPage';
 import { DepartmentsPage } from './pages-components/departments/DepartmentsPage';
-
+import { ProspectsPage } from './pages-components/prospects/ProspectsPage';
+import { ChatPage } from './pages-components/chat/ChatPage';
+import { EmailVerificationPage } from './pages-components/email-verification/EmailVerificationPage';
 export interface AppProps {
   initialView?: string;
 }
@@ -44,6 +46,9 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       if (path === 'products') return 'products';
       if (path === 'implementations') return 'implementations';
       if (path === 'maintenance' || path === 'annual-maintenance') return 'maintenance';
+      if (path === 'prospects') return 'prospects';
+      if (path === 'chat') return 'chat';
+      if (path === 'verify-email') return 'verify_email';
       if (path === 'reports') return 'reports';
       if (path === 'import') return 'import';
       if (path === 'sla_settings' || path === 'sla-settings') return 'sla_settings';
@@ -84,6 +89,9 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
         approvals: '/approvals',
         products: '/products',
         implementations: '/implementations',
+        prospects: '/prospects',
+        chat: '/chat',
+        verify_email: '/verify-email',
         maintenance: '/annual-maintenance',
         reports: '/reports',
         import: '/import',
@@ -212,7 +220,10 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
           {currentView === 'approvals' && <ApprovalsPage onNavigateDetail={(id) => navigateTo('ticket_detail', id)} />}
           {currentView === 'products' && <ProductsPage />}
           {currentView === 'implementations' && <ImplementationsPage />}
-          {currentView === 'maintenance' && <MaintenancePage />}
+          {currentView === 'prospects' && <ProspectsPage />}
+          {currentView === 'chat' && <ChatPage />}
+          {currentView === 'verify_email' && <EmailVerificationPage />}
+        {currentView === 'maintenance' && <MaintenancePage />}
           {currentView === 'reports' && <ReportsPage />}
           {currentView === 'import' && <ImportPage />}
           {currentView === 'sla_settings' && <SLASettingsPage />}

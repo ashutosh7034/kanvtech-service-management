@@ -16,6 +16,9 @@ import {
   ShieldAlert,
   Smartphone,
   Layers,
+  Briefcase,
+  MessageSquare,
+  Mail,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -66,6 +69,16 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
         {isAccessible(['MANAGER']) && (
           <button
+            className={`nav-item ${currentView === 'prospects' ? 'active' : ''}`}
+            onClick={() => onNavigate('prospects')}
+          >
+            <Briefcase size={16} />
+            <span>Prospects & Leads</span>
+          </button>
+        )}
+
+        {isAccessible(['MANAGER']) && (
+          <button
             className={`nav-item ${currentView === 'departments' ? 'active' : ''}`}
             onClick={() => onNavigate('departments')}
           >
@@ -91,6 +104,16 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
           <Ticket size={16} />
           <span>Support Tickets</span>
         </button>
+
+        {!isAccessible(['CUSTOMER']) && (
+          <button
+            className={`nav-item ${currentView === 'chat' ? 'active' : ''}`}
+            onClick={() => onNavigate('chat')}
+          >
+            <MessageSquare size={16} />
+            <span>Internal Chat</span>
+          </button>
+        )}
 
         {isAccessible(['MANAGER']) && (
           <button
@@ -172,6 +195,14 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
             >
               <FileSpreadsheet size={16} />
               <span>Import Data</span>
+            </button>
+            
+            <button
+              className={`nav-item ${currentView === 'verify_email' ? 'active' : ''}`}
+              onClick={() => onNavigate('verify_email')}
+            >
+              <Mail size={16} />
+              <span>Email Verification</span>
             </button>
           </>
         )}

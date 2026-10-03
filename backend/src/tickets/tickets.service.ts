@@ -44,6 +44,7 @@ export class TicketsService {
     const activeStatuses: TicketStatus[] = [
       TicketStatus.OPEN,
       TicketStatus.IN_PROGRESS,
+      TicketStatus.PAUSED,
       TicketStatus.REOPENED,
       TicketStatus.RESOLVED,
       TicketStatus.MANAGER_REVIEW,
@@ -70,6 +71,10 @@ export class TicketsService {
     customer_contact_id?: number;
     productId?: string;
     product_id?: string;
+    moduleId?: string;
+    module_id?: string;
+    submoduleId?: string;
+    submodule_id?: string;
     branchId?: string;
     branch_id?: string;
     problemType: string;
@@ -160,7 +165,7 @@ export class TicketsService {
 
     // 3. Automatic Department Derivation from Product
     let department = await this.prisma.department.findFirst({
-      where: { productId, isActive: true },
+      where: { products: { some: { productId } }, isActive: true },
     });
     if (!department) {
       // Try finding department by product code or name
@@ -210,6 +215,8 @@ export class TicketsService {
         companyId: params.companyId,
         customerContactId,
         productId,
+        moduleId: params.moduleId || params.module_id || null,
+        submoduleId: params.submoduleId || params.submodule_id || null,
         branchId,
         departmentId,
         problemType: (params.problemType || 'General Incident').trim(),
@@ -238,6 +245,8 @@ export class TicketsService {
         metadataJson: JSON.stringify({
           productId,
           productName: product.name,
+          moduleId: params.moduleId || params.module_id || null,
+          submoduleId: params.submoduleId || params.submodule_id || null,
           branchId,
           departmentId,
           departmentName: department?.name,
@@ -311,7 +320,7 @@ export class TicketsService {
       action: 'TICKET_CREATED',
       entityType: 'TICKET',
       entityId: ticketId,
-      newValues: { id: ticketId, companyId: params.companyId, productId, branchId, departmentId, priority: params.priority },
+      newValues: { id: ticketId, companyId: params.companyId, productId, moduleId: params.moduleId || params.module_id || null, submoduleId: params.submoduleId || params.submodule_id || null, branchId, departmentId, priority: params.priority },
     });
 
     return this.getTicketById(ticketId);
@@ -323,6 +332,8 @@ export class TicketsService {
       include: {
         company: true,
         product: true,
+        module: true,
+        submodule: true,
         branch: true,
         department: true,
         customerContact: true,
@@ -389,6 +400,12 @@ export class TicketsService {
       product_code: t.product?.code || null,
       product_name: t.product?.name || null,
       product: t.product,
+      module_id: t.moduleId,
+      module_name: t.module?.name || null,
+      module: t.module,
+      submodule_id: t.submoduleId,
+      submodule_name: t.submodule?.name || null,
+      submodule: t.submodule,
       branch_id: t.branchId,
       branch_name: t.branch?.branchName || null,
       branch: t.branch,
@@ -550,6 +567,8 @@ export class TicketsService {
         include: {
           company: { select: { companyName: true } },
           product: { select: { code: true, name: true } },
+          module: { select: { name: true } },
+          submodule: { select: { name: true } },
           branch: { select: { branchName: true } },
           department: { select: { name: true, code: true } },
           customerContact: { select: { name: true, phone: true } },
@@ -585,6 +604,10 @@ export class TicketsService {
         product_id: r.productId,
         product_name: r.product?.name || null,
         product_code: r.product?.code || null,
+        module_id: r.moduleId,
+        module_name: r.module?.name || null,
+        submodule_id: r.submoduleId,
+        submodule_name: r.submodule?.name || null,
         branch_id: r.branchId,
         branch_name: r.branch?.branchName || null,
         department_id: r.departmentId,
@@ -693,6 +716,61 @@ export class TicketsService {
       entityType: 'TICKET',
       entityId: ticketId,
       newValues: { assignedEmployeeId: effectiveEmployeeId, status: 'IN_PROGRESS' },
+    });
+  }
+
+  async pauseWork(ticketId: string, actorUserId?: number): Promise<void> {
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    const elapsed = await this.timerService.pauseWorkSession(ticketId);
+
+    await this.prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        actorUserId: actorUserId || 1,
+        actionType: 'PAUSED',
+        title: 'Work Paused',
+        description: `Resolution timer paused. Active session duration: ${elapsed}s. Ticket status changed to PAUSED.`,
+      },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'TICKET_WORK_PAUSED',
+      entityType: 'TICKET',
+      entityId: ticketId,
+      newValues: { status: 'PAUSED', sessionSeconds: elapsed },
+    });
+  }
+
+  async resumeWork(ticketId: string, employeeId?: string, actorUserId?: number): Promise<void> {
+    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+
+    const effectiveEmployeeId = employeeId || ticket.assignedEmployeeId;
+    if (!effectiveEmployeeId) {
+      throw new BadRequestException('Cannot resume: no assigned employee found for this ticket.');
+    }
+
+    await this.timerService.resumeWorkSession(ticketId, effectiveEmployeeId, ticket.assignedLevel);
+
+    await this.prisma.ticketHistory.create({
+      data: {
+        ticketId,
+        actorUserId: actorUserId || 1,
+        actionType: 'RESUMED',
+        title: 'Work Resumed',
+        description: 'Resolution timer resumed. Cumulative time continues from previous sessions.',
+      },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'TICKET_WORK_RESUMED',
+      entityType: 'TICKET',
+      entityId: ticketId,
+      newValues: { status: 'IN_PROGRESS', assignedEmployeeId: effectiveEmployeeId },
     });
   }
 

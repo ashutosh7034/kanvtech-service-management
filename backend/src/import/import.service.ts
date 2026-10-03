@@ -393,7 +393,16 @@ export class ImportService {
       const nextSeq = await this.prisma.getNextSequence('DEPARTMENT_SEQ');
       const id = `DEP-${String(nextSeq).padStart(4, '0')}`;
       await this.prisma.department.create({
-        data: { id, name: row.name, code: row.code, productId: row.productId || null, description: row.description || null, isActive: true },
+        data: { 
+          id, 
+          name: row.name, 
+          code: row.code, 
+          description: row.description || null, 
+          isActive: true,
+          products: row.productId ? {
+            create: [{ productId: row.productId }]
+          } : undefined
+        },
       });
       importedCount++;
     }
@@ -850,7 +859,15 @@ export class ImportService {
       // 6. Attendance
       await tx.employeeAttendance.deleteMany();
 
-      // 7. Non-admin Employees & Users
+      // 7. New Modules (Chat, Tokens, etc.)
+      await tx.chatReadReceipt.deleteMany();
+      await tx.chatMessage.deleteMany();
+      await tx.chatParticipant.deleteMany();
+      await tx.chatConversation.deleteMany();
+      await tx.emailVerificationToken.deleteMany();
+      await tx.customerCredential.deleteMany();
+      
+      // 8. Non-admin Employees & Users
       const nonAdminUsers = await tx.user.findMany({
         where: { role: { not: UserRole.ADMIN } },
         select: { id: true },

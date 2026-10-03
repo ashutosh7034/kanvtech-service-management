@@ -57,7 +57,7 @@ export class EmployeesService {
       orderBy: [{ level: 'asc' }, { name: 'asc' }],
       include: {
         manager: { select: { id: true, name: true } },
-        departmentRel: { select: { id: true, name: true, code: true, productId: true } },
+        departmentRel: { select: { id: true, name: true, code: true } },
         assignedTickets: {
           where: { status: { in: ['OPEN', 'IN_PROGRESS', 'REOPENED', 'CUSTOMER_FEEDBACK', 'MANAGER_REVIEW'] } },
           select: { id: true },
@@ -75,7 +75,9 @@ export class EmployeesService {
       user_id: e.userId,
       name: e.name,
       email: e.email,
+      alternate_emails: e.alternateEmails,
       phone: e.phone,
+      alternate_phones: e.alternatePhones,
       department: e.departmentRel?.name || e.department,
       department_id: e.departmentId || e.departmentRel?.id || null,
       department_code: e.departmentRel?.code || null,
@@ -97,7 +99,7 @@ export class EmployeesService {
       where: { id },
       include: {
         manager: { select: { id: true, name: true } },
-        departmentRel: { select: { id: true, name: true, code: true, productId: true } },
+        departmentRel: { select: { id: true, name: true, code: true } },
         assignedTickets: {
           take: 10,
           orderBy: { updatedAt: 'desc' },
@@ -110,6 +112,11 @@ export class EmployeesService {
             assignedLevel: true,
             totalResolutionSeconds: true,
           },
+        },
+        attendance: {
+          take: 1,
+          orderBy: { createdAt: 'desc' },
+          select: { status: true },
         },
       },
     });
@@ -128,7 +135,9 @@ export class EmployeesService {
       user_id: e.userId,
       name: e.name,
       email: e.email,
+      alternate_emails: e.alternateEmails,
       phone: e.phone,
+      alternate_phones: e.alternatePhones,
       department: e.departmentRel?.name || e.department,
       department_id: e.departmentId || e.departmentRel?.id || null,
       department_code: e.departmentRel?.code || null,
@@ -157,7 +166,9 @@ export class EmployeesService {
     data: {
       name: string;
       email: string;
+      alternate_emails?: string;
       phone: string;
+      alternate_phones?: string;
       department?: string;
       department_id?: string;
       departmentId?: string;
@@ -243,7 +254,9 @@ export class EmployeesService {
         userId: user.id,
         name: data.name.trim(),
         email,
+        alternateEmails: data.alternate_emails?.trim() || null,
         phone: data.phone.trim(),
+        alternatePhones: data.alternate_phones?.trim() || null,
         department: departmentName,
         departmentId,
         designation: data.designation.trim(),
@@ -296,7 +309,9 @@ export class EmployeesService {
       where: { id },
       data: {
         name: data.name !== undefined ? data.name.trim() : undefined,
+        alternateEmails: data.alternate_emails !== undefined ? data.alternate_emails.trim() : undefined,
         phone: data.phone !== undefined ? data.phone.trim() : undefined,
+        alternatePhones: data.alternate_phones !== undefined ? data.alternate_phones.trim() : undefined,
         department: departmentName,
         departmentId,
         designation: data.designation !== undefined ? data.designation.trim() : undefined,

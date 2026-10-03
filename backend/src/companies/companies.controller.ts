@@ -84,8 +84,8 @@ export class CompaniesController {
   @Post(':id/products')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Add a purchased product to customer' })
-  async addProduct(@Param('id') id: string, @Body() body: { productId: string; notes?: string }, @Request() req: any) {
-    const result = await this.companiesService.addCompanyProduct(id, body.productId, body.notes, req.user?.id || req.user?.userId);
+  async addProduct(@Param('id') id: string, @Body() body: { productId: string; notes?: string; purchaseType?: string; modules?: string[] }, @Request() req: any) {
+    const result = await this.companiesService.addCompanyProduct(id, body.productId, body.notes, body.purchaseType, body.modules, req.user?.id || req.user?.userId);
     return { success: true, product: result, message: 'Product added to customer successfully' };
   }
 

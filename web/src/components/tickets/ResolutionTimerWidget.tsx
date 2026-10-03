@@ -7,6 +7,8 @@ interface Props {
   sessions?: any[];
   canControl?: boolean;
   onStart?: () => void;
+  onPause?: () => void;
+  onResume?: () => void;
 }
 
 export const ResolutionTimerWidget: React.FC<Props> = ({
@@ -15,6 +17,8 @@ export const ResolutionTimerWidget: React.FC<Props> = ({
   sessions = [],
   canControl = false,
   onStart,
+  onPause,
+  onResume,
 }) => {
   const [seconds, setSeconds] = useState(initialSeconds);
 
@@ -67,11 +71,23 @@ export const ResolutionTimerWidget: React.FC<Props> = ({
           </div>
         </div>
 
-        {canControl && !isRunning && onStart && (
-          <button className="btn btn-primary btn-sm" onClick={onStart}>
-            <Play size={14} /> Start Work
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {canControl && !isRunning && onStart && !sessions.length && (
+            <button className="btn btn-primary btn-sm" onClick={onStart}>
+              <Play size={14} /> Start Work
+            </button>
+          )}
+          {canControl && !isRunning && onResume && sessions.length > 0 && (
+            <button className="btn btn-success btn-sm" onClick={onResume}>
+              <Play size={14} /> Resume
+            </button>
+          )}
+          {canControl && isRunning && onPause && (
+            <button className="btn btn-warning btn-sm" onClick={onPause}>
+              <Square size={14} /> Pause
+            </button>
+          )}
+        </div>
       </div>
 
       {sessions.length > 0 && (

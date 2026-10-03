@@ -103,6 +103,8 @@ export class TicketsController {
       companyId,
       customerContactId: Number(customerContactId),
       productId: body.productId || body.product_id,
+      moduleId: body.moduleId || body.module_id,
+      submoduleId: body.submoduleId || body.submodule_id,
       branchId: body.branchId || body.branch_id,
       problemType: body.problemType || body.problem_type,
       priority: body.priority,
@@ -143,6 +145,43 @@ export class TicketsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   async startWorkAlias(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     return this.startWork(id, body, req);
+  }
+
+  @Post(':id/pause-work')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @ApiOperation({ summary: 'Pause active timer session — ticket moves to PAUSED state' })
+  async pauseWork(@Param('id') id: string, @Request() req: any) {
+    const ticket = await this.ticketsService.getTicketById(id);
+    if (!ticket) return { success: false, error: 'Ticket not found' };
+    // Only assigned employee, manager, or admin can pause
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'MANAGER') {
+      if (ticket.assigned_employee_id && req.user.employeeId !== ticket.assigned_employee_id) {
+        throw new ForbiddenException('Only the assigned employee can pause this ticket.');
+      }
+    }
+    await this.ticketsService.pauseWork(id, req.user?.id || req.user?.userId || 1);
+    return { success: true, message: 'Timer paused. Ticket is now in PAUSED state.' };
+  }
+
+  @Post(':id/pause')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  async pauseAlias(@Param('id') id: string, @Request() req: any) {
+    return this.pauseWork(id, req);
+  }
+
+  @Post(':id/resume-work')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @ApiOperation({ summary: 'Resume paused timer session — ticket moves back to IN_PROGRESS' })
+  async resumeWork(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const employeeId = req.user?.employeeId || body?.employeeId || body?.employee_id;
+    await this.ticketsService.resumeWork(id, employeeId, req.user?.id || req.user?.userId || 1);
+    return { success: true, message: 'Timer resumed. Ticket is now IN_PROGRESS.' };
+  }
+
+  @Post(':id/resume')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  async resumeAlias(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    return this.resumeWork(id, body, req);
   }
 
   @Post(':id/escalate')

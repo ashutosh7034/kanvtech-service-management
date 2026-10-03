@@ -14,6 +14,16 @@ export class ProductsService {
     return `PROD-${String(nextSeq).padStart(4, '0')}`;
   }
 
+  async generateModuleId(): Promise<string> {
+    const nextSeq = await this.prisma.getNextSequence('PRODUCT_MODULE_SEQ');
+    return `MOD-${String(nextSeq).padStart(4, '0')}`;
+  }
+
+  async generateSubmoduleId(): Promise<string> {
+    const nextSeq = await this.prisma.getNextSequence('PRODUCT_SUBMODULE_SEQ');
+    return `SMOD-${String(nextSeq).padStart(4, '0')}`;
+  }
+
   async getProducts(params: {
     search?: string;
     category?: string;
@@ -54,6 +64,11 @@ export class ProductsService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
+          modules: {
+            include: {
+              submodules: true,
+            }
+          },
           _count: {
             select: {
               subscriptions: true,
@@ -72,6 +87,7 @@ export class ProductsService {
       description: p.description,
       is_active: p.isActive,
       isActive: p.isActive,
+      modules: p.modules,
       subscriptions_count: p._count.subscriptions,
       implementations_count: p._count.implementations,
       created_at: p.createdAt,
@@ -90,6 +106,11 @@ export class ProductsService {
     const p = await this.prisma.product.findUnique({
       where: { id },
       include: {
+        modules: {
+          include: {
+            submodules: true,
+          }
+        },
         subscriptions: {
           include: {
             company: { select: { id: true, companyName: true } },
@@ -121,6 +142,7 @@ export class ProductsService {
       description: p.description,
       is_active: p.isActive,
       isActive: p.isActive,
+      modules: p.modules,
       subscriptions_count: p._count.subscriptions,
       implementations_count: p._count.implementations,
       subscriptions: p.subscriptions,
@@ -285,24 +307,6 @@ export class ProductsService {
     };
   }
 
-  async getStats() {
-    const [total, active, categories] = await Promise.all([
-      this.prisma.product.count(),
-      this.prisma.product.count({ where: { isActive: true } }),
-      this.prisma.product.groupBy({
-        by: ['category'],
-        _count: { _all: true },
-      }),
-    ]);
-
-    return {
-      total,
-      active,
-      inactive: total - active,
-      categories: categories.map((c) => ({ category: c.category, count: c._count._all })),
-    };
-  }
-
   async deleteProduct(id: string, actorUserId: number) {
     const existing = await this.prisma.product.findUnique({
       where: { id },
@@ -339,5 +343,179 @@ export class ProductsService {
     });
 
     return { success: true, message: `Product ${existing.code} deleted successfully` };
+  }
+
+  // --- Module Management ---
+
+  async createModule(productId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundException('Product not found');
+
+    const id = await this.generateModuleId();
+    const module = await this.prisma.productModule.create({
+      data: {
+        id,
+        productId,
+        name: data.name.trim(),
+        description: data.description?.trim(),
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      }
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_MODULE_CREATED',
+      entityType: 'PRODUCT_MODULE',
+      entityId: id,
+      newValues: { id, productId, name: module.name }
+    });
+
+    return module;
+  }
+
+  async updateModule(moduleId: string, data: { name?: string; description?: string; isActive?: boolean }, actorUserId: number) {
+    const existing = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
+    if (!existing) throw new NotFoundException('Module not found');
+
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name.trim();
+    if (data.description !== undefined) updateData.description = data.description.trim();
+    if (data.isActive !== undefined) updateData.isActive = Boolean(data.isActive);
+
+    const updated = await this.prisma.productModule.update({
+      where: { id: moduleId },
+      data: updateData,
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_MODULE_UPDATED',
+      entityType: 'PRODUCT_MODULE',
+      entityId: moduleId,
+      oldValues: existing,
+      newValues: updateData,
+    });
+
+    return updated;
+  }
+
+  // --- Submodule Management ---
+
+  async createSubmodule(moduleId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number) {
+    const mod = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
+    if (!mod) throw new NotFoundException('Module not found');
+
+    const id = await this.generateSubmoduleId();
+    const submodule = await this.prisma.productSubmodule.create({
+      data: {
+        id,
+        moduleId,
+        name: data.name.trim(),
+        description: data.description?.trim(),
+        isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+      }
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_SUBMODULE_CREATED',
+      entityType: 'PRODUCT_SUBMODULE',
+      entityId: id,
+      newValues: { id, moduleId, name: submodule.name }
+    });
+
+    return submodule;
+  }
+
+  async updateSubmodule(submoduleId: string, data: { name?: string; description?: string; isActive?: boolean }, actorUserId: number) {
+    const existing = await this.prisma.productSubmodule.findUnique({ where: { id: submoduleId } });
+    if (!existing) throw new NotFoundException('Submodule not found');
+
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name.trim();
+    if (data.description !== undefined) updateData.description = data.description.trim();
+    if (data.isActive !== undefined) updateData.isActive = Boolean(data.isActive);
+
+    const updated = await this.prisma.productSubmodule.update({
+      where: { id: submoduleId },
+      data: updateData,
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_SUBMODULE_UPDATED',
+      entityType: 'PRODUCT_SUBMODULE',
+      entityId: submoduleId,
+      oldValues: existing,
+      newValues: updateData,
+    });
+
+    return updated;
+  }
+
+  async getModules(productId: string) {
+    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+    if (!product) throw new NotFoundException('Product not found');
+
+    const modules = await this.prisma.productModule.findMany({
+      where: { productId },
+      include: { submodules: true },
+      orderBy: { name: 'asc' },
+    });
+
+    return { modules, product: { id: product.id, code: product.code, name: product.name } };
+  }
+
+  async deleteModule(moduleId: string, actorUserId: number) {
+    const existing = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
+    if (!existing) throw new NotFoundException('Module not found');
+
+    await this.prisma.productSubmodule.deleteMany({ where: { moduleId } });
+    await this.prisma.productModule.delete({ where: { id: moduleId } });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_MODULE_DELETED',
+      entityType: 'PRODUCT_MODULE',
+      entityId: moduleId,
+      oldValues: { id: existing.id, name: existing.name, productId: existing.productId },
+    });
+
+    return { success: true, message: `Module '${existing.name}' deleted successfully` };
+  }
+
+  async deleteSubmodule(submoduleId: string, actorUserId: number) {
+    const existing = await this.prisma.productSubmodule.findUnique({ where: { id: submoduleId } });
+    if (!existing) throw new NotFoundException('Submodule not found');
+
+    await this.prisma.productSubmodule.delete({ where: { id: submoduleId } });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'PRODUCT_SUBMODULE_DELETED',
+      entityType: 'PRODUCT_SUBMODULE',
+      entityId: submoduleId,
+      oldValues: { id: existing.id, name: existing.name, moduleId: existing.moduleId },
+    });
+
+    return { success: true, message: `Submodule '${existing.name}' deleted successfully` };
+  }
+
+  async getStats() {
+    const [total, active, categories] = await Promise.all([
+      this.prisma.product.count(),
+      this.prisma.product.count({ where: { isActive: true } }),
+      this.prisma.product.groupBy({
+        by: ['category'],
+        _count: { _all: true },
+      }),
+    ]);
+
+    return {
+      total,
+      active,
+      inactive: total - active,
+      categories: categories.map((c) => ({ category: c.category, count: c._count._all })),
+    };
   }
 }

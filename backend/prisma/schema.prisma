@@ -56,6 +56,7 @@ enum TicketLevel {
 enum TicketStatus {
   OPEN
   IN_PROGRESS
+  PAUSED
   REOPENED
   RESOLVED
   MANAGER_REVIEW
@@ -134,17 +135,21 @@ model User {
 
   employee          Employee?
   companyContacts   CompanyContact[]
-  createdTickets    Ticket[]                  @relation("TicketCreator")
-  closedTickets     Ticket[]                  @relation("TicketCloser")
-  assignedTicketsBy TicketAssignment[]        @relation("AssignedByUser")
+  createdTickets    Ticket[]              @relation("TicketCreator")
+  closedTickets     Ticket[]              @relation("TicketCloser")
+  assignedTicketsBy TicketAssignment[]    @relation("AssignedByUser")
   ticketHistory     TicketHistory[]
   comments          TicketComment[]
   attachments       TicketAttachment[]
   feedback          TicketFeedback[]
   reopenedTickets   TicketReopenHistory[]
-  completedTasks    ImplementationTask[]      @relation("TaskCompletedBy")
+  completedTasks    ImplementationTask[]  @relation("TaskCompletedBy")
   notifications     Notification[]
   auditLogs         AuditLog[]
+  chatParticipants  ChatParticipant[]
+  sentMessages      ChatMessage[]
+  readReceipts      ChatReadReceipt[]
+  emailVerificationTokens EmailVerificationToken[]
 
   @@index([role], name: "idx_users_role")
   @@index([email], name: "idx_users_email")
@@ -177,6 +182,7 @@ model Company {
   tickets         Ticket[]
   subscriptions   Subscription[]
   implementations Implementation[]
+  credentials     CustomerCredential[]
 
   @@index([companyName], name: "idx_companies_name")
   @@index([isActive], name: "idx_companies_active")
@@ -207,17 +213,19 @@ model CompanyContact {
 
 // 5. Customer Purchased Products
 model CompanyProduct {
-  id          Int      @id @default(autoincrement())
-  companyId   String   @map("company_id") @db.VarChar(50)
-  productId   String   @map("product_id") @db.VarChar(50)
-  purchasedAt DateTime @default(now()) @map("purchased_at")
-  isActive    Boolean  @default(true) @map("is_active")
-  notes       String?  @db.Text
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+  id           Int      @id @default(autoincrement())
+  companyId    String   @map("company_id") @db.VarChar(50)
+  productId    String   @map("product_id") @db.VarChar(50)
+  purchaseType String   @default("COMPLETE") @map("purchase_type") @db.VarChar(50) // COMPLETE, SELECTED_MODULES
+  purchasedAt  DateTime @default(now()) @map("purchased_at")
+  isActive     Boolean  @default(true) @map("is_active")
+  notes        String?  @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @default(now()) @updatedAt @map("updated_at")
 
-  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  company Company                @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  product Product                @relation(fields: [productId], references: [id], onDelete: Restrict)
+  modules CompanyProductModule[]
 
   @@unique([companyId, productId], name: "uq_company_product")
   @@index([companyId], name: "idx_company_products_company")
@@ -225,21 +233,36 @@ model CompanyProduct {
   @@map("company_products")
 }
 
+model CompanyProductModule {
+  id               Int    @id @default(autoincrement())
+  companyProductId Int    @map("company_product_id")
+  moduleId         String @map("module_id") @db.VarChar(50)
+
+  companyProduct CompanyProduct @relation(fields: [companyProductId], references: [id], onDelete: Cascade)
+  module         ProductModule  @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+
+  @@unique([companyProductId, moduleId], name: "uq_company_product_module")
+  @@map("company_product_modules")
+}
+
 // 6. Customer Branches
 model CompanyBranch {
-  id            String   @id @db.VarChar(50) // BR-0001
-  companyId     String   @map("company_id") @db.VarChar(50)
-  branchName    String   @map("branch_name") @db.VarChar(150)
-  address       String   @db.Text
-  city          String   @db.VarChar(100)
-  state         String   @db.VarChar(100)
-  pincode       String?  @db.VarChar(20)
-  contactPerson String   @map("contact_person") @db.VarChar(150)
-  contactPhone  String   @map("contact_phone") @db.VarChar(50)
-  contactEmail  String?  @map("contact_email") @db.VarChar(191)
-  status        String   @default("ACTIVE") @db.VarChar(50)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at")
+  id                String   @id @db.VarChar(50) // BR-0001
+  companyId         String   @map("company_id") @db.VarChar(50)
+  branchName        String   @map("branch_name") @db.VarChar(150)
+  address           String   @db.Text
+  city              String   @db.VarChar(100)
+  state             String   @db.VarChar(100)
+  pincode           String?  @db.VarChar(20)
+  contactPerson     String   @map("contact_person") @db.VarChar(150)
+  contactPhone      String   @map("contact_phone") @db.VarChar(50)
+  contactEmail      String?  @map("contact_email") @db.VarChar(191)
+  alternatePhones   String?  @map("alternate_phones") @db.Text
+  alternateEmails   String?  @map("alternate_emails") @db.Text
+  alternateContacts String?  @map("alternate_contacts") @db.Text
+  status            String   @default("ACTIVE") @db.VarChar(50)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @default(now()) @updatedAt @map("updated_at")
 
   company        Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
   branchProducts BranchProduct[]
@@ -250,7 +273,7 @@ model CompanyBranch {
   @@map("company_branches")
 }
 
-// 7. Branch-Level Products (Branch Products must be a subset of Customer Products)
+// 7. Branch-Level Products
 model BranchProduct {
   id         Int      @id @default(autoincrement())
   branchId   String   @map("branch_id") @db.VarChar(50)
@@ -260,8 +283,9 @@ model BranchProduct {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @default(now()) @updatedAt @map("updated_at")
 
-  branch  CompanyBranch @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  product Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  branch  CompanyBranch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  product Product               @relation(fields: [productId], references: [id], onDelete: Restrict)
+  modules BranchProductModule[]
 
   @@unique([branchId, productId], name: "uq_branch_product")
   @@index([branchId], name: "idx_branch_products_branch")
@@ -269,44 +293,69 @@ model BranchProduct {
   @@map("branch_products")
 }
 
-// 8. Department Master (Product-specialized operational support teams)
+model BranchProductModule {
+  id              Int    @id @default(autoincrement())
+  branchProductId Int    @map("branch_product_id")
+  moduleId        String @map("module_id") @db.VarChar(50)
+
+  branchProduct BranchProduct @relation(fields: [branchProductId], references: [id], onDelete: Cascade)
+  module        ProductModule @relation(fields: [moduleId], references: [id], onDelete: Restrict)
+
+  @@unique([branchProductId, moduleId], name: "uq_branch_product_module")
+  @@map("branch_product_modules")
+}
+
+// 8. Department Master
 model Department {
   id          String   @id @db.VarChar(50) // DEP-0001
   name        String   @unique @db.VarChar(100)
   code        String   @unique @db.VarChar(50)
   description String?  @db.Text
-  productId   String?  @unique @map("product_id") @db.VarChar(50)
   managerId   String?  @map("manager_id") @db.VarChar(50)
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
-  product   Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
-  manager   Employee?  @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
-  employees Employee[] @relation("EmployeeDepartment")
+  manager   Employee?           @relation("DepartmentManager", fields: [managerId], references: [id], onDelete: SetNull)
+  employees Employee[]          @relation("EmployeeDepartment")
   tickets   Ticket[]
+  products  DepartmentProduct[]
 
   @@index([code], name: "idx_departments_code")
   @@index([isActive], name: "idx_departments_active")
   @@map("departments")
 }
 
-// 9. Employees Master (1 Employee = Exactly 1 Department)
+model DepartmentProduct {
+  id           Int    @id @default(autoincrement())
+  departmentId String @map("department_id") @db.VarChar(50)
+  productId    String @map("product_id") @db.VarChar(50)
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([departmentId, productId], name: "uq_department_product")
+  @@map("department_products")
+}
+
+// 9. Employees Master
 model Employee {
-  id           String               @id @db.VarChar(50) // EMP-001
-  userId       Int                  @unique @map("user_id")
-  name         String               @db.VarChar(150)
-  email        String               @unique @db.VarChar(191)
-  phone        String               @db.VarChar(50)
-  department   String               @db.VarChar(100)
-  departmentId String?              @map("department_id") @db.VarChar(50)
-  designation  String               @db.VarChar(100)
-  level        EmployeeLevel
-  managerId    String?              @map("manager_id") @db.VarChar(50)
-  availability EmployeeAvailability @default(AVAILABLE)
-  status       EmployeeStatus       @default(ACTIVE)
-  createdAt    DateTime             @default(now()) @map("created_at")
-  updatedAt    DateTime             @default(now()) @updatedAt @map("updated_at")
+  id              String               @id @db.VarChar(50) // EMP-001
+  userId          Int                  @unique @map("user_id")
+  name            String               @db.VarChar(150)
+  email           String               @unique @db.VarChar(191)
+  alternateEmails String?              @map("alternate_emails") @db.Text
+  phone           String               @db.VarChar(50)
+  alternatePhones String?              @map("alternate_phones") @db.Text
+  department      String               @db.VarChar(100)
+  departmentId    String?              @map("department_id") @db.VarChar(50)
+  designation     String               @db.VarChar(100)
+  level           EmployeeLevel
+  managerId       String?              @map("manager_id") @db.VarChar(50)
+  availability    EmployeeAvailability @default(AVAILABLE)
+  status          EmployeeStatus       @default(ACTIVE)
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @default(now()) @updatedAt @map("updated_at")
 
   user                 User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
   manager              Employee?                 @relation("EmployeeManager", fields: [managerId], references: [id], onDelete: SetNull)
@@ -321,12 +370,24 @@ model Employee {
   resolutionSessions   TicketResolutionSession[]
   ownedSubscriptions   Subscription[]
   ownedImplementations Implementation[]
+  createdTasks         EmployeeTask[]            @relation("TaskCreatedBy")
+  assignedTasks        EmployeeTask[]            @relation("TaskAssignedTo")
 
   @@index([level], name: "idx_employees_level")
   @@index([status], name: "idx_employees_status")
   @@index([availability], name: "idx_employees_avail")
   @@index([departmentId], name: "idx_employees_department_id")
   @@map("employees")
+}
+
+// Configurable Support Levels
+model SupportLevel {
+  id         Int     @id @default(autoincrement())
+  name       String  @unique @db.VarChar(50) // e.g. "L1", "L2", "Manager"
+  orderIndex Int     @map("order_index")
+  isActive   Boolean @default(true) @map("is_active")
+
+  @@map("support_levels")
 }
 
 // 10. Employee Attendance
@@ -353,6 +414,8 @@ model Ticket {
   companyId              String         @map("company_id") @db.VarChar(50)
   customerContactId      Int            @map("customer_contact_id")
   productId              String?        @map("product_id") @db.VarChar(50)
+  moduleId               String?        @map("module_id") @db.VarChar(50)
+  submoduleId            String?        @map("submodule_id") @db.VarChar(50)
   branchId               String?        @map("branch_id") @db.VarChar(50)
   departmentId           String?        @map("department_id") @db.VarChar(50)
   problemType            String         @map("problem_type") @db.VarChar(150)
@@ -378,6 +441,8 @@ model Ticket {
   company            Company                   @relation(fields: [companyId], references: [id], onDelete: Restrict)
   customerContact    CompanyContact            @relation(fields: [customerContactId], references: [id], onDelete: Restrict)
   product            Product?                  @relation(fields: [productId], references: [id], onDelete: SetNull)
+  module             ProductModule?            @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  submodule          ProductSubmodule?         @relation(fields: [submoduleId], references: [id], onDelete: SetNull)
   branch             CompanyBranch?            @relation(fields: [branchId], references: [id], onDelete: SetNull)
   department         Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   creator            User                      @relation("TicketCreator", fields: [createdBy], references: [id], onDelete: Restrict)
@@ -623,17 +688,47 @@ model Product {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
 
-  department      Department?
   companyProducts CompanyProduct[]
   branchProducts  BranchProduct[]
   subscriptions   Subscription[]
   implementations Implementation[]
   tickets         Ticket[]
+  departments     DepartmentProduct[]
+  modules         ProductModule[]
 
   @@index([code], name: "idx_products_code")
   @@index([category], name: "idx_products_category")
   @@index([isActive], name: "idx_products_active")
   @@map("products")
+}
+
+model ProductModule {
+  id          String  @id @db.VarChar(50) // MOD-0001
+  productId   String  @map("product_id") @db.VarChar(50)
+  name        String  @db.VarChar(150)
+  description String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+
+  product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
+  submodules      ProductSubmodule[]
+  companyProducts CompanyProductModule[]
+  branchProducts  BranchProductModule[]
+  tickets         Ticket[]
+
+  @@map("product_modules")
+}
+
+model ProductSubmodule {
+  id          String  @id @db.VarChar(50) // SMOD-0001
+  moduleId    String  @map("module_id") @db.VarChar(50)
+  name        String  @db.VarChar(150)
+  description String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+
+  module  ProductModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  tickets Ticket[]
+
+  @@map("product_submodules")
 }
 
 // 26. Annual Maintenance / Subscriptions
@@ -719,17 +814,18 @@ model TicketReopenHistory {
 
 // 29. Implementation Tasks (Checklist & Dynamic Progress)
 model ImplementationTask {
-  id               String      @id @db.VarChar(50) // TSK-0001
-  implementationId String      @map("implementation_id") @db.VarChar(50)
-  taskName         String      @map("task_name") @db.VarChar(255)
-  description      String?     @db.Text
-  priority         String?     @default("MEDIUM") @db.VarChar(50)
-  status           TaskStatus  @default(PENDING)
-  orderIndex       Int         @default(0) @map("order_index")
-  completedBy      Int?        @map("completed_by")
-  completedAt      DateTime?   @map("completed_at")
-  createdAt        DateTime    @default(now()) @map("created_at")
-  updatedAt        DateTime    @default(now()) @updatedAt @map("updated_at")
+  id               String     @id @db.VarChar(50) // TSK-0001
+  implementationId String     @map("implementation_id") @db.VarChar(50)
+  moduleId         String?    @map("module_id") @db.VarChar(50)
+  taskName         String     @map("task_name") @db.VarChar(255)
+  description      String?    @db.Text
+  priority         String?    @default("MEDIUM") @db.VarChar(50)
+  status           TaskStatus @default(PENDING)
+  orderIndex       Int        @default(0) @map("order_index")
+  completedBy      Int?       @map("completed_by")
+  completedAt      DateTime?  @map("completed_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
+  updatedAt        DateTime   @default(now()) @updatedAt @map("updated_at")
 
   implementation  Implementation @relation(fields: [implementationId], references: [id], onDelete: Cascade)
   completedByUser User?          @relation("TaskCompletedBy", fields: [completedBy], references: [id], onDelete: SetNull)
@@ -737,4 +833,136 @@ model ImplementationTask {
   @@index([implementationId], name: "idx_impl_tasks_impl")
   @@index([status], name: "idx_impl_tasks_status")
   @@map("implementation_tasks")
+}
+
+// 30. Prospects
+model Prospect {
+  id                   String    @id @db.VarChar(50) // PROS-0001
+  companyName          String    @map("company_name") @db.VarChar(255)
+  contactPerson        String    @map("contact_person") @db.VarChar(150)
+  phone                String    @db.VarChar(50)
+  email                String    @db.VarChar(191)
+  address              String?   @db.Text
+  enquiry              String?   @db.Text
+  source               String?   @db.VarChar(100)
+  status               String    @default("ENQUIRY") @db.VarChar(50) // ENQUIRY, QUALIFIED, CONVERTED, REJECTED
+  convertedToCompanyId String?   @map("converted_to_company_id") @db.VarChar(50)
+  convertedAt          DateTime? @map("converted_at")
+  convertedByUserId    Int?      @map("converted_by_user_id")
+  assignedEmployeeId   String?   @map("assigned_employee_id") @db.VarChar(50)
+  notes                String?   @db.Text
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  @@index([status], name: "idx_prospects_status")
+  @@index([email], name: "idx_prospects_email")
+  @@map("prospects")
+}
+
+// 31. Employee Task Reminders
+model EmployeeTask {
+  id           String    @id @db.VarChar(50) // ETSK-0001
+  title        String    @db.VarChar(255)
+  description  String?   @db.Text
+  dueDate      DateTime? @map("due_date")
+  dueTime      String?   @map("due_time") @db.VarChar(20)
+  priority     String    @default("MEDIUM") @db.VarChar(50)
+  reminderTime DateTime? @map("reminder_time")
+  status       String    @default("PENDING") @db.VarChar(50)
+  createdBy    String    @map("created_by") @db.VarChar(50)
+  assignedTo   String    @map("assigned_to") @db.VarChar(50)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  completedAt  DateTime? @map("completed_at")
+
+  creator  Employee @relation("TaskCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
+  assignee Employee @relation("TaskAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
+
+  @@index([assignedTo], name: "idx_emp_tasks_assignee")
+  @@map("employee_tasks")
+}
+
+// 32. Internal Chat
+model ChatConversation {
+  id           Int               @id @default(autoincrement())
+  title        String?           @db.VarChar(255)
+  isGroup      Boolean           @default(false) @map("is_group")
+  createdAt    DateTime          @default(now()) @map("created_at")
+  participants ChatParticipant[]
+  messages     ChatMessage[]
+
+  @@map("chat_conversations")
+}
+
+model ChatParticipant {
+  id             Int              @id @default(autoincrement())
+  conversationId Int              @map("conversation_id")
+  userId         Int              @map("user_id")
+  joinedAt       DateTime         @default(now()) @map("joined_at")
+  conversation   ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId], name: "idx_chat_part_conv")
+  @@index([userId], name: "idx_chat_part_user")
+  @@map("chat_participants")
+}
+
+model ChatMessage {
+  id             Int               @id @default(autoincrement())
+  conversationId Int               @map("conversation_id")
+  senderId       Int               @map("sender_id")
+  message        String            @db.Text
+  createdAt      DateTime          @default(now()) @map("created_at")
+  conversation   ChatConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User              @relation(fields: [senderId], references: [id], onDelete: Restrict)
+  readReceipts   ChatReadReceipt[]
+
+  @@index([conversationId], name: "idx_chat_msg_conv")
+  @@map("chat_messages")
+}
+
+model ChatReadReceipt {
+  id        Int         @id @default(autoincrement())
+  messageId Int         @map("message_id")
+  userId    Int         @map("user_id")
+  readAt    DateTime    @default(now()) @map("read_at")
+  message   ChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([messageId], name: "idx_chat_read_msg")
+  @@map("chat_read_receipts")
+}
+
+// 33. Customer Credentials
+model CustomerCredential {
+  id                Int      @id @default(autoincrement())
+  companyId         String   @map("company_id") @db.VarChar(50)
+  productId         String?  @map("product_id") @db.VarChar(50)
+  url               String?  @db.VarChar(255)
+  username          String   @db.VarChar(150)
+  passwordEncrypted String   @map("password_encrypted") @db.Text
+  notes             String?  @db.Text
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId], name: "idx_cust_cred_company")
+  @@map("customer_credentials")
+}
+
+// 34. Email Verification Tokens
+model EmailVerificationToken {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  email       String   @db.VarChar(191)
+  tokenHash   String   @map("token_hash") @db.VarChar(255)
+  expiresAt   DateTime @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], name: "idx_email_verify_user")
+  @@index([tokenHash], name: "idx_email_verify_token")
+  @@map("email_verification_tokens")
 }

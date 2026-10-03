@@ -80,16 +80,26 @@ async function runSuite() {
   let testTaskId2 = '';
 
   // Ensure Products in DB
-  const tallyProd = await prisma.product.findFirst({ where: { code: 'TALLY' } });
-  const spineProd = await prisma.product.findFirst({ where: { code: 'SPINE' } });
-  const biosProd = await prisma.product.findFirst({ where: { code: 'BIOS360' } });
+  let tallyProd: any = await prisma.product.findFirst({ where: { code: 'TALLY' } });
+  if (!tallyProd) tallyProd = await productsService.createProduct({ code: 'TALLY', name: 'Tally Prime', category: 'Accounting' } as any, 1);
+
+  let spineProd: any = await prisma.product.findFirst({ where: { code: 'SPINE' } });
+  if (!spineProd) spineProd = await productsService.createProduct({ code: 'SPINE', name: 'Spine HRMS', category: 'HRMS' } as any, 1);
+
+  let biosProd: any = await prisma.product.findFirst({ where: { code: 'BIOS360' } });
+  if (!biosProd) biosProd = await productsService.createProduct({ code: 'BIOS360', name: 'BIOS 360', category: 'Security' } as any, 1);
+
   assert(tallyProd && spineProd && biosProd, 'Baseline products must exist');
 
   // Ensure Departments in DB
-  const tallyDept = await prisma.department.findFirst({ where: { productId: tallyProd.id } });
-  const spineDept = await prisma.department.findFirst({ where: { productId: spineProd.id } });
-  testDeptTallyId = tallyDept?.id || 'DEP-0001';
-  testDeptSpineId = spineDept?.id || 'DEP-0002';
+  let tallyDept = await prisma.department.findFirst({ where: { products: { some: { productId: tallyProd.id } } } });
+  if (!tallyDept) tallyDept = await departmentsService.createDepartment({ code: 'DEP-TALLY', name: 'Tally Support', productIds: [tallyProd.id] } as any, 1);
+
+  let spineDept = await prisma.department.findFirst({ where: { products: { some: { productId: spineProd.id } } } });
+  if (!spineDept) spineDept = await departmentsService.createDepartment({ code: 'DEP-SPINE', name: 'Spine Support', productIds: [spineProd.id] } as any, 1);
+
+  testDeptTallyId = tallyDept.id;
+  testDeptSpineId = spineDept.id;
 
   // --- CUSTOMERS ---
   await test('1. Customer with one product (Tally)', async () => {
@@ -206,7 +216,7 @@ async function runSuite() {
     const createdDept = await departmentsService.createDepartment({
       name: `Dedicated Test Dept ${timestamp}`,
       code: `DEP-TEST-${timestamp}`,
-      productId: testProd.id,
+      productIds: [testProd.id],
       description: 'Specialized diagnostics team',
     });
     assert(createdDept.id.startsWith('DEP-'));
@@ -215,9 +225,9 @@ async function runSuite() {
   await test('11. Product -> department mapping', async () => {
     const dept = await prisma.department.findUnique({
       where: { id: testDeptTallyId },
-      include: { product: true },
+      include: { products: true },
     });
-    assert.strictEqual(dept?.productId, tallyProd.id);
+    assert.strictEqual(dept?.products[0].productId, tallyProd.id);
   });
 
   await test('12. One employee -> one department (Enforced at backend)', async () => {

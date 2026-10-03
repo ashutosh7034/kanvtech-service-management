@@ -552,6 +552,23 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                           <div style={{ fontWeight: 600, fontSize: 13, color: '#0b3b60' }}>{p.product_name || p.product?.name}</div>
                           <div style={{ fontSize: 11, color: '#64748b' }}>Code: {p.product_code || p.product?.code}</div>
                           {p.category && <div style={{ fontSize: 11, color: '#2563eb' }}>{p.category}</div>}
+                          {p.modules && p.modules.length > 0 && (
+                            <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: '2px solid #e2e8f0' }}>
+                              <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>PURCHASED MODULES</div>
+                              {p.modules.map((m: any) => (
+                                <div key={m.id} style={{ fontSize: 11, color: '#334155', marginBottom: 2 }}>
+                                  • {m.name}
+                                  {m.submodules && m.submodules.length > 0 && (
+                                    <div style={{ paddingLeft: 12, color: '#64748b', fontSize: 10 }}>
+                                      {m.submodules.map((sm: any) => (
+                                        <div key={sm.id}>- {sm.name}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <button
                           className="btn btn-secondary btn-sm"

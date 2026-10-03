@@ -111,4 +111,14 @@ export class NotificationsService {
       data: { isRead: true },
     });
   }
+
+  async createInAppNotification(userId: number, title: string, message: string, type: string, linkUrl?: string): Promise<void> {
+    try {
+      await this.prisma.notification.create({
+        data: { userId, title, message, type, isRead: false, linkUrl: linkUrl || null },
+      });
+    } catch (err: any) {
+      this.logger.error(`[NotificationService] Failed creating in-app notification for user ${userId}: ${err.message}`);
+    }
+  }
 }

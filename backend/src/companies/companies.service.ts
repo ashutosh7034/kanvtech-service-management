@@ -132,6 +132,15 @@ export class CompaniesService {
         products: {
           include: {
             product: true,
+            modules: {
+              include: {
+                module: {
+                  include: {
+                    submodules: true,
+                  }
+                }
+              }
+            }
           },
         },
         branches: {
@@ -209,8 +218,10 @@ export class CompaniesService {
         category: cp.product.category,
         description: cp.product.description,
         is_active: cp.isActive ? 1 : 0,
+        purchase_type: cp.purchaseType,
         purchased_at: cp.purchasedAt,
         notes: cp.notes,
+        modules: cp.modules.map(m => m.module),
       })),
       branches: c.branches.map((b) => ({
         id: b.id,
@@ -287,13 +298,20 @@ export class CompaniesService {
     // MANDATORY CUSTOMER PRODUCT VALIDATION:
     // A customer cannot become an active KANVTECH customer without purchasing at least ONE KANVTECH product.
     // If zero products selected: BLOCK REGISTRATION with exact required message.
-    let productIds: string[] = [];
+    let productIds: any[] = [];
     if (Array.isArray(data.product_ids || data.productIds)) {
       productIds = (data.product_ids || data.productIds).filter(Boolean);
     } else if (Array.isArray(data.products)) {
       productIds = data.products
-        .map((p: any) => (typeof p === 'string' ? p : p.id || p.product_id || p.productId))
-        .filter(Boolean);
+        .map((p: any) => {
+          if (typeof p === 'string') return { productId: p, purchaseType: 'COMPLETE' };
+          return {
+            productId: p.id || p.product_id || p.productId,
+            purchaseType: p.purchaseType || p.purchase_type || 'COMPLETE',
+            modules: p.modules || p.moduleIds || []
+          };
+        })
+        .filter((p: any) => Boolean(p.productId));
     }
 
     // Check if we have existing default products in DB for backward compatibility if not provided in raw test payload
@@ -306,7 +324,7 @@ export class CompaniesService {
       // If legacy call without product array: check if default product exists to auto-attach, else enforce validation
       const defaultProd = await this.prisma.product.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } });
       if (defaultProd) {
-        productIds = [defaultProd.id];
+        productIds = [{ productId: defaultProd.id, purchaseType: 'COMPLETE' }];
       } else {
         throw new BadRequestException('At least one product must be selected before registering a customer.');
       }
@@ -414,11 +432,20 @@ export class CompaniesService {
           ],
         },
         products: {
-          create: productIds.map((pid) => ({
-            productId: pid,
-            isActive: true,
-            notes: 'Purchased on customer registration',
-          })),
+          create: productIds.map((pidObj) => {
+            let pid = typeof pidObj === 'string' ? pidObj : pidObj.productId;
+            let purchaseType = typeof pidObj === 'object' && pidObj.purchaseType ? pidObj.purchaseType : 'COMPLETE';
+            let modules = typeof pidObj === 'object' && pidObj.modules ? pidObj.modules : [];
+            return {
+              productId: pid,
+              purchaseType: purchaseType,
+              isActive: true,
+              notes: 'Purchased on customer registration',
+              modules: {
+                create: modules.map((mId: string) => ({ moduleId: mId }))
+              }
+            };
+          }),
         },
       },
     });
@@ -435,7 +462,7 @@ export class CompaniesService {
       action: 'COMPANY_CREATED',
       entityType: 'COMPANY',
       entityId: companyId,
-      newValues: { id: companyId, companyName, primaryEmail, contactPerson, productIds },
+      newValues: { id: companyId, companyName, primaryEmail, contactPerson, productIds: productIds.map(p => typeof p === 'string' ? p : p.productId) },
     });
 
     return companyId;
@@ -504,7 +531,7 @@ export class CompaniesService {
 
   // --- Customer Product Management ---
 
-  async addCompanyProduct(companyId: string, productId: string, notes?: string, actorUserId?: number) {
+  async addCompanyProduct(companyId: string, productId: string, notes?: string, purchaseType?: string, modules?: string[], actorUserId?: number) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Company not found');
 
@@ -519,8 +546,20 @@ export class CompaniesService {
       if (!existing.isActive) {
         const updated = await this.prisma.companyProduct.update({
           where: { id: existing.id },
-          data: { isActive: true, notes: notes || existing.notes },
+          data: { 
+            isActive: true, 
+            notes: notes || existing.notes,
+            purchaseType: purchaseType || existing.purchaseType,
+          },
         });
+        
+        if (modules && modules.length > 0) {
+           await this.prisma.companyProductModule.deleteMany({ where: { companyProductId: existing.id } });
+           await this.prisma.companyProductModule.createMany({
+             data: modules.map(mId => ({ companyProductId: existing.id, moduleId: mId }))
+           });
+        }
+        
         return updated;
       }
       return existing;
@@ -530,8 +569,12 @@ export class CompaniesService {
       data: {
         companyId,
         productId,
+        purchaseType: purchaseType || 'COMPLETE',
         isActive: true,
         notes: notes || 'Additional product purchased',
+        modules: modules && modules.length > 0 ? {
+          create: modules.map(mId => ({ moduleId: mId }))
+        } : undefined
       },
     });
 

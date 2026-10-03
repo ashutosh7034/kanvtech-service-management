@@ -87,6 +87,7 @@ export async function seedDatabase() {
     { name: 'SUBSCRIPTION_SEQ', currentValue: 0 },
     { name: 'IMPLEMENTATION_SEQ', currentValue: 0 },
     { name: 'TASK_SEQ', currentValue: 0 },
+    { name: 'PROSPECT_SEQ', currentValue: 0 },
   ];
 
   for (const tr of trackers) {

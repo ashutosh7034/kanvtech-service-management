@@ -30,7 +30,7 @@ export class DepartmentsService {
       where,
       orderBy: { createdAt: 'asc' },
       include: {
-        product: { select: { id: true, code: true, name: true, category: true } },
+        products: { include: { product: { select: { id: true, code: true, name: true, category: true } } } },
         manager: { select: { id: true, name: true, email: true, phone: true } },
         employees: {
           select: {
@@ -61,9 +61,7 @@ export class DepartmentsService {
         name: d.name,
         code: d.code,
         description: d.description,
-        product_id: d.productId,
-        product_code: d.product?.code || null,
-        product_name: d.product?.name || null,
+        products: d.products.map(dp => dp.product),
         manager_id: d.managerId,
         manager_name: d.manager?.name || null,
         manager_email: d.manager?.email || null,
@@ -85,7 +83,7 @@ export class DepartmentsService {
     const d = await this.prisma.department.findUnique({
       where: { id },
       include: {
-        product: true,
+        products: { include: { product: true } },
         manager: true,
         employees: {
           orderBy: [{ level: 'asc' }, { name: 'asc' }],
@@ -115,8 +113,7 @@ export class DepartmentsService {
       name: d.name,
       code: d.code,
       description: d.description,
-      product_id: d.productId,
-      product: d.product,
+      products: d.products.map(dp => dp.product),
       manager_id: d.managerId,
       manager: d.manager,
       is_active: d.isActive ? 1 : 0,
@@ -152,7 +149,7 @@ export class DepartmentsService {
       name: string;
       code: string;
       description?: string;
-      productId?: string;
+      productIds?: string[];
       managerId?: string;
       isActive?: boolean;
     },
@@ -182,15 +179,10 @@ export class DepartmentsService {
       throw new BadRequestException(`Department code '${code}' already exists.`);
     }
 
-    if (data.productId) {
-      const prod = await this.prisma.product.findUnique({ where: { id: data.productId } });
-      if (!prod) throw new BadRequestException(`Product '${data.productId}' not found.`);
-
-      const existingProdDept = await this.prisma.department.findFirst({
-        where: { productId: data.productId },
-      });
-      if (existingProdDept) {
-        throw new BadRequestException(`Product '${prod.name}' is already assigned to department '${existingProdDept.name}'.`);
+    if (data.productIds && data.productIds.length > 0) {
+      for (const pid of data.productIds) {
+        const prod = await this.prisma.product.findUnique({ where: { id: pid } });
+        if (!prod) throw new BadRequestException(`Product '${pid}' not found.`);
       }
     }
 
@@ -219,9 +211,11 @@ export class DepartmentsService {
         name,
         code,
         description: data.description?.trim() || null,
-        productId: data.productId || null,
         managerId: data.managerId || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+        products: {
+          create: (data.productIds || []).map(pid => ({ productId: pid }))
+        }
       },
     });
 
@@ -230,7 +224,7 @@ export class DepartmentsService {
       action: 'DEPARTMENT_CREATED',
       entityType: 'DEPARTMENT',
       entityId: departmentId,
-      newValues: { id: departmentId, name, code, productId: data.productId, managerId: data.managerId },
+      newValues: { id: departmentId, name, code, productIds: data.productIds, managerId: data.managerId },
     });
 
     return department;
@@ -243,29 +237,28 @@ export class DepartmentsService {
     const name = data.name !== undefined ? data.name.trim() : undefined;
     const code = data.code !== undefined ? data.code.trim().toUpperCase() : undefined;
     const description = data.description !== undefined ? data.description.trim() : undefined;
-    const productId = data.productId !== undefined ? (data.productId || null) : undefined;
+    const productIds = data.productIds !== undefined ? data.productIds : undefined;
     const managerId = data.managerId !== undefined ? (data.managerId || null) : undefined;
     const isActive = data.isActive !== undefined ? Boolean(data.isActive) : undefined;
 
-    if (productId) {
-      const existingProdDept = await this.prisma.department.findFirst({
-        where: { productId, id: { not: id } },
-      });
-      if (existingProdDept) {
-        throw new BadRequestException(`Product is already assigned to department '${existingProdDept.name}'.`);
-      }
+    let updateData: any = {
+      name,
+      code,
+      description,
+      managerId,
+      isActive,
+    };
+
+    if (productIds !== undefined) {
+      updateData.products = {
+        deleteMany: {},
+        create: productIds.map((pid: string) => ({ productId: pid }))
+      };
     }
 
     const updated = await this.prisma.department.update({
       where: { id },
-      data: {
-        name,
-        code,
-        description,
-        productId,
-        managerId,
-        isActive,
-      },
+      data: updateData,
     });
 
     await this.auditService.log({

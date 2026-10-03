@@ -36,6 +36,10 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
 
   const [selectedBranchId, setSelectedBranchId] = useState<string>('');
   const [selectedProductId, setSelectedProductId] = useState<string>('');
+  const [selectedModuleId, setSelectedModuleId] = useState<string>('');
+  const [selectedSubmoduleId, setSelectedSubmoduleId] = useState<string>('');
+  const [productModules, setProductModules] = useState<any[]>([]);
+  const [moduleSubmodules, setModuleSubmodules] = useState<any[]>([]);
   const [derivedDepartmentName, setDerivedDepartmentName] = useState<string>('Auto-derived from product');
 
   const [formProblem, setFormProblem] = useState('');
@@ -141,7 +145,35 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
 
   const handleProductChange = (productId: string) => {
     setSelectedProductId(productId);
+    setSelectedModuleId('');
+    setSelectedSubmoduleId('');
+    setProductModules([]);
+    setModuleSubmodules([]);
     updateDerivedDepartment(productId);
+    if (productId) {
+      loadProductModules(productId);
+    }
+  };
+
+  const loadProductModules = async (productId: string) => {
+    try {
+      const res = await api.getProductModules(productId);
+      setProductModules(res.modules || []);
+    } catch (err) {
+      console.error('Failed to load modules', err);
+    }
+  };
+
+  const handleModuleChange = (moduleId: string) => {
+    setSelectedModuleId(moduleId);
+    setSelectedSubmoduleId('');
+    setModuleSubmodules([]);
+    if (moduleId) {
+      const mod = productModules.find((m: any) => m.id === moduleId);
+      if (mod && mod.submodules && mod.submodules.length > 0) {
+        setModuleSubmodules(mod.submodules);
+      }
+    }
   };
 
   const updateDerivedDepartment = (productId: string) => {
@@ -192,6 +224,8 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
         customerContactId: selectedContactId,
         branchId: selectedBranchId || undefined,
         productId: selectedProductId,
+        moduleId: selectedModuleId || undefined,
+        submoduleId: selectedSubmoduleId || undefined,
         problemType: formProblem,
         priority: formPriority,
         category: formCategory,
@@ -509,6 +543,45 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                     <strong>Automated Routing:</strong> {derivedDepartmentName} → Lowest Workload L1 Specialist
                   </span>
                 </div>
+
+                {/* Module / Submodule Selection (Cascading) */}
+                {productModules.length > 0 && (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className="form-group">
+                      <label className="form-label">Product Module (Optional)</label>
+                      <select
+                        className="form-control"
+                        value={selectedModuleId}
+                        onChange={(e) => handleModuleChange(e.target.value)}
+                      >
+                        <option value="">All Modules</option>
+                        {productModules.map((m: any) => (
+                          <option key={m.id} value={m.id}>
+                            {m.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {moduleSubmodules.length > 0 && (
+                      <div className="form-group">
+                        <label className="form-label">Submodule (Optional)</label>
+                        <select
+                          className="form-control"
+                          value={selectedSubmoduleId}
+                          onChange={(e) => setSelectedSubmoduleId(e.target.value)}
+                        >
+                          <option value="">All Submodules</option>
+                          {moduleSubmodules.map((sm: any) => (
+                            <option key={sm.id} value={sm.id}>
+                              {sm.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">Problem Title / Issue Summary <span className="required">*</span></label>

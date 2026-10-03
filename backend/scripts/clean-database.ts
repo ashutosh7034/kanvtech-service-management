@@ -70,7 +70,7 @@ export async function cleanAndInitializeDatabase() {
     const attendance = await tx.employeeAttendance.deleteMany({});
 
     // 10. Clear circular/foreign key relationships in departments and employees
-    await tx.department.updateMany({ data: { managerId: null, productId: null } });
+    await tx.department.updateMany({ data: { managerId: null } });
     await tx.employee.updateMany({ data: { managerId: null, departmentId: null } });
 
     // 11. Delete employees
@@ -272,7 +272,7 @@ export async function cleanAndInitializeDatabase() {
   });
 
   const orphanedDepartments = await prisma.department.findMany({
-    where: { productId: { not: null } },
+    where: { products: { some: {} } },
   });
 
   console.log(` - Orphaned Non-Admin Users: ${orphanedUsers.length}`);

@@ -125,6 +125,8 @@ export const api = {
   createTicket: (data: any) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
   assignTicket: (id: string, data: any) => request(`/tickets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
   startWork: (id: string) => request(`/tickets/${id}/start`, { method: 'POST' }),
+  pauseWork: (id: string) => request(`/tickets/${id}/pause`, { method: 'POST' }),
+  resumeWork: (id: string) => request(`/tickets/${id}/resume`, { method: 'POST' }),
   escalateTicket: (id: string, data: any) => request(`/tickets/${id}/escalate`, { method: 'POST', body: JSON.stringify(data) }),
   resolveTicket: (id: string, data: any) => request(`/tickets/${id}/resolve`, { method: 'POST', body: JSON.stringify(data) }),
   approveTicket: (id: string, data: any = {}) => request(`/tickets/${id}/approve`, { method: 'POST', body: JSON.stringify(data) }),
@@ -158,10 +160,44 @@ export const api = {
   getProduct: (id: string) => request(`/products/${id}`),
   createProduct: (data: any) => request('/products', { method: 'POST', body: JSON.stringify(data) }),
   updateProduct: (id: string, data: any) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // Prospects
+  getProspects: (params: any = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return request(`/prospects?${qs}`);
+  },
+  createProspect: (data: any) => request('/prospects', { method: 'POST', body: JSON.stringify(data) }),
+  updateProspect: (id: string, data: any) => request(`/prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  convertProspect: (id: string, data: any) => request(`/prospects/${id}/convert`, { method: 'POST', body: JSON.stringify(data) }),
+
+  // Chat
+  getConversations: () => request('/chat/conversations').then(r => r.conversations || []),
+  getMessages: (conversationId: number) => request(`/chat/conversations/${conversationId}/messages`).then(r => r.messages || []),
+  sendMessage: (conversationId: number, message: string) => request(`/chat/conversations/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ message }) }),
+  markMessagesRead: (conversationId: number) => request(`/chat/conversations/${conversationId}/read`, { method: 'POST' }),
+  startDirectChat: (targetUserId: number) => request('/chat/conversations/direct', { method: 'POST', body: JSON.stringify({ targetUserId }) }).then(r => r.conversation),
+
+  // Email Verification
+  requestEmailVerification: (email: string) => request('/email-verification/send', { method: 'POST', body: JSON.stringify({ email }) }),
+  verifyEmail: (token: string) => request('/email-verification/verify', { method: 'POST', body: JSON.stringify({ token }) }),
+  getVerificationStatus: (email: string) => request(`/email-verification/status?email=${encodeURIComponent(email)}`),
   toggleProductStatus: (id: string, isActive: boolean) =>
     request(`/products/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
   getProductStats: () => request('/products/stats'),
   deleteProduct: (id: string) => request(`/products/${id}`, { method: 'DELETE' }),
+  getProductModules: (productId: string) => request(`/products/${productId}/modules`),
+  createProductModule: (productId: string, data: any) =>
+    request(`/products/${productId}/modules`, { method: 'POST', body: JSON.stringify(data) }),
+  updateProductModule: (moduleId: string, data: any) =>
+    request(`/products/modules/${moduleId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProductModule: (moduleId: string) =>
+    request(`/products/modules/${moduleId}`, { method: 'DELETE' }),
+  createProductSubmodule: (moduleId: string, data: any) =>
+    request(`/products/modules/${moduleId}/submodules`, { method: 'POST', body: JSON.stringify(data) }),
+  updateProductSubmodule: (submoduleId: string, data: any) =>
+    request(`/products/submodules/${submoduleId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProductSubmodule: (submoduleId: string) =>
+    request(`/products/submodules/${submoduleId}`, { method: 'DELETE' }),
 
   // Subscriptions & AMC
   getSubscriptions: (params: any = {}) => {
