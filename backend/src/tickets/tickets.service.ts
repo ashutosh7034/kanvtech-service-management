@@ -733,13 +733,21 @@ export class TicketsService {
       if (bestEmp) {
         effectiveEmployeeId = bestEmp.id;
       } else {
+        const whereClause: any = { level: ticket.assignedLevel as any, status: 'ACTIVE' };
+        if (ticket.departmentId) {
+          whereClause.departmentId = ticket.departmentId;
+        }
         const fallbackEmp = await this.prisma.employee.findFirst({
-          where: { level: ticket.assignedLevel as any, status: 'ACTIVE' },
+          where: whereClause,
         });
         if (fallbackEmp) {
           effectiveEmployeeId = fallbackEmp.id;
         } else {
-          throw new BadRequestException('Cannot start work session: No active employee found for this ticket level.');
+          const dept = ticket.departmentId ? await this.prisma.department.findUnique({ where: { id: ticket.departmentId } }) : null;
+          const deptName = dept ? ` for ${dept.name} department` : '';
+          throw new BadRequestException(
+            `Cannot start work session: No active ${ticket.assignedLevel} specialist configured${deptName}. Please assign a specialist who belongs to the ${dept ? dept.name : 'required'} department in Employee Master.`,
+          );
         }
       }
 
