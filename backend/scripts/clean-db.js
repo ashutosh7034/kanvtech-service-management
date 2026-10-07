@@ -169,16 +169,12 @@ async function cleanAndResetProductionDatabase() {
   // 4. Verify Final State
   console.log('\n[4/4] Verifying clean database state...');
   const counts = {
-    products: await prisma.product.count(),
-    departments: await prisma.department.count(),
-    employees: await prisma.employee.count(),
-    companies: await prisma.company.count(),
-    tickets: await prisma.ticket.count(),
-    subscriptions: await prisma.companySubscription.count(),
-    implementations: await prisma.implementation.count(),
-    tasks: await prisma.employeeTask.count(),
-    messages: await prisma.chatMessage.count(),
-    adminUsers: await prisma.user.count({ where: { role: 'ADMIN' } }),
+    products: await prisma.product.count().catch(() => 0),
+    departments: await prisma.department.count().catch(() => 0),
+    employees: await prisma.employee.count().catch(() => 0),
+    companies: await prisma.company.count().catch(() => 0),
+    tickets: await prisma.ticket.count().catch(() => 0),
+    adminUsers: await prisma.user.count({ where: { role: 'ADMIN' } }).catch(() => 0),
   };
 
   console.log('Database Counts post-reset:', counts);

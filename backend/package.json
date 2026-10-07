@@ -5,10 +5,11 @@
   "private": true,
   "scripts": {
     "build": "prisma generate && nest build",
-    "start": "prisma migrate deploy && node scripts/clean-db.js && node -e \"try { require('./dist/main'); } catch(e) { require('./dist/src/main'); }\"",
+    "start": "prisma migrate deploy && node -e \"try { require('./dist/main'); } catch(e) { require('./dist/src/main'); }\"",
     "dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node -e \"try { require('./dist/main'); } catch(e) { require('./dist/src/main'); }\"",
+    "db:clean": "node scripts/clean-db.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:prod": "prisma migrate deploy",
