@@ -146,23 +146,23 @@ async function cleanAndResetProductionDatabase() {
 
   // 3.5 Monotonic Sequence Trackers
   const trackers = [
-    { sequenceKey: 'TICK_SEQ', currentVal: 0, prefix: 'KT' },
-    { sequenceKey: 'COMP_SEQ', currentVal: 0, prefix: 'CMP' },
-    { sequenceKey: 'BRANCH_SEQ', currentVal: 0, prefix: 'BR' },
-    { sequenceKey: 'EMP_SEQ', currentVal: 0, prefix: 'EMP' },
-    { sequenceKey: 'DEPT_SEQ', currentVal: 0, prefix: 'DEP' },
-    { sequenceKey: 'PROD_SEQ', currentVal: 0, prefix: 'PROD' },
-    { sequenceKey: 'SUB_SEQ', currentVal: 0, prefix: 'SUB' },
-    { sequenceKey: 'IMPL_SEQ', currentVal: 0, prefix: 'IMP' },
-    { sequenceKey: 'PROS_SEQ', currentVal: 0, prefix: 'PROS' },
-    { sequenceKey: 'EMP_TASK_SEQ', currentVal: 0, prefix: 'ETSK' },
+    { name: 'TICKET_SEQ', currentValue: 0 },
+    { name: 'COMPANY_SEQ', currentValue: 0 },
+    { name: 'BRANCH_SEQ', currentValue: 0 },
+    { name: 'DEPARTMENT_SEQ', currentValue: 0 },
+    { name: 'EMPLOYEE_SEQ', currentValue: 0 },
+    { name: 'PRODUCT_SEQ', currentValue: 0 },
+    { name: 'SUBSCRIPTION_SEQ', currentValue: 0 },
+    { name: 'IMPLEMENTATION_SEQ', currentValue: 0 },
+    { name: 'TASK_SEQ', currentValue: 0 },
+    { name: 'PROSPECT_SEQ', currentValue: 0 },
   ];
 
-  for (const t of trackers) {
+  for (const tr of trackers) {
     await prisma.sequenceTracker.upsert({
-      where: { sequenceKey: t.sequenceKey },
-      update: { currentVal: t.currentVal, prefix: t.prefix },
-      create: { sequenceKey: t.sequenceKey, currentVal: t.currentVal, prefix: t.prefix },
+      where: { name: tr.name },
+      update: { currentValue: tr.currentValue },
+      create: tr,
     });
   }
 
