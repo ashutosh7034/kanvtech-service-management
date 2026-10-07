@@ -25,6 +25,7 @@ export async function request<T = any>(
   }
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
+    cache: 'no-store',
     ...options,
     headers,
   });
@@ -43,7 +44,7 @@ export async function request<T = any>(
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok || data.success === false) {
-    throw new ApiError(data.error || 'Server request failed', response.status);
+    throw new ApiError(data.message || data.error || 'Server request failed', response.status);
   }
 
   return data as T;
@@ -111,8 +112,12 @@ export const api = {
   getEmployee: (id: string) => request(`/employees/${id}`),
   createEmployee: (data: any) => request('/employees', { method: 'POST', body: JSON.stringify(data) }),
   updateEmployee: (id: string, data: any) => request(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  promoteEmployee: (id: string) => request(`/employees/${id}/promote`, { method: 'POST' }),
-  demoteEmployee: (id: string) => request(`/employees/${id}/demote`, { method: 'POST' }),
+  promoteEmployee: (id: string, level?: string) => request(`/employees/${id}/promote`, { method: 'POST', body: JSON.stringify({ level }) }),
+  demoteEmployee: (id: string, level?: string) => request(`/employees/${id}/demote`, { method: 'POST', body: JSON.stringify({ level }) }),
+  toggleEmployeeStatus: (id: string) => request(`/employees/${id}/toggle-status`, { method: 'POST' }),
+  deleteEmployee: (id: string) => request(`/employees/${id}`, { method: 'DELETE' }),
+  getLevelManagementStatus: () => request('/employees/level-management/status'),
+  toggleLevelManagement: (enabled: boolean) => request('/employees/level-management/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
   checkIn: (data: any) => request('/employees/attendance/check-in', { method: 'POST', body: JSON.stringify(data) }),
   checkOut: (data: any) => request('/employees/attendance/check-out', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -135,6 +140,9 @@ export const api = {
   closeTicket: (id: string, data: any = {}) => request(`/tickets/${id}/close`, { method: 'POST', body: JSON.stringify(data) }),
   addComment: (id: string, data: any) => request(`/tickets/${id}/comments`, { method: 'POST', body: JSON.stringify(data) }),
   uploadAttachment: (id: string, formData: FormData) => request(`/tickets/${id}/attachments`, { method: 'POST', body: formData }),
+  getAutoAssignmentLevel: () => request('/tickets/settings/auto-assignment-level'),
+  updateAutoAssignmentLevel: (level: string) =>
+    request('/tickets/settings/auto-assignment-level', { method: 'POST', body: JSON.stringify({ level }) }),
 
   // Import
   downloadTemplate: (type: string) => request(`/import/template/${type}`),
@@ -161,26 +169,52 @@ export const api = {
   createProduct: (data: any) => request('/products', { method: 'POST', body: JSON.stringify(data) }),
   updateProduct: (id: string, data: any) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
-  // Prospects
+  // Prospects / Enquiries
   getProspects: (params: any = {}) => {
     const qs = new URLSearchParams(params).toString();
     return request(`/prospects?${qs}`);
   },
+  getProspect: (id: string) => request(`/prospects/${id}`),
   createProspect: (data: any) => request('/prospects', { method: 'POST', body: JSON.stringify(data) }),
   updateProspect: (id: string, data: any) => request(`/prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   convertProspect: (id: string, data: any) => request(`/prospects/${id}/convert`, { method: 'POST', body: JSON.stringify(data) }),
 
-  // Chat
-  getConversations: () => request('/chat/conversations').then(r => r.conversations || []),
-  getMessages: (conversationId: number) => request(`/chat/conversations/${conversationId}/messages`).then(r => r.messages || []),
-  sendMessage: (conversationId: number, message: string) => request(`/chat/conversations/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ message }) }),
-  markMessagesRead: (conversationId: number) => request(`/chat/conversations/${conversationId}/read`, { method: 'POST' }),
-  startDirectChat: (targetUserId: number) => request('/chat/conversations/direct', { method: 'POST', body: JSON.stringify({ targetUserId }) }).then(r => r.conversation),
+  // Internal Messaging / Mailbox
+  getConversations: (params: { folder?: 'inbox' | 'sent' | 'unread'; search?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.folder) qs.append('folder', params.folder);
+    if (params.search) qs.append('search', params.search);
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    return request(`/chat/conversations${query}`).then((r) => r.conversations || []);
+  },
+  getConversationDetails: (conversationId: number) =>
+    request(`/chat/conversations/${conversationId}`).then((r) => r.conversation),
+  composeMessage: (data: { toUserIds: number[]; ccUserIds?: number[]; subject: string; message: string }) =>
+    request('/chat/compose', { method: 'POST', body: JSON.stringify(data) }),
+  replyMessage: (conversationId: number, data: { message: string; isReplyAll?: boolean }) =>
+    request(`/chat/conversations/${conversationId}/reply`, { method: 'POST', body: JSON.stringify(data) }),
+  getInternalEmployees: () => request('/chat/employees').then((r) => r.employees || []),
+  searchEmployeesForMessaging: (q: string) =>
+    request(`/chat/search/employees?q=${encodeURIComponent(q)}`).then((r) => r.employees || []),
+  getMessages: (conversationId: number) =>
+    request(`/chat/conversations/${conversationId}/messages`).then((r) => r.messages || []),
+  sendMessage: (conversationId: number, message: string) =>
+    request(`/chat/conversations/${conversationId}/messages`, { method: 'POST', body: JSON.stringify({ message }) }),
+  markMessagesRead: (conversationId: number) =>
+    request(`/chat/conversations/${conversationId}/read`, { method: 'POST' }),
+  startDirectChat: (targetUserId: number) =>
+    request('/chat/conversations/direct', { method: 'POST', body: JSON.stringify({ targetUserId }) }).then(
+      (r) => r.conversation
+    ),
 
   // Email Verification
   requestEmailVerification: (email: string) => request('/email-verification/send', { method: 'POST', body: JSON.stringify({ email }) }),
   verifyEmail: (token: string) => request('/email-verification/verify', { method: 'POST', body: JSON.stringify({ token }) }),
   getVerificationStatus: (email: string) => request(`/email-verification/status?email=${encodeURIComponent(email)}`),
+  verifyCustomerEmail: (email: string) =>
+    request('/email-verification/customer-verify', { method: 'POST', body: JSON.stringify({ email }) }),
+  checkCustomerEmailVerification: (email: string) =>
+    request(`/email-verification/check-status?email=${encodeURIComponent(email)}`),
   toggleProductStatus: (id: string, isActive: boolean) =>
     request(`/products/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
   getProductStats: () => request('/products/stats'),
@@ -254,6 +288,8 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/employee-tasks?${qs}`);
   },
+  getMyTaskSummary: () => request('/employee-tasks/summary'),
+  getTaskById: (id: string) => request(`/employee-tasks/${id}`),
   getDueReminders: () => request('/employee-tasks/reminders'),
   createTask: (data: any) => request('/employee-tasks', { method: 'POST', body: JSON.stringify(data) }),
   updateTask: (id: string, data: any) => request(`/employee-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

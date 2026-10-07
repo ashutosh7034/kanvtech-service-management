@@ -173,8 +173,30 @@ export class SubscriptionsService {
       company_id?: string;
       productId?: string;
       product_id?: string;
+      productIds?: string[];
+      products?: Array<{
+        productId: string;
+        planName?: string;
+        notes?: string;
+        startDate?: string | Date;
+        expiryDate?: string | Date;
+      }>;
+      slaRules?: Array<{
+        targetType: 'PRODUCT' | 'MODULE' | 'SUBMODULE' | 'GLOBAL';
+        targetId?: string;
+        targetName?: string;
+        productName?: string;
+        moduleName?: string;
+        submoduleName?: string;
+        slaTier?: string;
+        priority?: string;
+        responseTimeHours?: number;
+        resolutionTimeHours?: number;
+        notes?: string;
+      }>;
       planName?: string;
       plan_name?: string;
+      agreementName?: string;
       startDate?: string | Date;
       start_date?: string | Date;
       expiryDate?: string | Date;
@@ -186,18 +208,13 @@ export class SubscriptionsService {
     actorUserId: number,
   ) {
     const companyId = data.companyId || data.company_id;
-    let productId = data.productId || data.product_id;
-    if (!productId) {
-      const defaultProd = await this.prisma.product.findFirst({ where: { isActive: true } });
-      productId = defaultProd?.id || (await this.prisma.product.findFirst())?.id;
-    }
-    const planName = data.planName || data.plan_name || (data as any).contractName || (data as any).contract_name || 'Standard Enterprise AMC';
+    const planName = data.agreementName || data.planName || data.plan_name || (data as any).contractName || (data as any).contract_name || 'Standard Enterprise AMC';
     const rawStartDate = data.startDate || data.start_date;
     const rawExpiryDate = data.expiryDate || data.expiry_date;
     const ownerEmployeeId = data.ownerEmployeeId || data.owner_employee_id || null;
 
-    if (!companyId || !productId || !planName || !rawStartDate || !rawExpiryDate) {
-      throw new BadRequestException('Company, Product, Plan Name, Start Date, and Expiry Date are required');
+    if (!companyId || !rawStartDate || !rawExpiryDate) {
+      throw new BadRequestException('Company, Start Date, and Expiry Date are required');
     }
 
     const startDate = new Date(rawStartDate);
@@ -211,32 +228,84 @@ export class SubscriptionsService {
       throw new BadRequestException('Expiry Date must be after Start Date');
     }
 
-    const status = this.computeStatus(expiryDate, SubscriptionStatus.ACTIVE);
-    const id = await this.generateSubscriptionId();
+    // Determine target product IDs
+    let targetProductList: Array<{ productId: string; planName?: string; notes?: string }> = [];
 
-    const sub = await this.prisma.subscription.create({
-      data: {
-        id,
-        companyId,
-        productId,
-        planName: planName.trim(),
-        startDate,
-        expiryDate,
-        status,
-        ownerEmployeeId,
-        notes: data.notes?.trim() || null,
-      },
-    });
+    if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+      targetProductList = data.products.map(p => ({
+        productId: p.productId,
+        planName: p.planName || planName,
+        notes: p.notes,
+      }));
+    } else if (data.productIds && Array.isArray(data.productIds) && data.productIds.length > 0) {
+      targetProductList = data.productIds.map(pId => ({
+        productId: pId,
+        planName: planName,
+      }));
+    } else if (data.productId || data.product_id) {
+      targetProductList = [{
+        productId: (data.productId || data.product_id)!,
+        planName: planName,
+      }];
+    } else {
+      const defaultProd = await this.prisma.product.findFirst({ where: { isActive: true } });
+      const pId = defaultProd?.id || (await this.prisma.product.findFirst())?.id;
+      if (!pId) {
+        throw new BadRequestException('At least one Product must be specified for AMC');
+      }
+      targetProductList = [{ productId: pId, planName: planName }];
+    }
 
-    await this.auditService.log({
-      actorUserId,
-      action: 'SUBSCRIPTION_CREATED',
-      entityType: 'SUBSCRIPTION',
-      entityId: sub.id,
-      newValues: { id: sub.id, companyId, productId, planName, expiryDate },
-    });
+    // Build SLA rules text summary if SLA rules were provided
+    let slaRulesSummary = '';
+    if (data.slaRules && Array.isArray(data.slaRules) && data.slaRules.length > 0) {
+      const formattedRules = data.slaRules.map((rule, idx) => {
+        const target = rule.submoduleName
+          ? `Submodule: ${rule.submoduleName} (${rule.moduleName || ''})`
+          : rule.moduleName
+          ? `Module: ${rule.moduleName} (${rule.productName || ''})`
+          : rule.productName
+          ? `Product: ${rule.productName}`
+          : 'Agreement Wide';
+        return `[Rule ${idx + 1}] ${target} -> Tier: ${rule.slaTier || 'Custom'} | Resp: ${rule.responseTimeHours ?? 'Standard'}h | Res: ${rule.resolutionTimeHours ?? 'Standard'}h | Pri: ${rule.priority || 'ALL'}${rule.notes ? ` (${rule.notes})` : ''}`;
+      }).join('\n');
+      slaRulesSummary = `\n--- Configured SLA Rules ---\n${formattedRules}`;
+    }
 
-    return this.getSubscriptionById(sub.id);
+    const createdSubscriptions = [];
+
+    for (const item of targetProductList) {
+      const status = this.computeStatus(expiryDate, SubscriptionStatus.ACTIVE);
+      const id = await this.generateSubscriptionId();
+      const combinedNotes = [data.notes?.trim(), item.notes?.trim(), slaRulesSummary.trim()].filter(Boolean).join('\n\n');
+
+      const sub = await this.prisma.subscription.create({
+        data: {
+          id,
+          companyId,
+          productId: item.productId,
+          planName: (item.planName || planName).trim(),
+          startDate,
+          expiryDate,
+          status,
+          ownerEmployeeId,
+          notes: combinedNotes || null,
+        },
+      });
+
+      await this.auditService.log({
+        actorUserId,
+        action: 'SUBSCRIPTION_CREATED',
+        entityType: 'SUBSCRIPTION',
+        entityId: sub.id,
+        newValues: { id: sub.id, companyId, productId: item.productId, planName: sub.planName, expiryDate, slaRulesCount: data.slaRules?.length || 0 },
+      });
+
+      const fullSub = await this.getSubscriptionById(sub.id);
+      createdSubscriptions.push(fullSub);
+    }
+
+    return createdSubscriptions[0];
   }
 
   async updateSubscription(

@@ -152,6 +152,25 @@ export interface NotificationItem {
   created_at: string;
 }
 
+export interface ProductSubmodule {
+  id: string;
+  moduleId: string;
+  name: string;
+  description?: string | null;
+  isActive?: boolean;
+  is_active?: boolean;
+}
+
+export interface ProductModule {
+  id: string;
+  productId: string;
+  name: string;
+  description?: string | null;
+  isActive?: boolean;
+  is_active?: boolean;
+  submodules?: ProductSubmodule[];
+}
+
 export interface Product {
   id: string;
   code: string;
@@ -160,6 +179,16 @@ export interface Product {
   description: string;
   isActive: boolean;
   is_active?: boolean;
+  modules?: ProductModule[];
+}
+
+export interface DepartmentSpecialization {
+  productId: string;
+  productName?: string;
+  productCode?: string;
+  isComplete?: boolean;
+  moduleIds?: string[];
+  submoduleIds?: string[];
 }
 
 export interface Department {
@@ -180,6 +209,8 @@ export interface Department {
   active_ticket_count?: number;
   employees?: Employee[];
   products?: any[];
+  specializations?: DepartmentSpecialization[];
+  specialization_json?: string;
 }
 
 export interface BranchProduct {
@@ -197,6 +228,7 @@ export interface Branch {
   companyId?: string;
   branch_name: string;
   branchName?: string;
+  gstn?: string;
   address: string;
   city: string;
   state: string;

@@ -58,6 +58,26 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
           <span>Dashboard</span>
         </button>
 
+        {role !== 'CUSTOMER' && (
+          <button
+            className={`nav-item ${currentView === 'task_reminders' ? 'active' : ''}`}
+            onClick={() => onNavigate('task_reminders')}
+          >
+            <Bell size={16} />
+            <span>My Tasks & Reminders</span>
+          </button>
+        )}
+
+        {role !== 'CUSTOMER' && (
+          <button
+            className={`nav-item ${currentView === 'chat' ? 'active' : ''}`}
+            onClick={() => onNavigate('chat')}
+          >
+            <Mail size={16} />
+            <span>Internal Messages</span>
+          </button>
+        )}
+
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'companies' ? 'active' : ''}`}
@@ -74,7 +94,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
             onClick={() => onNavigate('prospects')}
           >
             <Briefcase size={16} />
-            <span>Prospects & Leads</span>
+            <span>Enquiries</span>
           </button>
         )}
 
@@ -105,26 +125,6 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
           <Ticket size={16} />
           <span>Support Tickets</span>
         </button>
-
-        {!isAccessible(['CUSTOMER']) && (
-          <button
-            className={`nav-item ${currentView === 'task_reminders' ? 'active' : ''}`}
-            onClick={() => onNavigate('task_reminders')}
-          >
-            <Bell size={16} />
-            <span>Task Reminders</span>
-          </button>
-        )}
-
-        {!isAccessible(['CUSTOMER']) && (
-          <button
-            className={`nav-item ${currentView === 'chat' ? 'active' : ''}`}
-            onClick={() => onNavigate('chat')}
-          >
-            <MessageSquare size={16} />
-            <span>Internal Chat</span>
-          </button>
-        )}
 
         {isAccessible(['MANAGER']) && (
           <button
@@ -207,14 +207,6 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
               <FileSpreadsheet size={16} />
               <span>Import Data</span>
             </button>
-            
-            <button
-              className={`nav-item ${currentView === 'verify_email' ? 'active' : ''}`}
-              onClick={() => onNavigate('verify_email')}
-            >
-              <Mail size={16} />
-              <span>Email Verification</span>
-            </button>
           </>
         )}
 
@@ -225,7 +217,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
               onClick={() => onNavigate('sla_settings')}
             >
               <Settings size={16} />
-              <span>SLA Settings</span>
+              <span>System & SLA Settings</span>
             </button>
 
             <button

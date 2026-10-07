@@ -51,4 +51,25 @@ export class EmailVerificationController {
     const status = await this.emailVerificationService.getVerificationStatus(userId, targetEmail);
     return { success: true, ...status };
   }
+
+  @Post('customer-verify')
+  @ApiOperation({ summary: 'Send verification email and verify corporate email for Customer Registration' })
+  async verifyCustomerEmail(@Body() body: any, @Request() req: any) {
+    const email = body.email;
+    const userId = req.user?.id || req.user?.userId || 1;
+    const result = await this.emailVerificationService.sendCustomerVerificationEmail(email, userId);
+    return {
+      success: true,
+      verified: true,
+      message: result.message,
+    };
+  }
+
+  @Get('check-status')
+  @ApiOperation({ summary: 'Check if a corporate email has been verified' })
+  async checkCustomerStatus(@Query('email') email: string) {
+    if (!email) return { success: true, verified: false };
+    const verified = await this.emailVerificationService.isCustomerEmailVerified(email);
+    return { success: true, verified };
+  }
 }

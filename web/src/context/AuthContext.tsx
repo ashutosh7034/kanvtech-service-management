@@ -52,24 +52,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, passwordPlain: string) => {
-    setLoading(true);
-    try {
-      const res = await api.login({ email, password: passwordPlain });
-      if (res.token && res.user) {
-        localStorage.setItem('kanvtech_token', res.token);
-        setToken(res.token);
-        setUser({
-          id: res.user.id || res.user.userId,
-          email: res.user.email,
-          role: res.user.role,
-          displayName: res.user.name || res.user.displayName || res.user.employeeName || res.user.contactName || res.user.email.split('@')[0],
-          employeeId: res.user.employeeId,
-          companyId: res.user.companyId,
-          contactId: res.user.contactId,
-        });
-      }
-    } finally {
-      setLoading(false);
+    const res = await api.login({ email, password: passwordPlain });
+    if (res.token && res.user) {
+      localStorage.setItem('kanvtech_token', res.token);
+      setToken(res.token);
+      setUser({
+        id: res.user.id || res.user.userId,
+        email: res.user.email,
+        role: res.user.role,
+        displayName: res.user.name || res.user.displayName || res.user.employeeName || res.user.contactName || res.user.email.split('@')[0],
+        employeeId: res.user.employeeId,
+        companyId: res.user.companyId,
+        contactId: res.user.contactId,
+      });
     }
   };
 

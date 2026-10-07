@@ -3,6 +3,7 @@ import { Queue, Worker } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { SlaService } from '../sla/sla.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { EmployeeTasksService } from '../employee-tasks/employee-tasks.service';
 
 @Injectable()
 export class JobsService implements OnModuleInit, OnModuleDestroy {
@@ -15,6 +16,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly slaService: SlaService,
     private readonly notificationsService: NotificationsService,
+    private readonly employeeTasksService: EmployeeTasksService,
   ) {}
 
   async onModuleInit() {
@@ -30,6 +32,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         'sla-monitor',
         async (job) => {
           await this.processSlaCheck();
+          await this.processTaskReminders();
         },
         { connection: { host: redisHost, port: redisPort, maxRetriesPerRequest: null } },
       );
@@ -38,21 +41,30 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         this.logger.debug(`BullMQ Worker notice (${err.message}). Using resilient in-process scheduled processor.`);
       });
 
-      this.logger.log('Initialized Redis + BullMQ SLA background job processor');
+      this.logger.log('Initialized Redis + BullMQ SLA & Task Reminders background processor');
     } catch (err: any) {
-      this.logger.warn(`Redis not available (${err.message}). Running background SLA checks with internal timer.`);
+      this.logger.warn(`Redis not available (${err.message}). Running background checks with internal timer.`);
     }
 
-    // Always run scheduled SLA sweep every 60 seconds
+    // Always run scheduled sweep every 30 seconds for SLA and task reminders
     this.intervalId = setInterval(() => {
       this.processSlaCheck().catch((e) => this.logger.error(`SLA sweep error: ${e.message}`));
-    }, 60000);
+      this.processTaskReminders().catch((e) => this.logger.error(`Task reminder sweep error: ${e.message}`));
+    }, 30000);
   }
 
   async onModuleDestroy() {
     if (this.intervalId) clearInterval(this.intervalId);
     if (this.slaWorker) await this.slaWorker.close();
     if (this.slaQueue) await this.slaQueue.close();
+  }
+
+  async processTaskReminders() {
+    try {
+      await this.employeeTasksService.processDueReminders();
+    } catch (err: any) {
+      this.logger.error(`Error processing task reminders: ${err.message}`);
+    }
   }
 
   async processSlaCheck() {

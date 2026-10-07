@@ -9,3 +9,10 @@ dist/
 .env.test.local
 .env.production.local
 *.log
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

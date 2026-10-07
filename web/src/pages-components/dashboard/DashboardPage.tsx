@@ -14,11 +14,25 @@ import {
   ShieldCheck,
   UserCheck,
   ArrowRight,
+  Bell,
+  Plus,
+  Calendar,
+  Clock,
+  Circle,
+  Flag,
 } from 'lucide-react';
 
 interface Props {
   onNavigate: (view: string, id?: string) => void;
 }
+
+const priorityBadgeStyles: Record<string, { color: string; bg: string }> = {
+  LOW: { color: '#64748b', bg: '#f1f5f9' },
+  MEDIUM: { color: '#0284c7', bg: '#e0f2fe' },
+  HIGH: { color: '#d97706', bg: '#fef3c7' },
+  URGENT: { color: '#dc2626', bg: '#fee2e2' },
+  CRITICAL: { color: '#dc2626', bg: '#fee2e2' },
+};
 
 export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
   const { user } = useAuth();
@@ -29,9 +43,33 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
     implementations?: any;
     allotment?: any;
   }>({});
+  const [taskSummary, setTaskSummary] = useState<{
+    metrics?: {
+      dueTodayCount: number;
+      upcomingCount: number;
+      overdueCount: number;
+      completedCount: number;
+      totalPendingCount: number;
+    };
+    todayTasks?: any[];
+    overdueTasks?: any[];
+    upcomingTasks?: any[];
+  }>({
+    metrics: {
+      dueTodayCount: 0,
+      upcomingCount: 0,
+      overdueCount: 0,
+      completedCount: 0,
+      totalPendingCount: 0,
+    },
+    todayTasks: [],
+    overdueTasks: [],
+    upcomingTasks: [],
+  });
   const [loading, setLoading] = useState(true);
 
   const isManagement = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const isEmployee = user?.role !== 'CUSTOMER';
 
   useEffect(() => {
     loadDashboard();
@@ -43,6 +81,14 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
       const res = await api.getDashboard();
       if (res.metrics) {
         setData(res.metrics);
+      }
+
+      if (isEmployee) {
+        api.getMyTaskSummary()
+          .then((tRes) => {
+            if (tRes.metrics) setTaskSummary(tRes);
+          })
+          .catch(() => {});
       }
 
       if (isManagement) {
@@ -67,6 +113,17 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickCompleteTask = async (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await api.completeTask(taskId);
+      const res = await api.getMyTaskSummary();
+      if (res.metrics) setTaskSummary(res);
+    } catch (err) {
+      console.error('Failed to complete task', err);
     }
   };
 
@@ -119,21 +176,21 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
             <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
               Active Tickets
             </span>
-            <Ticket size={18} color="#0b3b60" />
+            <Ticket size={18} color="var(--brand-primary)" />
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6, color: '#0f172a' }}>
-            {volume.open + volume.inProgress}
+          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 8, color: 'var(--text-primary)' }}>
+            {volume.active || 0}
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            {volume.open} unassigned • {volume.inProgress} in progress
+            {volume.unassigned || 0} unassigned • {volume.inProgress || 0} in progress
           </div>
         </div>
 
         <div
           className="card"
           style={{ padding: '16px 20px', marginBottom: 0, cursor: 'pointer', transition: 'border-color 0.15s ease' }}
-          onClick={() => onNavigate('tickets')}
-          title="Click to inspect tickets at SLA risk"
+          onClick={() => onNavigate('escalations')}
+          title="Click to view escalations queue"
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
@@ -141,11 +198,11 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
             </span>
             <AlertOctagon size={18} color="#dc2626" />
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6, color: sla.breached > 0 ? '#dc2626' : '#0f172a' }}>
-            {sla.breached}
+          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 8, color: sla.breached > 0 ? '#dc2626' : 'var(--text-primary)' }}>
+            {sla.breached || 0}
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            {sla.warning} tickets at warning threshold (75%)
+            {sla.warning || 0} tickets at warning threshold (75%)
           </div>
         </div>
 
@@ -153,39 +210,34 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
           className="card"
           style={{ padding: '16px 20px', marginBottom: 0, cursor: 'pointer', transition: 'border-color 0.15s ease' }}
           onClick={() => onNavigate('approvals')}
-          title="Click to review pending resolutions"
+          title="Click to view pending manager reviews"
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
               Pending Approvals
             </span>
-            <CheckSquare size={18} color="#a21caf" />
+            <CheckSquare size={18} color="#d97706" />
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6, color: '#a21caf' }}>
-            {volume.managerReview}
+          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 8, color: 'var(--text-primary)' }}>
+            {volume.managerReview || 0}
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
             Awaiting Manager Review
           </div>
         </div>
 
-        <div
-          className="card"
-          style={{ padding: '16px 20px', marginBottom: 0, cursor: 'pointer', transition: 'border-color 0.15s ease' }}
-          onClick={() => onNavigate('reports')}
-          title="Click to view SLA analytics"
-        >
+        <div className="card" style={{ padding: '16px 20px', marginBottom: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
               SLA Compliance
             </span>
             <TrendingUp size={18} color="#16a34a" />
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6, color: '#16a34a' }}>
-            {sla.complianceRate}%
+          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 8, color: '#16a34a' }}>
+            {sla.complianceRate !== undefined ? `${sla.complianceRate}%` : '100%'}
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            {sla.met} met within resolution threshold
+            {sla.met || 0} met within resolution threshold
           </div>
         </div>
 
@@ -194,97 +246,191 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
             <span style={{ fontSize: 12, fontWeight: 600, color: '#64748b', textTransform: 'uppercase' }}>
               CSAT Score
             </span>
-            <CheckCircle2 size={18} color="#0284c7" />
+            <CheckCircle2 size={18} color="#2563eb" />
           </div>
-          <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6, color: '#0f172a' }}>
-            {csat.averageScore} / 5.0
+          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 8, color: 'var(--text-primary)' }}>
+            {csat.avgRating ? `${csat.avgRating} / 5.0` : '0.0 / 5.0'}
           </div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
-            Based on {csat.totalRatings} customer ratings
+            Based on {csat.totalRated || 0} customer ratings
           </div>
         </div>
       </div>
 
-      {/* Management Quick Stats (Business, AMC, Implementations) */}
-      {isManagement && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 16, marginBottom: 20 }}>
-          <div
-            className="card"
-            style={{ marginBottom: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%)', border: '1px solid #bbf7d0' }}
-            onClick={() => onNavigate('products')}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#166534', textTransform: 'uppercase' }}>
-                  Product Catalog
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#14532d', marginTop: 4 }}>
-                  {bizStats.products?.active || 0} <span style={{ fontSize: 13, fontWeight: 400, color: '#4ade80' }}>/ {bizStats.products?.total || 0} Total</span>
-                </div>
-                <div style={{ fontSize: 12, color: '#166534', marginTop: 4 }}>
-                  Active software & hardware modules
-                </div>
+      {/* ========================================================= */}
+      {/* MY PERSONAL TASKS & REMINDERS WIDGET                     */}
+      {/* ========================================================= */}
+      {isEmployee && taskSummary && (
+        <div className="card" style={{ marginBottom: 20, borderLeft: '4px solid #0284c7' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Bell size={18} color="#0284c7" />
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                  My Tasks & Reminders
+                </h3>
               </div>
-              <div style={{ background: '#dcfce7', padding: 10, borderRadius: 8 }}>
-                <Package size={22} color="#16a34a" />
+              <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                Personal task list and scheduled in-app reminders
               </div>
             </div>
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#15803d' }}>
-              Manage Products <ArrowRight size={13} />
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={() => onNavigate('task_reminders')}
+                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                <Plus size={13} /> Add Task
+              </button>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => onNavigate('task_reminders')}
+                style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+              >
+                View All ({taskSummary.metrics?.totalPendingCount || 0}) <ArrowRight size={13} />
+              </button>
             </div>
           </div>
 
-          <div
-            className="card"
-            style={{ marginBottom: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #ffffff 0%, #eff6ff 100%)', border: '1px solid #bfdbfe' }}
-            onClick={() => onNavigate('maintenance')}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#1e40af', textTransform: 'uppercase' }}>
-                  AMC & Subscriptions
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#1e3a8a', marginTop: 4 }}>
-                  {bizStats.subscriptions?.active || 0} Active
-                </div>
-                <div style={{ fontSize: 12, color: '#1e40af', marginTop: 4 }}>
-                  {bizStats.subscriptions?.expiringSoon || 0} expiring soon • {bizStats.subscriptions?.expired || 0} expired
-                </div>
-              </div>
-              <div style={{ background: '#dbeafe', padding: 10, borderRadius: 8 }}>
-                <ShieldCheck size={22} color="#2563eb" />
+          {/* Metric Badges */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+            <div
+              style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: 6, cursor: 'pointer' }}
+              onClick={() => onNavigate('task_reminders')}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Due Today</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#d97706', marginTop: 2 }}>
+                {taskSummary.metrics?.dueTodayCount || 0}
               </div>
             </div>
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#1d4ed8' }}>
-              View Contracts <ArrowRight size={13} />
+
+            <div
+              style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '10px 14px', borderRadius: 6, cursor: 'pointer' }}
+              onClick={() => onNavigate('task_reminders')}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#166534', textTransform: 'uppercase' }}>Upcoming</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#15803d', marginTop: 2 }}>
+                {taskSummary.metrics?.upcomingCount || 0}
+              </div>
+            </div>
+
+            <div
+              style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: 6, cursor: 'pointer' }}
+              onClick={() => onNavigate('task_reminders')}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' }}>Overdue</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#dc2626', marginTop: 2 }}>
+                {taskSummary.metrics?.overdueCount || 0}
+              </div>
+            </div>
+
+            <div
+              style={{ background: '#f8fafc', border: '1px solid #e2e8f0', padding: '10px 14px', borderRadius: 6, cursor: 'pointer' }}
+              onClick={() => onNavigate('task_reminders')}
+            >
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' }}>Completed</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: '#334155', marginTop: 2 }}>
+                {taskSummary.metrics?.completedCount || 0}
+              </div>
             </div>
           </div>
 
-          <div
-            className="card"
-            style={{ marginBottom: 0, cursor: 'pointer', background: 'linear-gradient(135deg, #ffffff 0%, #faf5ff 100%)', border: '1px solid #e9d5ff' }}
-            onClick={() => onNavigate('implementations')}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: '#6b21a8', textTransform: 'uppercase' }}>
-                  Client Implementations
-                </div>
-                <div style={{ fontSize: 22, fontWeight: 700, color: '#581c87', marginTop: 4 }}>
-                  {bizStats.implementations?.active || 0} Ongoing
-                </div>
-                <div style={{ fontSize: 12, color: '#6b21a8', marginTop: 4 }}>
-                  {bizStats.implementations?.avgProgress || 0}% average progress ({bizStats.implementations?.live || 0} Live)
-                </div>
-              </div>
-              <div style={{ background: '#f3e8ff', padding: 10, borderRadius: 8 }}>
-                <Rocket size={22} color="#9333ea" />
-              </div>
+          {/* Quick Tasks Display */}
+          {(taskSummary.overdueTasks?.length === 0 && taskSummary.todayTasks?.length === 0 && taskSummary.upcomingTasks?.length === 0) ? (
+            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: 6, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              No pending personal tasks. You are all caught up!
             </div>
-            <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, fontWeight: 600, color: '#7e22ce' }}>
-              Track Onboarding <ArrowRight size={13} />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {/* Overdue Tasks Alert */}
+              {taskSummary.overdueTasks && taskSummary.overdueTasks.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', marginBottom: 6 }}>
+                    ● Overdue Tasks
+                  </div>
+                  {taskSummary.overdueTasks.map((task: any) => (
+                    <div
+                      key={task.id}
+                      onClick={() => onNavigate('task_reminders', task.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        borderRadius: 6,
+                        marginBottom: 6,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          onClick={(e) => handleQuickCompleteTask(task.id, e)}
+                          title="Mark complete"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <Circle size={16} color="#dc2626" />
+                        </button>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: '#991b1b' }}>{task.title}</span>
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c' }}>
+                        Due {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'Past'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Today Tasks */}
+              {taskSummary.todayTasks && taskSummary.todayTasks.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>
+                    ● Due Today
+                  </div>
+                  {taskSummary.todayTasks.map((task: any) => (
+                    <div
+                      key={task.id}
+                      onClick={() => onNavigate('task_reminders', task.id)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        background: '#fffbeb',
+                        border: '1px solid #fde68a',
+                        borderRadius: 6,
+                        marginBottom: 6,
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          onClick={(e) => handleQuickCompleteTask(task.id, e)}
+                          title="Mark complete"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                        >
+                          <Circle size={16} color="#d97706" />
+                        </button>
+                        <span style={{ fontWeight: 600, fontSize: 13, color: '#92400e' }}>{task.title}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {task.reminder_time && (
+                          <span style={{ fontSize: 11, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <Bell size={11} /> {new Date(task.reminder_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                        <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>
+                          {task.due_time ? task.due_time : 'Today'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -296,19 +442,19 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, textAlign: 'center' }}>
             <div style={{ background: '#f8fafc', padding: 14, borderRadius: 6, border: '1px solid #e2e8f0' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>{sla.onTrack}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>{sla.onTrack || 0}</div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>On Track</div>
             </div>
             <div style={{ background: '#fffbeb', padding: 14, borderRadius: 6, border: '1px solid #fde68a' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#d97706' }}>{sla.warning}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#d97706' }}>{sla.warning || 0}</div>
               <div style={{ fontSize: 12, color: '#b45309', marginTop: 2 }}>Warning Risk</div>
             </div>
             <div style={{ background: '#fef2f2', padding: 14, borderRadius: 6, border: '1px solid #fecaca' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>{sla.breached}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>{sla.breached || 0}</div>
               <div style={{ fontSize: 12, color: '#b91c1c', marginTop: 2 }}>Breached</div>
             </div>
             <div style={{ background: '#f0fdf4', padding: 14, borderRadius: 6, border: '1px solid #bbf7d0' }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: '#15803d' }}>{sla.met}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#15803d' }}>{sla.met || 0}</div>
               <div style={{ fontSize: 12, color: '#166534', marginTop: 2 }}>SLA Met</div>
             </div>
           </div>
@@ -341,7 +487,7 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
             </div>
           </div>
           <button className="btn btn-secondary btn-sm" onClick={() => onNavigate('tickets')}>
-            View All ({volume.total})
+            View All ({volume.total || 0})
           </button>
         </div>
 

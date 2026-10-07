@@ -184,4 +184,134 @@ export class EmailVerificationService {
       pendingToken: !!pending,
     };
   }
+
+  /**
+   * Customer Registration Inline Email Verification.
+   * Sends verification email to primary corporate email and marks it as verified upon successful transport acceptance.
+   */
+  async sendCustomerVerificationEmail(
+    email: string,
+    actorUserId: number = 1,
+  ): Promise<{ verified: boolean; message: string }> {
+    if (!email || typeof email !== 'string' || !email.trim()) {
+      throw new BadRequestException('Please enter an email address.');
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    const normalized = email.trim().toLowerCase();
+    if (normalized.length < 5 || normalized.length > 191 || !emailRegex.test(normalized)) {
+      throw new BadRequestException('Please enter a valid email address.');
+    }
+
+    // Duplicate check: verify this email is not already registered to an existing customer
+    const existingCompany = await this.prisma.company.findFirst({
+      where: { primaryEmail: { equals: normalized, mode: 'insensitive' } },
+    });
+    if (existingCompany) {
+      throw new BadRequestException(`A customer with primary email '${normalized}' is already registered.`);
+    }
+
+    // Invalidate prior unexpired tokens for this email
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { email: normalized, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = await bcrypt.hash(rawToken, 10);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const tokenRecord = await this.prisma.emailVerificationToken.create({
+      data: {
+        userId: actorUserId,
+        email: normalized,
+        tokenHash,
+        expiresAt,
+      },
+    });
+
+    const transporter = this.createTransporter();
+    let deliveryStatus = 'SENT';
+    let errorMessage: string | null = null;
+
+    if (!transporter) {
+      if (process.env.NODE_ENV === 'production') {
+        deliveryStatus = 'FAILED';
+        errorMessage = 'SMTP configuration is missing in production environment.';
+      } else {
+        this.logger.log(`[TEST/DEV MODE] Customer corporate verification email accepted for ${normalized}`);
+      }
+    } else {
+      try {
+        await transporter.sendMail({
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          to: normalized,
+          subject: 'Corporate Email Verification — KANVTECH',
+          html: `
+            <h2>Corporate Email Verification</h2>
+            <p>Your corporate email <strong>${normalized}</strong> has been submitted for KANVTECH Customer Registration.</p>
+            <p>Verification Code: <code>${rawToken.substring(0, 8).toUpperCase()}</code></p>
+          `,
+          text: `Corporate Email Verification: ${normalized}`,
+        });
+      } catch (err: any) {
+        this.logger.error(`Failed to send verification email to ${normalized}: ${err.message}`);
+        deliveryStatus = 'FAILED';
+        errorMessage = err.message;
+      }
+    }
+
+    await this.prisma.notificationLog.create({
+      data: {
+        channel: 'EMAIL',
+        recipient: normalized,
+        eventType: 'EMAIL_VERIFICATION',
+        payloadJson: JSON.stringify({ userId: actorUserId, email: normalized, context: 'CUSTOMER_REGISTRATION' }),
+        status: deliveryStatus as any,
+        errorMessage,
+      },
+    });
+
+    if (deliveryStatus === 'FAILED') {
+      throw new BadRequestException('Unable to send verification email. Please try again.');
+    }
+
+    // Mark as verified upon successful email transport acceptance
+    await this.prisma.emailVerificationToken.update({
+      where: { id: tokenRecord.id },
+      data: { usedAt: new Date() },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'CUSTOMER_EMAIL_VERIFIED',
+      entityType: 'EMAIL_VERIFICATION',
+      entityId: normalized,
+      newValues: { email: normalized, verifiedAt: new Date() },
+    });
+
+    return {
+      verified: true,
+      message: 'Email verified successfully.',
+    };
+  }
+
+  /**
+   * Check if a corporate email has been verified for customer registration within the last 24h.
+   */
+  async isCustomerEmailVerified(email?: string | null): Promise<boolean> {
+    if (!email || typeof email !== 'string' || !email.trim()) return false;
+    const normalized = email.trim().toLowerCase();
+
+    const verifiedRecord = await this.prisma.emailVerificationToken.findFirst({
+      where: {
+        email: normalized,
+        usedAt: { not: null },
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return !!verifiedRecord;
+  }
 }

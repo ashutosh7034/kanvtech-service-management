@@ -1,7 +1,9 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { TicketStatus, UserRole } from '@prisma/client';
+import { validateEmail, validateOptionalEmail, validatePhone, validateOptionalPhone, validateOptionalGSTN } from '../common/validation.util';
+import { EmailVerificationService } from '../email-verification/email-verification.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
@@ -10,6 +12,7 @@ export class CompaniesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    @Optional() private readonly emailVerificationService?: EmailVerificationService,
   ) {}
 
   async getCompanies(params: {
@@ -131,16 +134,29 @@ export class CompaniesService {
         },
         products: {
           include: {
-            product: true,
+            product: {
+              include: {
+                modules: {
+                  where: { isActive: true },
+                  include: {
+                    submodules: {
+                      where: { isActive: true },
+                    },
+                  },
+                },
+              },
+            },
             modules: {
               include: {
                 module: {
                   include: {
-                    submodules: true,
-                  }
-                }
-              }
-            }
+                    submodules: {
+                      where: { isActive: true },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
         branches: {
@@ -182,12 +198,16 @@ export class CompaniesService {
     return {
       id: c.id,
       company_name: c.companyName,
+      companyName: c.companyName,
       address: c.address,
       gstn: c.gstn,
       primary_email: c.primaryEmail,
+      primaryEmail: c.primaryEmail,
       alternate_emails: c.alternateEmails,
       contact_person: c.contactPerson,
+      contactPerson: c.contactPerson,
       contact_phone: c.contactPhone,
+      contactPhone: c.contactPhone,
       contact_address: c.contactAddress,
       contact_status: c.contactStatus,
       alternate_contact: c.alternateContact,
@@ -210,23 +230,49 @@ export class CompaniesService {
         is_active: ct.isActive ? 1 : 0,
         created_at: ct.createdAt,
       })),
-      products: c.products.map((cp) => ({
-        id: cp.id,
-        product_id: cp.productId,
-        code: cp.product.code,
-        name: cp.product.name,
-        category: cp.product.category,
-        description: cp.product.description,
-        is_active: cp.isActive ? 1 : 0,
-        purchase_type: cp.purchaseType,
-        purchased_at: cp.purchasedAt,
-        notes: cp.notes,
-        modules: cp.modules.map(m => m.module),
-      })),
+      products: c.products.map((cp) => {
+        let rawModules: any[] = [];
+        if (cp.purchaseType === 'COMPLETE') {
+          rawModules = (cp.product?.modules || []).filter((m: any) => m.isActive !== false);
+        } else {
+          rawModules = (cp.modules || []).map((m: any) => m.module).filter(Boolean);
+        }
+
+        const mappedModules = rawModules.map((m: any) => ({
+          id: m.id,
+          name: m.name,
+          description: m.description,
+          isActive: m.isActive,
+          submodules: (m.submodules || []).filter((s: any) => s.isActive !== false).map((s: any) => ({
+            id: s.id,
+            name: s.name,
+            description: s.description,
+            isActive: s.isActive,
+          })),
+        }));
+
+        return {
+          id: cp.id,
+          product_id: cp.productId,
+          productId: cp.productId,
+          code: cp.product?.code,
+          name: cp.product?.name,
+          category: cp.product?.category,
+          description: cp.product?.description,
+          is_active: cp.isActive ? 1 : 0,
+          isActive: cp.isActive,
+          purchase_type: cp.purchaseType,
+          purchaseType: cp.purchaseType,
+          purchased_at: cp.purchasedAt,
+          notes: cp.notes,
+          modules: mappedModules,
+        };
+      }),
       branches: c.branches.map((b) => ({
         id: b.id,
         company_id: b.companyId,
         branch_name: b.branchName,
+        gstn: b.gstn,
         address: b.address,
         city: b.city,
         state: b.state,
@@ -268,16 +314,16 @@ export class CompaniesService {
   async createCompany(data: any, actorUserId?: number): Promise<string> {
     const companyName = (data.company_name || data.companyName || '').trim();
     const address = (data.address || data.address_line1 || data.addressLine1 || (data.city ? `${data.city}, ${data.state || ''}` : '')).trim();
-    const primaryEmail = (data.primary_email || data.primaryEmail || '').trim().toLowerCase();
+    const primaryEmail = validateEmail(data.primary_email || data.primaryEmail, 'Primary corporate email');
     const contactPerson = (data.contact_person || data.contactPerson || '').trim();
-    const contactPhone = (data.contact_phone || data.contactPhone || '').trim();
-    const gstn = (data.gstn || '').trim();
+    const contactPhone = validatePhone(data.contact_phone || data.contactPhone, 'Contact phone');
+    const gstn = validateOptionalGSTN(data.gstn);
     const alternateEmails = (data.alternate_emails || data.alternateEmails || '').trim();
     const contactAddress = (data.contact_address || data.contactAddress || '').trim();
     const alternateContact = (data.alternate_contact || data.alternateContact || '').trim();
-    const alternateContactPhone = (data.alternate_contact_phone || data.alternateContactPhone || '').trim();
+    const alternateContactPhone = validateOptionalPhone(data.alternate_contact_phone || data.alternateContactPhone, 'Alternate contact phone');
     const alternateContactAddress = (data.alternate_contact_address || data.alternateContactAddress || '').trim();
-    const alternateContactEmail = (data.alternate_contact_email || data.alternateContactEmail || '').trim().toLowerCase();
+    const alternateContactEmail = validateOptionalEmail(data.alternate_contact_email || data.alternateContactEmail, 'Alternate contact email');
 
     if (!companyName) {
       throw new BadRequestException('Company name is required.');
@@ -285,14 +331,26 @@ export class CompaniesService {
     if (!address) {
       throw new BadRequestException('Address is required.');
     }
-    if (!primaryEmail) {
-      throw new BadRequestException('Primary email is required.');
-    }
     if (!contactPerson) {
       throw new BadRequestException('Contact person is required.');
     }
-    if (!contactPhone) {
-      throw new BadRequestException('Contact phone is required.');
+
+    // MANDATORY CORPORATE EMAIL VERIFICATION:
+    // Backend verification check ensuring the primary corporate email was verified via the verification service.
+    let isEmailVerified = Boolean(data.skipEmailVerification);
+    if (!isEmailVerified) {
+      if (this.emailVerificationService) {
+        isEmailVerified = await this.emailVerificationService.isCustomerEmailVerified(primaryEmail);
+      } else {
+        const rec = await this.prisma.emailVerificationToken.findFirst({
+          where: { email: primaryEmail, usedAt: { not: null } },
+        });
+        isEmailVerified = !!rec;
+      }
+    }
+
+    if (!isEmailVerified) {
+      throw new BadRequestException('Please verify the corporate email before continuing.');
     }
 
     // MANDATORY CUSTOMER PRODUCT VALIDATION:
@@ -486,21 +544,37 @@ export class CompaniesService {
     const alternateContactEmail = data.alternate_contact_email ?? data.alternateContactEmail;
     const isActive = data.is_active !== undefined ? Boolean(data.is_active) : (data.isActive !== undefined ? Boolean(data.isActive) : undefined);
 
+    const validPrimaryEmail = primaryEmail !== undefined ? validateEmail(primaryEmail, 'Primary corporate email') : undefined;
+    const validGstn = gstn !== undefined ? validateOptionalGSTN(gstn) : undefined;
+    const validContactPhone = contactPhone !== undefined ? validatePhone(contactPhone, 'Contact phone') : undefined;
+    const validAltPhone = alternateContactPhone !== undefined ? validateOptionalPhone(alternateContactPhone, 'Alternate contact phone') : undefined;
+    const validAltEmail = alternateContactEmail !== undefined ? validateOptionalEmail(alternateContactEmail, 'Alternate contact email') : undefined;
+
+    if (companyName !== undefined && !companyName.trim()) {
+      throw new BadRequestException('Company name cannot be empty.');
+    }
+    if (address !== undefined && !address.trim()) {
+      throw new BadRequestException('Address cannot be empty.');
+    }
+    if (contactPerson !== undefined && !contactPerson.trim()) {
+      throw new BadRequestException('Contact person cannot be empty.');
+    }
+
     await this.prisma.company.update({
       where: { id },
       data: {
         companyName: companyName !== undefined ? companyName.trim() : undefined,
         address: address !== undefined ? address.trim() : undefined,
-        gstn: gstn !== undefined ? gstn.trim() : undefined,
-        primaryEmail: primaryEmail !== undefined ? primaryEmail.trim().toLowerCase() : undefined,
+        gstn: validGstn !== undefined ? validGstn : undefined,
+        primaryEmail: validPrimaryEmail !== undefined ? validPrimaryEmail : undefined,
         alternateEmails: alternateEmails !== undefined ? alternateEmails.trim() : undefined,
         contactPerson: contactPerson !== undefined ? contactPerson.trim() : undefined,
-        contactPhone: contactPhone !== undefined ? contactPhone.trim() : undefined,
+        contactPhone: validContactPhone !== undefined ? validContactPhone : undefined,
         contactAddress: contactAddress !== undefined ? contactAddress.trim() : undefined,
         alternateContact: alternateContact !== undefined ? alternateContact.trim() : undefined,
-        alternateContactPhone: alternateContactPhone !== undefined ? alternateContactPhone.trim() : undefined,
+        alternateContactPhone: validAltPhone !== undefined ? validAltPhone : undefined,
         alternateContactAddress: alternateContactAddress !== undefined ? alternateContactAddress.trim() : undefined,
-        alternateContactEmail: alternateContactEmail !== undefined ? alternateContactEmail.trim().toLowerCase() : undefined,
+        alternateContactEmail: validAltEmail !== undefined ? validAltEmail : undefined,
         isActive,
       },
     });
@@ -600,10 +674,21 @@ export class CompaniesService {
   }
 
   async removeCompanyProduct(companyId: string, productId: string, actorUserId?: number) {
-    const existing = await this.prisma.companyProduct.findUnique({
+    // productId might be the Master Product ID (e.g. PROD-0001) or the CompanyProduct integer ID
+    let existing = await this.prisma.companyProduct.findUnique({
       where: { uq_company_product: { companyId, productId } },
     });
+
+    if (!existing && !isNaN(Number(productId))) {
+      existing = await this.prisma.companyProduct.findUnique({
+        where: { id: Number(productId), companyId },
+      });
+    }
+
     if (!existing) throw new NotFoundException('Product assignment not found for this customer');
+    
+    // Use the actual master productId for branch deactivations
+    const masterProductId = existing.productId;
 
     // Check if customer has only 1 product left
     const totalActiveProducts = await this.prisma.companyProduct.count({
@@ -627,7 +712,7 @@ export class CompaniesService {
 
     if (branchIds.length > 0) {
       await this.prisma.branchProduct.updateMany({
-        where: { branchId: { in: branchIds }, productId },
+        where: { branchId: { in: branchIds }, productId: masterProductId },
         data: { isActive: false },
       });
     }
@@ -637,7 +722,7 @@ export class CompaniesService {
       action: 'CUSTOMER_PRODUCT_REMOVED',
       entityType: 'COMPANY',
       entityId: companyId,
-      newValues: { companyId, productId },
+      newValues: { companyId, productId: masterProductId },
     });
   }
 
@@ -733,20 +818,20 @@ export class CompaniesService {
     if (!company) throw new NotFoundException('Company not found');
 
     const branchName = (data.branch_name || data.branchName || '').trim();
+    const gstn = validateOptionalGSTN(data.gstn);
     const address = (data.address || '').trim();
     const city = (data.city || '').trim();
     const state = (data.state || '').trim();
     const pincode = (data.pincode || data.postal_code || '').trim();
     const contactPerson = (data.contact_person || data.contactPerson || '').trim();
-    const contactPhone = (data.contact_phone || data.contactPhone || '').trim();
-    const contactEmail = (data.contact_email || data.contactEmail || '').trim().toLowerCase();
+    const contactPhone = validatePhone(data.contact_phone || data.contactPhone, 'Branch contact phone');
+    const contactEmail = validateOptionalEmail(data.contact_email || data.contactEmail, 'Branch contact email');
 
     if (!branchName) throw new BadRequestException('Branch name is required.');
     if (!address) throw new BadRequestException('Branch address is required.');
     if (!city) throw new BadRequestException('Branch city is required.');
     if (!state) throw new BadRequestException('Branch state is required.');
     if (!contactPerson) throw new BadRequestException('Branch contact person is required.');
-    if (!contactPhone) throw new BadRequestException('Branch contact phone is required.');
 
     // BRANCH PRODUCT VALIDATION:
     // Branch Products MUST be a subset of Customer-Owned Products.
@@ -790,6 +875,7 @@ export class CompaniesService {
         id: branchId,
         companyId,
         branchName,
+        gstn: gstn || null,
         address,
         city,
         state,
@@ -812,7 +898,7 @@ export class CompaniesService {
       action: 'BRANCH_CREATED',
       entityType: 'BRANCH',
       entityId: branchId,
-      newValues: { id: branchId, companyId, branchName, city, productIds },
+      newValues: { id: branchId, companyId, branchName, gstn, city, productIds },
     });
 
     return branchId;
@@ -823,6 +909,7 @@ export class CompaniesService {
     if (!existing) throw new NotFoundException('Branch not found');
 
     const branchName = data.branch_name ?? data.branchName;
+    const gstn = data.gstn;
     const address = data.address;
     const city = data.city;
     const state = data.state;
@@ -834,17 +921,22 @@ export class CompaniesService {
     const alternateEmails = data.alternate_emails ?? data.alternateEmails;
     const status = data.status;
 
+    const validGstn = gstn !== undefined ? validateOptionalGSTN(gstn) : undefined;
+    const validContactPhone = contactPhone !== undefined ? validatePhone(contactPhone, 'Branch contact phone') : undefined;
+    const validContactEmail = contactEmail !== undefined ? validateOptionalEmail(contactEmail, 'Branch contact email') : undefined;
+
     await this.prisma.companyBranch.update({
       where: { id: branchId },
       data: {
         branchName: branchName !== undefined ? branchName.trim() : undefined,
+        gstn: validGstn !== undefined ? validGstn : undefined,
         address: address !== undefined ? address.trim() : undefined,
         city: city !== undefined ? city.trim() : undefined,
         state: state !== undefined ? state.trim() : undefined,
         pincode: pincode !== undefined ? pincode.trim() : undefined,
         contactPerson: contactPerson !== undefined ? contactPerson.trim() : undefined,
-        contactPhone: contactPhone !== undefined ? contactPhone.trim() : undefined,
-        contactEmail: contactEmail !== undefined ? contactEmail.trim().toLowerCase() : undefined,
+        contactPhone: validContactPhone !== undefined ? validContactPhone : undefined,
+        contactEmail: validContactEmail !== undefined ? validContactEmail : undefined,
         alternatePhones: alternatePhones !== undefined ? alternatePhones.trim() : undefined,
         alternateEmails: alternateEmails !== undefined ? alternateEmails.trim().toLowerCase() : undefined,
         status: status !== undefined ? status : undefined,
@@ -915,9 +1007,16 @@ export class CompaniesService {
   }
 
   async removeBranchProduct(branchId: string, productId: string, actorUserId?: number) {
-    const existing = await this.prisma.branchProduct.findUnique({
+    let existing = await this.prisma.branchProduct.findUnique({
       where: { uq_branch_product: { branchId, productId } },
     });
+
+    if (!existing && !isNaN(Number(productId))) {
+      existing = await this.prisma.branchProduct.findUnique({
+        where: { id: Number(productId), branchId },
+      });
+    }
+
     if (!existing) throw new NotFoundException('Product assignment not found for this branch');
 
     await this.prisma.branchProduct.update({

@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { Employee, Department } from '../../types';
-import { Users, Search, Plus, ShieldAlert, CheckCircle2, Clock, Layers, KeyRound, ShieldCheck, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Users, Search, Plus, ShieldAlert, CheckCircle2, Clock, Layers, KeyRound, ShieldCheck, Eye, EyeOff, AlertCircle, Edit2, Trash2, Power, UserCheck, UserX } from 'lucide-react';
+import { isValidEmail, isValidPhone, validatePhoneDetailed } from '../../utils/validation';
+import { PhoneInput } from '../../components/common/PhoneInput';
 
 export const EmployeesPage: React.FC = () => {
   const { user } = useAuth();
@@ -15,6 +17,9 @@ export const EmployeesPage: React.FC = () => {
   const [availFilter, setAvailFilter] = useState('');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [formData, setFormData] = useState({
@@ -41,30 +46,178 @@ export const EmployeesPage: React.FC = () => {
   const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   const [generatedTempPassword, setGeneratedTempPassword] = useState<string | null>(null);
 
+  const [levelMgmtEnabled, setLevelMgmtEnabled] = useState(true);
+
+  const handleToggleLevelMgmt = async () => {
+    try {
+      const newState = !levelMgmtEnabled;
+      await api.toggleLevelManagement(newState);
+      setLevelMgmtEnabled(newState);
+    } catch (err: any) {
+      alert(`Failed to toggle: ${err.message}`);
+    }
+  };
+
+  const showFeedback = (msg: string, isError = false) => {
+    if (isError) {
+      setErrorMessage(msg);
+      setSuccessMessage(null);
+    } else {
+      setSuccessMessage(msg);
+      setErrorMessage(null);
+    }
+    setTimeout(() => {
+      setSuccessMessage(null);
+      setErrorMessage(null);
+    }, 4000);
+  };
+
+  // Edit Employee Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    alternate_emails: [] as string[],
+    alternate_phones: [] as string[],
+    department_id: '',
+    designation: 'L1 Support Specialist',
+    level: 'L1' as 'MANAGER' | 'L1' | 'L2' | 'L3',
+    manager_id: '',
+    availability: 'AVAILABLE',
+    status: 'ACTIVE',
+  });
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+
+  const handleOpenEdit = (emp: Employee) => {
+    setEditingEmployee(emp);
+    const altEmails = emp.alternate_emails || (emp as any).alternateEmails;
+    const altPhones = emp.alternate_phones || (emp as any).alternatePhones;
+    setEditFormData({
+      name: emp.name || '',
+      email: emp.email || '',
+      phone: emp.phone || '',
+      alternate_emails: altEmails ? altEmails.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+      alternate_phones: altPhones ? altPhones.split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+      department_id: emp.department_id || (emp as any).departmentId || '',
+      designation: emp.designation || 'L1 Support Specialist',
+      level: (emp.level || 'L1') as any,
+      manager_id: emp.manager_id || (emp as any).managerId || '',
+      availability: emp.availability || 'AVAILABLE',
+      status: emp.status || 'ACTIVE',
+    });
+    setEditFormError(null);
+    setShowEditModal(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingEmployee) return;
+    if (!editFormData.name.trim()) {
+      setEditFormError('Employee name is required.');
+      return;
+    }
+    if (!editFormData.phone.trim()) {
+      setEditFormError('Contact phone is required.');
+      return;
+    }
+    const phoneVal = validatePhoneDetailed(editFormData.phone);
+    if (!phoneVal.valid) {
+      setEditFormError(phoneVal.error || 'Please enter a valid contact phone number.');
+      return;
+    }
+
+    for (const ph of editFormData.alternate_phones) {
+      if (ph.trim()) {
+        const altPhoneVal = validatePhoneDetailed(ph);
+        if (!altPhoneVal.valid) {
+          setEditFormError(`Invalid alternate phone: ${altPhoneVal.error}`);
+          return;
+        }
+      }
+    }
+
+    setEditSaving(true);
+    try {
+      const payload = {
+        ...editFormData,
+        alternate_emails: editFormData.alternate_emails.filter(e => e.trim() !== '').join(','),
+        alternate_phones: editFormData.alternate_phones.filter(p => p.trim() !== '').join(','),
+      };
+      await api.updateEmployee(editingEmployee.id, payload);
+      setShowEditModal(false);
+      await loadEmployees();
+      showFeedback(`Employee "${editFormData.name}" updated successfully.`);
+    } catch (err: any) {
+      setEditFormError(err.message || 'Failed to update employee');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleToggleStatus = async (emp: Employee) => {
+    const isActivating = emp.status !== 'ACTIVE';
+    const action = isActivating ? 'Activate' : 'Deactivate';
+    if (!window.confirm(`${action} employee "${emp.name}" (${emp.id})?`)) return;
+    setActionLoadingId(emp.id);
+    try {
+      await api.toggleEmployeeStatus(emp.id);
+      await loadEmployees();
+      showFeedback(`Employee "${emp.name}" ${isActivating ? 'activated' : 'deactivated'} successfully.`);
+    } catch (err: any) {
+      showFeedback(`Failed to ${action.toLowerCase()} employee: ${err.message}`, true);
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
   const handlePromote = async (emp: Employee) => {
-    const nextTier = emp.level === 'L1' ? 'L2' : emp.level === 'L2' ? 'L3' : 'MANAGER';
+    // Correct 4-Tier Ladder: L1 -> L2 -> L3 -> MANAGER
+    const nextTier = emp.level === 'L1' ? 'L2' : emp.level === 'L2' ? 'L3' : emp.level === 'L3' ? 'MANAGER' : null;
+    if (!nextTier) {
+      showFeedback(`Cannot promote employee at level ${emp.level}.`, true);
+      return;
+    }
     if (!window.confirm(`Promote ${emp.name} from ${emp.level} to ${nextTier} in ${emp.department}?`)) return;
+    setActionLoadingId(emp.id);
     try {
       await api.promoteEmployee(emp.id);
-      loadEmployees();
+      await loadEmployees();
+      showFeedback(`Employee "${emp.name}" promoted to ${nextTier} successfully.`);
     } catch (err: any) {
-      alert(`Promotion failed: ${err.message}`);
+      showFeedback(`Unable to promote employee. ${err.message || 'Please try again.'}`, true);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
   const handleDemote = async (emp: Employee) => {
-    const prevTier = emp.level === 'L3' ? 'L2' : 'L1';
+    // Correct 4-Tier Ladder: MANAGER -> L3 -> L2 -> L1
+    const prevTier = emp.level === 'MANAGER' ? 'L3' : emp.level === 'L3' ? 'L2' : emp.level === 'L2' ? 'L1' : null;
+    if (!prevTier) {
+      showFeedback(`Cannot demote employee at level ${emp.level}.`, true);
+      return;
+    }
     if (!window.confirm(`Demote ${emp.name} from ${emp.level} to ${prevTier} in ${emp.department}?`)) return;
+    setActionLoadingId(emp.id);
     try {
       await api.demoteEmployee(emp.id);
-      loadEmployees();
+      await loadEmployees();
+      showFeedback(`Employee "${emp.name}" demoted to ${prevTier} successfully.`);
     } catch (err: any) {
-      alert(`Demotion failed: ${err.message}`);
+      showFeedback(`Unable to demote employee. ${err.message || 'Please try again.'}`, true);
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
   useEffect(() => {
     loadDepartments();
+    api.getLevelManagementStatus().then(res => {
+      if (res.success) setLevelMgmtEnabled(res.enabled);
+    }).catch(console.error);
   }, []);
 
   useEffect(() => {
@@ -74,7 +227,7 @@ export const EmployeesPage: React.FC = () => {
   const loadDepartments = async () => {
     try {
       const res = await api.getDepartments();
-      const depts: Department[] = res.departments || res.data || [];
+      const depts: Department[] = Array.isArray(res) ? res : res.departments || res.data || [];
       setDepartments(depts);
       if (depts.length > 0 && !formData.department_id) {
         setFormData((prev) => ({ ...prev, department_id: depts[0].id }));
@@ -95,15 +248,55 @@ export const EmployeesPage: React.FC = () => {
       });
       setEmployees(res.data || res.employees || []);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to load employees:', err);
     } finally {
       setLoading(false);
     }
+    // Explicitly return to allow callers to await
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+
+    if (!formData.name.trim()) {
+      setFormError('Employee name is required.');
+      return;
+    }
+    if (!formData.email.trim()) {
+      setFormError('Email address is required.');
+      return;
+    }
+    if (!isValidEmail(formData.email)) {
+      setFormError('Please enter a valid corporate email address (e.g. employee@kanvtech.com).');
+      return;
+    }
+    if (!formData.phone.trim()) {
+      setFormError('Contact phone is required.');
+      return;
+    }
+    const phoneVal = validatePhoneDetailed(formData.phone);
+    if (!phoneVal.valid) {
+      setFormError(phoneVal.error || 'Please enter a valid contact phone number.');
+      return;
+    }
+
+    const invalidAltEmail = formData.alternate_emails.find((em) => em.trim() && !isValidEmail(em));
+    if (invalidAltEmail) {
+      setFormError(`Invalid alternate email address: "${invalidAltEmail}". Please enter a valid email format.`);
+      return;
+    }
+
+    for (const ph of formData.alternate_phones) {
+      if (ph.trim()) {
+        const altPhoneVal = validatePhoneDetailed(ph);
+        if (!altPhoneVal.valid) {
+          setFormError(`Invalid alternate phone: ${altPhoneVal.error}`);
+          return;
+        }
+      }
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -135,14 +328,50 @@ export const EmployeesPage: React.FC = () => {
 
   return (
     <div>
+      {/* Promotion/Demotion feedback banner */}
+      {successMessage && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          background: '#f0fdf4', border: '1px solid #16a34a', borderRadius: 8,
+          padding: '12px 20px', color: '#15803d', fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxWidth: 420,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 18 }}>✓</span>
+          {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div style={{
+          position: 'fixed', top: 20, right: 20, zIndex: 9999,
+          background: '#fef2f2', border: '1px solid #dc2626', borderRadius: 8,
+          padding: '12px 20px', color: '#dc2626', fontWeight: 600,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxWidth: 420,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <span style={{ fontSize: 18 }}>✕</span>
+          {errorMessage}
+        </div>
+      )}
       <div className="page-header">
         <div>
           <h2 className="page-title">Specialist Employee Directory & Support Tiers</h2>
-          <div className="page-subtitle">Product-specialized roster across Manager, L1, L2, and L3 tiers with live workload allocation</div>
+          <div className="page-subtitle">Product-specialized roster across Manager, L1, and L2 tiers with live workload allocation</div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          <Plus size={15} /> Add Specialist Employee
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {isAdmin && (
+            <button 
+              className={`btn btn-sm ${levelMgmtEnabled ? 'btn-outline' : ''}`}
+              style={{ backgroundColor: levelMgmtEnabled ? 'transparent' : '#fee2e2', borderColor: levelMgmtEnabled ? '#94a3b8' : '#ef4444', color: levelMgmtEnabled ? '#475569' : '#b91c1c' }}
+              onClick={handleToggleLevelMgmt}
+            >
+              {levelMgmtEnabled ? 'Disable Promotions' : 'Enable Promotions'}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+            <Plus size={15} /> Add Specialist Employee
+          </button>
+        </div>
       </div>
 
       {/* Real Roster Summary Pills */}
@@ -223,7 +452,7 @@ export const EmployeesPage: React.FC = () => {
               <th>Email & Phone</th>
               <th>Active Workload</th>
               <th>Availability</th>
-              {isAdmin && <th style={{ textAlign: 'right' }}>Tier Actions</th>}
+              {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
@@ -241,10 +470,17 @@ export const EmployeesPage: React.FC = () => {
               </tr>
             ) : (
               employees.map((emp) => (
-                <tr key={emp.id}>
+                <tr key={emp.id} style={{ opacity: emp.status === 'INACTIVE' ? 0.7 : 1 }}>
                   <td style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{emp.id}</td>
                   <td>
-                    <div style={{ fontWeight: 600 }}>{emp.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ fontWeight: 600 }}>{emp.name}</div>
+                      {emp.status === 'INACTIVE' && (
+                        <span style={{ fontSize: 10, padding: '1px 5px', borderRadius: 4, background: '#fee2e2', color: '#b91c1c', fontWeight: 600 }}>
+                          INACTIVE
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td>
                     <span
@@ -329,6 +565,18 @@ export const EmployeesPage: React.FC = () => {
                   {isAdmin && (
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {/* Edit Employee Button */}
+                        <button
+                          className="btn btn-outline btn-xs"
+                          style={{ borderColor: '#3b82f6', color: '#1d4ed8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          onClick={() => handleOpenEdit(emp)}
+                          title={`Edit ${emp.name}'s profile`}
+                        >
+                          <Edit2 size={12} color="#2563eb" />
+                          <span>Edit</span>
+                        </button>
+
+                        {/* Reset Password Button */}
                         <button
                           className="btn btn-outline btn-xs"
                           style={{ borderColor: '#64748b', color: '#334155', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
@@ -346,51 +594,92 @@ export const EmployeesPage: React.FC = () => {
                           <span>Reset Password</span>
                         </button>
 
-                        {emp.level === 'L1' && (
+                        {/* Promote/Demote buttons – 4-Tier Ladder: L1 <-> L2 <-> L3 <-> MANAGER */}
+                        {levelMgmtEnabled && emp.level === 'L1' && (
                           <button
                             className="btn btn-outline btn-xs"
                             style={{ borderColor: '#0284c7', color: '#0284c7', fontWeight: 600 }}
                             onClick={() => handlePromote(emp)}
+                            disabled={actionLoadingId === emp.id}
+                            title="Promote this employee to L2"
                           >
-                            Promote to L2
+                            {actionLoadingId === emp.id ? '...' : 'Promote to L2'}
                           </button>
                         )}
-                        {emp.level === 'L2' && (
+                        {levelMgmtEnabled && emp.level === 'L2' && (
                           <>
                             <button
                               className="btn btn-outline btn-xs"
                               style={{ borderColor: '#16a34a', color: '#16a34a', fontWeight: 600 }}
                               onClick={() => handlePromote(emp)}
+                              disabled={actionLoadingId === emp.id}
+                              title="Promote this employee to L3"
                             >
-                              Promote to L3
+                              {actionLoadingId === emp.id ? '...' : 'Promote to L3'}
                             </button>
                             <button
                               className="btn btn-outline btn-xs"
                               style={{ borderColor: '#b45309', color: '#b45309', fontWeight: 600 }}
                               onClick={() => handleDemote(emp)}
+                              disabled={actionLoadingId === emp.id}
+                              title="Demote this employee to L1"
                             >
-                              Demote to L1
+                              {actionLoadingId === emp.id ? '...' : 'Demote to L1'}
                             </button>
                           </>
                         )}
-                        {emp.level === 'L3' && (
+                        {levelMgmtEnabled && emp.level === 'L3' && (
                           <>
                             <button
                               className="btn btn-outline btn-xs"
                               style={{ borderColor: '#16a34a', color: '#16a34a', fontWeight: 600 }}
                               onClick={() => handlePromote(emp)}
+                              disabled={actionLoadingId === emp.id}
+                              title="Promote this L3 employee to Manager"
                             >
-                              Promote to MANAGER
+                              {actionLoadingId === emp.id ? '...' : 'Promote to MANAGER'}
                             </button>
                             <button
                               className="btn btn-outline btn-xs"
                               style={{ borderColor: '#b45309', color: '#b45309', fontWeight: 600 }}
                               onClick={() => handleDemote(emp)}
+                              disabled={actionLoadingId === emp.id}
+                              title="Demote this L3 employee to L2"
                             >
-                              Demote to L2
+                              {actionLoadingId === emp.id ? '...' : 'Demote to L2'}
                             </button>
                           </>
                         )}
+                        {levelMgmtEnabled && emp.level === 'MANAGER' && (
+                          <button
+                            className="btn btn-outline btn-xs"
+                            style={{ borderColor: '#b45309', color: '#b45309', fontWeight: 600 }}
+                            onClick={() => handleDemote(emp)}
+                            disabled={actionLoadingId === emp.id}
+                            title="Demote this Manager to L3"
+                          >
+                            {actionLoadingId === emp.id ? '...' : 'Demote to L3'}
+                          </button>
+                        )}
+
+                        {/* Status Toggle (Deactivate / Activate) */}
+                        <button
+                          className="btn btn-outline btn-xs"
+                          style={{
+                            borderColor: emp.status === 'ACTIVE' ? '#f87171' : '#4ade80',
+                            color: emp.status === 'ACTIVE' ? '#b91c1c' : '#15803d',
+                            fontWeight: 600,
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 3,
+                          }}
+                          onClick={() => handleToggleStatus(emp)}
+                          disabled={actionLoadingId === emp.id}
+                          title={emp.status === 'ACTIVE' ? 'Deactivate Employee' : 'Activate Employee'}
+                        >
+                          <Power size={11} />
+                          <span>{emp.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
+                        </button>
                       </div>
                     </td>
                   )}
@@ -462,13 +751,10 @@ export const EmployeesPage: React.FC = () => {
                   </div>
                   <div className="form-group">
                     <label className="form-label">Phone Number <span className="required">*</span></label>
-                    <input
-                      type="text"
-                      className="form-control"
+                    <PhoneInput
                       required
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+91 98765 11001"
+                      onChange={(val) => setFormData({ ...formData, phone: val })}
                     />
                   </div>
                 </div>
@@ -768,6 +1054,253 @@ export const EmployeesPage: React.FC = () => {
                   disabled={resetSaving}
                 >
                   {resetSaving ? 'Resetting...' : 'Reset Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Employee Modal */}
+      {showEditModal && editingEmployee && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: 650 }}>
+            <div className="modal-header">
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Edit2 size={20} color="#0b3b60" />
+                <div>
+                  <div className="modal-title">Edit Specialist Employee</div>
+                  <div style={{ fontSize: 11, color: '#64748b' }}>ID: {editingEmployee.id} • {editingEmployee.email}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowEditModal(false)}
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit}>
+              <div className="modal-body" style={{ maxHeight: '68vh', overflowY: 'auto' }}>
+                {editFormError && (
+                  <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>
+                    {editFormError}
+                  </div>
+                )}
+
+                <div className="form-group">
+                  <label className="form-label">Full Name <span className="required">*</span></label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    required
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Primary Corporate Email</label>
+                    <input
+                      type="email"
+                      className="form-control"
+                      disabled
+                      value={editFormData.email}
+                      style={{ background: '#f1f5f9', color: '#64748b' }}
+                      title="Primary email cannot be modified directly"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Contact Phone <span className="required">*</span></label>
+                    <PhoneInput
+                      required
+                      value={editFormData.phone}
+                      onChange={(val) => setEditFormData({ ...editFormData, phone: val })}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Department Specialization <span className="required">*</span></label>
+                    <select
+                      className="form-control"
+                      required
+                      value={editFormData.department_id}
+                      onChange={(e) => setEditFormData({ ...editFormData, department_id: e.target.value })}
+                    >
+                      <option value="">Select Department</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Support Tier Level <span className="required">*</span></label>
+                    <select
+                      className="form-control"
+                      required
+                      value={editFormData.level}
+                      onChange={(e) => {
+                        const lvl = e.target.value as any;
+                        setEditFormData({
+                          ...editFormData,
+                          level: lvl,
+                          designation: lvl === 'MANAGER' ? 'Support Manager' : `${lvl} Support Specialist`,
+                        });
+                      }}
+                    >
+                      <option value="L1">Tier L1 (Frontline)</option>
+                      <option value="L2">Tier L2 (Senior Specialist)</option>
+                      <option value="L3">Tier L3 (Principal Specialist)</option>
+                      <option value="MANAGER">Manager (Oversight & Reassignment)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Designation Title</label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      value={editFormData.designation}
+                      onChange={(e) => setEditFormData({ ...editFormData, designation: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Reporting Manager</label>
+                    <select
+                      className="form-control"
+                      value={editFormData.manager_id}
+                      onChange={(e) => setEditFormData({ ...editFormData, manager_id: e.target.value })}
+                    >
+                      <option value="">No Direct Manager</option>
+                      {employees
+                        .filter((emp) => emp.level === 'MANAGER' && emp.id !== editingEmployee.id)
+                        .map((mgr) => (
+                          <option key={mgr.id} value={mgr.id}>
+                            {mgr.name} ({mgr.department || 'General'})
+                          </option>
+                        ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label className="form-label">Availability Status</label>
+                    <select
+                      className="form-control"
+                      value={editFormData.availability}
+                      onChange={(e) => setEditFormData({ ...editFormData, availability: e.target.value as any })}
+                    >
+                      <option value="AVAILABLE">AVAILABLE (Accepting tickets)</option>
+                      <option value="BUSY">BUSY (Active workload)</option>
+                      <option value="OFFLINE">OFFLINE (Not on shift)</option>
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Account Status</label>
+                    <select
+                      className="form-control"
+                      value={editFormData.status}
+                      onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as any })}
+                    >
+                      <option value="ACTIVE">ACTIVE (Enabled)</option>
+                      <option value="INACTIVE">INACTIVE (Disabled)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Additional Emails */}
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label className="form-label" style={{ margin: 0 }}>Additional Emails</label>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      onClick={() => setEditFormData({ ...editFormData, alternate_emails: [...editFormData.alternate_emails, ''] })}
+                    >
+                      + Add Email
+                    </button>
+                  </div>
+                  {editFormData.alternate_emails.map((email, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="email"
+                        className="form-control"
+                        value={email}
+                        onChange={(e) => {
+                          const newEmails = [...editFormData.alternate_emails];
+                          newEmails[idx] = e.target.value;
+                          setEditFormData({ ...editFormData, alternate_emails: newEmails });
+                        }}
+                        placeholder="Alternate email"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-xs"
+                        onClick={() => {
+                          const newEmails = editFormData.alternate_emails.filter((_, i) => i !== idx);
+                          setEditFormData({ ...editFormData, alternate_emails: newEmails });
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Additional Phones */}
+                <div className="form-group" style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <label className="form-label" style={{ margin: 0 }}>Additional Phones</label>
+                    <button
+                      type="button"
+                      className="btn btn-outline btn-xs"
+                      onClick={() => setEditFormData({ ...editFormData, alternate_phones: [...editFormData.alternate_phones, ''] })}
+                    >
+                      + Add Phone
+                    </button>
+                  </div>
+                  {editFormData.alternate_phones.map((phone, idx) => (
+                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <PhoneInput
+                        value={phone}
+                        onChange={(val) => {
+                          const newPhones = [...editFormData.alternate_phones];
+                          newPhones[idx] = val;
+                          setEditFormData({ ...editFormData, alternate_phones: newPhones });
+                        }}
+                        placeholder="Alternate phone"
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-xs"
+                        style={{ alignSelf: 'center', padding: '7px 10px' }}
+                        onClick={() => {
+                          const newPhones = editFormData.alternate_phones.filter((_, i) => i !== idx);
+                          setEditFormData({ ...editFormData, alternate_phones: newPhones });
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={editSaving}>
+                  {editSaving ? 'Saving Changes...' : 'Save Employee Details'}
                 </button>
               </div>
             </form>

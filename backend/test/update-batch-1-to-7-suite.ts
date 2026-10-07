@@ -110,6 +110,7 @@ async function runSuite() {
       contact_person: 'Rohan Verma',
       contact_phone: '+91 98220 11111',
       product_ids: [tallyProd.id],
+      skipEmailVerification: true,
     });
     const c = await companiesService.getCompanyById(testCompanyId);
     assert.strictEqual(c.products.length, 1);
@@ -124,6 +125,7 @@ async function runSuite() {
       contact_person: 'Pooja Hegde',
       contact_phone: '+91 98220 22222',
       product_ids: [tallyProd.id, spineProd.id, biosProd.id],
+      skipEmailVerification: true,
     });
     const c = await companiesService.getCompanyById(testMultiCompId);
     assert.strictEqual(c.products.length, 3);
@@ -505,6 +507,7 @@ async function runSuite() {
       contact_person: 'Dinesh Patel',
       contact_phone: '+91 98220 77777',
       product_ids: [tallyProd.id],
+      skipEmailVerification: true,
     });
     const contact = await prisma.companyContact.findFirst({ where: { companyId: noBranchComp } });
     assert(contact);
@@ -663,6 +666,7 @@ async function runSuite() {
       contact_person: 'Sunil Gavaskar',
       contact_phone: '+91 98220 99999',
       product_ids: [tallyProd.id],
+      skipEmailVerification: true,
     });
     const user = await prisma.user.findUnique({ where: { email: newCustEmail } });
     assert(user);
@@ -762,6 +766,7 @@ async function runSuite() {
       contact_person: 'Person A',
       contact_phone: '+91 99999 11111',
       product_ids: [tallyProd.id],
+      skipEmailVerification: true,
     });
     const compB = await companiesService.createCompany({
       company_name: `Isolation Comp B ${timestamp}`,
@@ -770,6 +775,7 @@ async function runSuite() {
       contact_person: 'Person B',
       contact_phone: '+91 99999 22222',
       product_ids: [tallyProd.id],
+      skipEmailVerification: true,
     });
     assert.notStrictEqual(compA, compB);
   });

@@ -4,6 +4,7 @@ import {
   Post,
   Put,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
@@ -38,6 +39,22 @@ export class EmployeesController {
     return { success: true, employees: list, data: list };
   }
 
+  @Get('level-management/status')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Check if employee level management is enabled' })
+  async getLevelManagementStatus() {
+    const enabled = await this.employeesService.isLevelManagementEnabled();
+    return { success: true, enabled };
+  }
+
+  @Post('level-management/toggle')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Enable or disable employee level management' })
+  async toggleLevelManagement(@Body() body: { enabled: boolean }, @Request() req: any) {
+    await this.employeesService.toggleLevelManagement(body.enabled, req.user?.id || req.user?.userId);
+    return { success: true, message: `Employee level management ${body.enabled ? 'enabled' : 'disabled'}` };
+  }
+
   @Get(':id')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get employee details and handled tickets' })
@@ -68,20 +85,39 @@ export class EmployeesController {
   @Post(':id/promote')
   @Patch(':id/promote')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Promote employee to the next tier (L1 -> L2 or L2 -> L3)' })
-  async promoteEmployee(@Param('id') id: string, @Request() req: any) {
-    const updated = await this.employeesService.promoteEmployee(id, req.user?.id || req.user?.userId);
+  @ApiOperation({ summary: 'Promote employee to a specific tier or next tier' })
+  async promoteEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const updated = await this.employeesService.promoteEmployee(id, body?.level, req.user?.id || req.user?.userId);
     return { success: true, employee: updated, message: 'Employee promoted successfully' };
   }
 
   @Post(':id/demote')
   @Patch(':id/demote')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Demote employee to the lower tier (L3 -> L2 or L2 -> L1)' })
-  async demoteEmployee(@Param('id') id: string, @Request() req: any) {
-    const updated = await this.employeesService.demoteEmployee(id, req.user?.id || req.user?.userId);
+  @ApiOperation({ summary: 'Demote employee to a specific tier or lower tier' })
+  async demoteEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const updated = await this.employeesService.demoteEmployee(id, body?.level, req.user?.id || req.user?.userId);
     return { success: true, employee: updated, message: 'Employee demoted successfully' };
   }
+
+  @Post(':id/toggle-status')
+  @Patch(':id/toggle-status')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Toggle employee active/inactive status' })
+  async toggleStatus(@Param('id') id: string, @Request() req: any) {
+    const updated = await this.employeesService.toggleEmployeeStatus(id, req.user?.id || req.user?.userId);
+    return { success: true, employee: updated, message: `Employee status set to ${updated?.status}` };
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Deactivate / delete employee profile' })
+  async deleteEmployee(@Param('id') id: string, @Request() req: any) {
+    const res = await this.employeesService.deleteEmployee(id, req.user?.id || req.user?.userId);
+    return res;
+  }
+
+
 
   @Post('attendance/check-in')
   @ApiOperation({ summary: 'Employee attendance check-in' })

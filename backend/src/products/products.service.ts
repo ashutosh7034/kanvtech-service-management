@@ -10,18 +10,48 @@ export class ProductsService {
   ) {}
 
   async generateProductId(): Promise<string> {
+    const allProds = await this.prisma.product.findMany({ select: { id: true } });
+    let maxNum = 0;
+    for (const p of allProds) {
+      const match = p.id.match(/^PROD-(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
     const nextSeq = await this.prisma.getNextSequence('PRODUCT_SEQ');
-    return `PROD-${String(nextSeq).padStart(4, '0')}`;
+    const safeSeq = Math.max(nextSeq, maxNum + 1);
+    return `PROD-${String(safeSeq).padStart(4, '0')}`;
   }
 
   async generateModuleId(): Promise<string> {
+    const allMods = await this.prisma.productModule.findMany({ select: { id: true } });
+    let maxNum = 0;
+    for (const m of allMods) {
+      const match = m.id.match(/^MOD-(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
     const nextSeq = await this.prisma.getNextSequence('PRODUCT_MODULE_SEQ');
-    return `MOD-${String(nextSeq).padStart(4, '0')}`;
+    const safeSeq = Math.max(nextSeq, maxNum + 1);
+    return `MOD-${String(safeSeq).padStart(4, '0')}`;
   }
 
   async generateSubmoduleId(): Promise<string> {
+    const allSmods = await this.prisma.productSubmodule.findMany({ select: { id: true } });
+    let maxNum = 0;
+    for (const s of allSmods) {
+      const match = s.id.match(/^SMOD-(\d+)$/);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > maxNum) maxNum = n;
+      }
+    }
     const nextSeq = await this.prisma.getNextSequence('PRODUCT_SUBMODULE_SEQ');
-    return `SMOD-${String(nextSeq).padStart(4, '0')}`;
+    const safeSeq = Math.max(nextSeq, maxNum + 1);
+    return `SMOD-${String(safeSeq).padStart(4, '0')}`;
   }
 
   async getProducts(params: {
@@ -351,15 +381,30 @@ export class ProductsService {
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Product not found');
 
+    const name = (data.name || '').trim();
+    if (!name) {
+      throw new BadRequestException('Module name is required.');
+    }
+
+    const duplicate = await this.prisma.productModule.findFirst({
+      where: {
+        productId,
+        name: { equals: name, mode: 'insensitive' },
+      },
+    });
+    if (duplicate) {
+      throw new BadRequestException(`Module '${name}' already exists for product '${product.name}'.`);
+    }
+
     const id = await this.generateModuleId();
     const module = await this.prisma.productModule.create({
       data: {
         id,
         productId,
-        name: data.name.trim(),
-        description: data.description?.trim(),
+        name,
+        description: data.description?.trim() || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
-      }
+      },
     });
 
     await this.auditService.log({
@@ -367,7 +412,7 @@ export class ProductsService {
       action: 'PRODUCT_MODULE_CREATED',
       entityType: 'PRODUCT_MODULE',
       entityId: id,
-      newValues: { id, productId, name: module.name }
+      newValues: { id, productId, name: module.name },
     });
 
     return module;
@@ -378,8 +423,22 @@ export class ProductsService {
     if (!existing) throw new NotFoundException('Module not found');
 
     const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name.trim();
-    if (data.description !== undefined) updateData.description = data.description.trim();
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) throw new BadRequestException('Module name cannot be empty.');
+      const duplicate = await this.prisma.productModule.findFirst({
+        where: {
+          productId: existing.productId,
+          name: { equals: name, mode: 'insensitive' },
+          id: { not: moduleId },
+        },
+      });
+      if (duplicate) {
+        throw new BadRequestException(`Module '${name}' already exists for this product.`);
+      }
+      updateData.name = name;
+    }
+    if (data.description !== undefined) updateData.description = data.description?.trim() || null;
     if (data.isActive !== undefined) updateData.isActive = Boolean(data.isActive);
 
     const updated = await this.prisma.productModule.update({
@@ -402,18 +461,33 @@ export class ProductsService {
   // --- Submodule Management ---
 
   async createSubmodule(moduleId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number) {
-    const mod = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
+    const mod = await this.prisma.productModule.findUnique({ where: { id: moduleId }, include: { product: true } });
     if (!mod) throw new NotFoundException('Module not found');
+
+    const name = (data.name || '').trim();
+    if (!name) {
+      throw new BadRequestException('Submodule name is required.');
+    }
+
+    const duplicate = await this.prisma.productSubmodule.findFirst({
+      where: {
+        moduleId,
+        name: { equals: name, mode: 'insensitive' },
+      },
+    });
+    if (duplicate) {
+      throw new BadRequestException(`Submodule '${name}' already exists for module '${mod.name}'.`);
+    }
 
     const id = await this.generateSubmoduleId();
     const submodule = await this.prisma.productSubmodule.create({
       data: {
         id,
         moduleId,
-        name: data.name.trim(),
-        description: data.description?.trim(),
+        name,
+        description: data.description?.trim() || null,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
-      }
+      },
     });
 
     await this.auditService.log({
@@ -421,7 +495,7 @@ export class ProductsService {
       action: 'PRODUCT_SUBMODULE_CREATED',
       entityType: 'PRODUCT_SUBMODULE',
       entityId: id,
-      newValues: { id, moduleId, name: submodule.name }
+      newValues: { id, moduleId, name: submodule.name },
     });
 
     return submodule;
@@ -432,8 +506,22 @@ export class ProductsService {
     if (!existing) throw new NotFoundException('Submodule not found');
 
     const updateData: any = {};
-    if (data.name !== undefined) updateData.name = data.name.trim();
-    if (data.description !== undefined) updateData.description = data.description.trim();
+    if (data.name !== undefined) {
+      const name = data.name.trim();
+      if (!name) throw new BadRequestException('Submodule name cannot be empty.');
+      const duplicate = await this.prisma.productSubmodule.findFirst({
+        where: {
+          moduleId: existing.moduleId,
+          name: { equals: name, mode: 'insensitive' },
+          id: { not: submoduleId },
+        },
+      });
+      if (duplicate) {
+        throw new BadRequestException(`Submodule '${name}' already exists for this module.`);
+      }
+      updateData.name = name;
+    }
+    if (data.description !== undefined) updateData.description = data.description?.trim() || null;
     if (data.isActive !== undefined) updateData.isActive = Boolean(data.isActive);
 
     const updated = await this.prisma.productSubmodule.update({
@@ -459,7 +547,11 @@ export class ProductsService {
 
     const modules = await this.prisma.productModule.findMany({
       where: { productId },
-      include: { submodules: true },
+      include: {
+        submodules: {
+          orderBy: { name: 'asc' },
+        },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -467,8 +559,26 @@ export class ProductsService {
   }
 
   async deleteModule(moduleId: string, actorUserId: number) {
-    const existing = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
+    const existing = await this.prisma.productModule.findUnique({
+      where: { id: moduleId },
+      include: { submodules: true },
+    });
     if (!existing) throw new NotFoundException('Module not found');
+
+    // Safe deletion checks: prevent deleting if linked to operational records
+    const [ticketCount, compProdCount, branchProdCount, taskCount] = await Promise.all([
+      this.prisma.ticket.count({ where: { moduleId } }),
+      this.prisma.companyProductModule.count({ where: { moduleId } }),
+      this.prisma.branchProductModule.count({ where: { moduleId } }),
+      this.prisma.implementationTask.count({ where: { moduleId } }),
+    ]);
+
+    const totalUsage = ticketCount + compProdCount + branchProdCount + taskCount;
+    if (totalUsage > 0) {
+      throw new BadRequestException(
+        `Cannot delete module '${existing.name}' because it is linked to ${ticketCount} ticket(s), ${compProdCount + branchProdCount} customer/branch entitlement(s), and ${taskCount} implementation task(s). Deactivate it instead to preserve operational history.`,
+      );
+    }
 
     await this.prisma.productSubmodule.deleteMany({ where: { moduleId } });
     await this.prisma.productModule.delete({ where: { id: moduleId } });
@@ -487,6 +597,14 @@ export class ProductsService {
   async deleteSubmodule(submoduleId: string, actorUserId: number) {
     const existing = await this.prisma.productSubmodule.findUnique({ where: { id: submoduleId } });
     if (!existing) throw new NotFoundException('Submodule not found');
+
+    // Safe deletion checks: prevent deleting if linked to tickets
+    const ticketCount = await this.prisma.ticket.count({ where: { submoduleId } });
+    if (ticketCount > 0) {
+      throw new BadRequestException(
+        `Cannot delete submodule '${existing.name}' because it is linked to ${ticketCount} ticket(s). Deactivate it instead to preserve operational history.`,
+      );
+    }
 
     await this.prisma.productSubmodule.delete({ where: { id: submoduleId } });
 

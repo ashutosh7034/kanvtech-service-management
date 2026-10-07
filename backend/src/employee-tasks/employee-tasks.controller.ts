@@ -16,45 +16,52 @@ import { EmployeeTasksService } from './employee-tasks.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 
-@ApiTags('Employee Tasks')
+@ApiTags('Employee Tasks / My Tasks')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Controller('employee-tasks')
+@Controller(['employee-tasks', 'my-tasks'])
 export class EmployeeTasksController {
   constructor(private readonly employeeTasksService: EmployeeTasksService) {}
 
-  private getEmployeeId(req: any): string {
-    const eid = req.user?.employeeId;
-    if (!eid) {
-      throw new ForbiddenException('Employee account required to manage tasks.');
-    }
-    return eid;
+  private async getEmployeeId(req: any): Promise<string> {
+    return this.employeeTasksService.resolveEmployeeId(req.user);
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get my task reminders' })
+  @ApiOperation({ summary: 'Get personal task reminders with filters and search' })
   async getMyTasks(@Query() query: any, @Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
+    const employeeId = await this.getEmployeeId(req);
     const result = await this.employeeTasksService.getMyTasks(employeeId, {
       status: query.status,
+      filter: query.filter,
+      priority: query.priority,
+      category: query.category,
+      search: query.search,
       page: query.page,
       limit: query.limit,
     });
     return { success: true, ...result };
   }
 
-  @Get('reminders')
-  @ApiOperation({ summary: 'Get due/overdue task reminders for dashboard' })
-  async getDueReminders(@Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
-    const result = await this.employeeTasksService.getDueReminders(employeeId);
+  @Get('summary')
+  @ApiOperation({ summary: 'Get personal task summary metrics for dashboard widget' })
+  async getDashboardSummary(@Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const summary = await this.employeeTasksService.getDashboardSummary(employeeId);
+    return { success: true, ...summary };
+  }
+
+  @Get('process-reminders')
+  @ApiOperation({ summary: 'Trigger reminder sweep immediately (scheduler / test endpoint)' })
+  async triggerReminderSweep() {
+    const result = await this.employeeTasksService.processDueReminders();
     return { success: true, ...result };
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a specific task by ID' })
+  @ApiOperation({ summary: 'Get a specific personal task by ID' })
   async getTask(@Param('id') id: string, @Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
+    const employeeId = await this.getEmployeeId(req);
     const task = await this.employeeTasksService.getTaskById(id, employeeId);
     return { success: true, task };
   }
@@ -62,48 +69,55 @@ export class EmployeeTasksController {
   @Post()
   @ApiOperation({ summary: 'Create a personal task reminder' })
   async createTask(@Body() body: any, @Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
-    const task = await this.employeeTasksService.createTask(employeeId, {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const task = await this.employeeTasksService.createTask(employeeId, userId, {
       title: body.title,
       description: body.description,
+      category: body.category,
       dueDate: body.due_date || body.dueDate,
       dueTime: body.due_time || body.dueTime,
       priority: body.priority,
       reminderTime: body.reminder_time || body.reminderTime,
-      assignedTo: body.assigned_to || body.assignedTo,
+      taskType: body.task_type || body.taskType,
     });
-    return { success: true, task, message: 'Task reminder created successfully.' };
+    return { success: true, task, message: 'Personal task created successfully.' };
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a task reminder' })
+  @ApiOperation({ summary: 'Update a personal task reminder' })
   async updateTask(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
-    const task = await this.employeeTasksService.updateTask(id, employeeId, {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const task = await this.employeeTasksService.updateTask(id, employeeId, userId, {
       title: body.title,
       description: body.description,
+      category: body.category,
       dueDate: body.due_date || body.dueDate,
       dueTime: body.due_time || body.dueTime,
       priority: body.priority,
       reminderTime: body.reminder_time || body.reminderTime,
       status: body.status,
+      taskType: body.task_type || body.taskType,
     });
     return { success: true, task, message: 'Task updated successfully.' };
   }
 
   @Post(':id/complete')
-  @ApiOperation({ summary: 'Mark a task as completed' })
+  @ApiOperation({ summary: 'Mark a personal task as completed' })
   async completeTask(@Param('id') id: string, @Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
-    const task = await this.employeeTasksService.completeTask(id, employeeId);
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const task = await this.employeeTasksService.completeTask(id, employeeId, userId);
     return { success: true, task, message: 'Task marked as completed.' };
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a task reminder' })
+  @ApiOperation({ summary: 'Delete a personal task' })
   async deleteTask(@Param('id') id: string, @Request() req: any) {
-    const employeeId = this.getEmployeeId(req);
-    const result = await this.employeeTasksService.deleteTask(id, employeeId);
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const result = await this.employeeTasksService.deleteTask(id, employeeId, userId);
     return { success: true, ...result };
   }
 }

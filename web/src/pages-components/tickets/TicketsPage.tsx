@@ -40,6 +40,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
   const [selectedSubmoduleId, setSelectedSubmoduleId] = useState<string>('');
   const [productModules, setProductModules] = useState<any[]>([]);
   const [moduleSubmodules, setModuleSubmodules] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [derivedDepartmentName, setDerivedDepartmentName] = useState<string>('Auto-derived from product');
 
   const [formProblem, setFormProblem] = useState('');
@@ -55,6 +56,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
 
   useEffect(() => {
     loadCompaniesForModal();
+    loadDepartmentsForModal();
   }, []);
 
   const loadTickets = async () => {
@@ -176,19 +178,32 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     }
   };
 
-  const updateDerivedDepartment = (productId: string) => {
-    const prod = companyProducts.find((p) => (p.product_id || p.productId) === productId);
-    const prodName = prod?.product_name || prod?.product?.name || '';
-    if (prodName.toLowerCase().includes('tally')) {
-      setDerivedDepartmentName('Tally Support (DEP-0001)');
-    } else if (prodName.toLowerCase().includes('spine')) {
-      setDerivedDepartmentName('Spine Support (DEP-0002)');
-    } else if (prodName.toLowerCase().includes('bios')) {
-      setDerivedDepartmentName('BIOS 360 Support (DEP-0003)');
-    } else if (prodName.toLowerCase().includes('cyber')) {
-      setDerivedDepartmentName('CyberShield Support (DEP-0004)');
+  const loadDepartmentsForModal = async () => {
+    try {
+      const res = await api.getDepartments({ isActive: 'true' });
+      const depts = Array.isArray(res) ? res : res.departments || res.data || [];
+      setDepartments(depts);
+    } catch (err) {
+      console.error('Failed to load departments', err);
+    }
+  };
+
+  const updateDerivedDepartment = (productId: string, currentDepts: any[] = departments) => {
+    if (!productId) {
+      setDerivedDepartmentName('No product selected');
+      return;
+    }
+    const deptsToSearch = currentDepts.length > 0 ? currentDepts : departments;
+    const matchedDept = deptsToSearch.find((d: any) => {
+      const inProducts = d.products?.some((p: any) => (p.id || p.productId) === productId);
+      const inSpecs = d.specializations?.some((s: any) => s.productId === productId);
+      return inProducts || inSpecs;
+    });
+
+    if (matchedDept) {
+      setDerivedDepartmentName(`${matchedDept.name} (${matchedDept.code})`);
     } else {
-      setDerivedDepartmentName('Dedicated Product Support Department');
+      setDerivedDepartmentName('Support Operations (General Support)');
     }
   };
 

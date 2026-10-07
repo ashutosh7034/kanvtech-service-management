@@ -59,7 +59,7 @@ async function runSuite() {
   const employeesService = new EmployeesService(prismaService, auditService);
   const ticketsService = new TicketsService(prismaService, assignmentsService, slaService, timerService, auditService, notificationsService);
   const prospectsService = new ProspectsService(prismaService, auditService, companiesService);
-  const chatService = new ChatService(prismaService, notificationsService);
+  const chatService = new ChatService(prismaService, notificationsService, auditService);
   const emailVerificationService = new EmailVerificationService(prismaService, auditService);
 
   const jwtService = new JwtService({ secret: process.env.JWT_SECRET || 'kanvtech-super-secret-staging-jwt-key-2026-secure' });
@@ -98,6 +98,7 @@ async function runSuite() {
     contact_person: 'Test Person',
     contact_phone: '+91 99000 11100',
     products: [tallyProd.id],
+    skipEmailVerification: true,
   });
 
   const contact = await prismaService.companyContact.findFirst({ where: { companyId: compId } });

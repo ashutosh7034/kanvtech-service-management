@@ -26,16 +26,45 @@ export const LoginPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    const emailTrimmed = email.trim();
+    if (!emailTrimmed && !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
+    if (!emailTrimmed) {
+      setError('Please enter your email.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailTrimmed)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
     setLoading(true);
     try {
       if (rememberMe) {
-        localStorage.setItem('kanvtech_remembered_email', email.trim());
+        localStorage.setItem('kanvtech_remembered_email', emailTrimmed);
       } else {
         localStorage.removeItem('kanvtech_remembered_email');
       }
-      await login(email, password);
+      await login(emailTrimmed, password);
     } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please check credentials.');
+      const msg = err.message || '';
+      if (msg === 'Failed to fetch' || msg.includes('Network Error') || !window.navigator.onLine || msg === 'Server request failed') {
+        setError('Unable to connect to the server. Please try again.');
+      } else if (msg.includes('User does not exist') || msg.includes('contact admin')) {
+        setError('User does not exist. Please contact admin.');
+      } else if (msg.includes('Invalid email or password') || msg.includes('Incorrect password')) {
+        setError('Incorrect password. Please try again.');
+      } else {
+        setError(msg || 'Authentication failed. Please check credentials.');
+      }
     } finally {
       setLoading(false);
     }

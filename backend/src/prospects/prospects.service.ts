@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, NotFoundException } from '@nestjs/comm
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { CompaniesService } from '../companies/companies.service';
+import { validateEmail, validatePhone } from '../common/validation.util';
 
 @Injectable()
 export class ProspectsService {
@@ -27,15 +28,22 @@ export class ProspectsService {
     assignedEmployeeId?: string;
     notes?: string;
   }, actorUserId?: number) {
+    const companyName = (data.companyName || '').trim();
+    const contactPerson = (data.contactPerson || '').trim();
+    if (!companyName) throw new BadRequestException('Company name is required.');
+    if (!contactPerson) throw new BadRequestException('Contact person is required.');
+
+    const email = validateEmail(data.email, 'Email');
+    const phone = validatePhone(data.phone, 'Contact phone');
     const id = await this.generateProspectId();
 
     const prospect = await this.prisma.prospect.create({
       data: {
         id,
-        companyName: data.companyName.trim(),
-        contactPerson: data.contactPerson.trim(),
-        phone: data.phone.trim(),
-        email: data.email.trim().toLowerCase(),
+        companyName,
+        contactPerson,
+        phone,
+        email,
         address: data.address?.trim() || null,
         enquiry: data.enquiry?.trim() || null,
         source: data.source?.trim() || null,
@@ -108,13 +116,16 @@ export class ProspectsService {
       throw new BadRequestException('Cannot edit a converted prospect.');
     }
 
+    const validPhone = data.phone !== undefined ? validatePhone(data.phone, 'Contact phone') : existing.phone;
+    const validEmail = data.email !== undefined ? validateEmail(data.email, 'Email') : existing.email;
+
     const updated = await this.prisma.prospect.update({
       where: { id },
       data: {
         companyName: data.companyName?.trim() || existing.companyName,
         contactPerson: data.contactPerson?.trim() || existing.contactPerson,
-        phone: data.phone?.trim() || existing.phone,
-        email: data.email?.trim().toLowerCase() || existing.email,
+        phone: validPhone,
+        email: validEmail,
         address: data.address !== undefined ? data.address?.trim() || null : existing.address,
         enquiry: data.enquiry !== undefined ? data.enquiry?.trim() || null : existing.enquiry,
         source: data.source !== undefined ? data.source?.trim() || null : existing.source,

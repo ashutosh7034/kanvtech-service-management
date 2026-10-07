@@ -14,7 +14,7 @@ export const Layout: React.FC<Props> = ({ currentView, onNavigate, pageTitle, ch
     <div className="app-container">
       <Sidebar currentView={currentView} onNavigate={onNavigate} />
       <div className="main-wrapper">
-        <Header pageTitle={pageTitle} />
+        <Header pageTitle={pageTitle} onNavigate={onNavigate} />
         <main className="content-area">{children}</main>
       </div>
     </div>

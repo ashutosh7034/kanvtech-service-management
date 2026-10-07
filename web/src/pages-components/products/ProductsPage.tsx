@@ -18,8 +18,10 @@ import {
   AlertCircle,
   Trash2,
   Eye,
+  GitBranch,
 } from 'lucide-react';
 import { formatDate } from '../../utils/date';
+import { ProductHierarchyManager } from '../../components/products/ProductHierarchyManager';
 
 interface Product {
   id: string;
@@ -51,7 +53,9 @@ export const ProductsPage: React.FC = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
+  const [showHierarchyModal, setShowHierarchyModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [hierarchyProduct, setHierarchyProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -185,6 +189,11 @@ export const ProductsPage: React.FC = () => {
   const openView = (product: Product) => {
     setSelectedProduct(product);
     setShowViewModal(true);
+  };
+
+  const openHierarchy = (product: Product) => {
+    setHierarchyProduct(product);
+    setShowHierarchyModal(true);
   };
 
   return (
@@ -373,6 +382,15 @@ export const ProductsPage: React.FC = () => {
                   </td>
                   <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                     <div style={{ display: 'inline-flex', gap: 6 }}>
+                      <button
+                        className="btn btn-outline btn-xs"
+                        onClick={() => openHierarchy(p)}
+                        title="Manage Modules & Hierarchy"
+                        style={{ color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Layers size={13} />
+                        <span>Modules</span>
+                      </button>
                       <button
                         className="btn btn-outline btn-xs"
                         onClick={() => openView(p)}
@@ -645,6 +663,18 @@ export const ProductsPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Product Hierarchy Management Modal */}
+      {showHierarchyModal && hierarchyProduct && (
+        <ProductHierarchyManager
+          product={hierarchyProduct}
+          onClose={() => {
+            setShowHierarchyModal(false);
+            setHierarchyProduct(null);
+          }}
+          onHierarchyUpdated={fetchData}
+        />
       )}
     </div>
   );

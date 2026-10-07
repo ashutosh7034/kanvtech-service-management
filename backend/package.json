@@ -15,6 +15,8 @@
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:seed:prod": "ts-node prisma/seed.prod.ts",
     "admin:create": "ts-node scripts/create-admin.ts",
+    "reset:data:dry": "ts-node scripts/reset-business-data.ts",
+    "reset:data": "node -e \"process.env.CONFIRM_RESET='YES'; require('ts-node/register'); require('./scripts/reset-business-data.ts');\"",
     "test": "ts-node test/runner.ts"
   },
   "dependencies": {

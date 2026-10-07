@@ -22,6 +22,8 @@ import {
   Save,
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
+import { isValidEmail, isValidPhone, isValidGSTN, validatePhoneDetailed } from '../../utils/validation';
+import { PhoneInput } from '../../components/common/PhoneInput';
 
 export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }> = ({ onNavigateTicket }) => {
   const [companies, setCompanies] = useState<Company[]>([]);
@@ -66,6 +68,12 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
+  // Inline Email Verification State for Customer Registration
+  const [emailVerified, setEmailVerified] = useState(false);
+  const [verifyingEmail, setVerifyingEmail] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [emailVerifyError, setEmailVerifyError] = useState<string | null>(null);
+
   // Edit Customer Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingCompany, setEditingCompany] = useState<any | null>(null);
@@ -94,6 +102,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const [editingBranch, setEditingBranch] = useState<Branch | null>(null);
   const [branchForm, setBranchForm] = useState({
     branch_name: '',
+    gstn: '',
     address: '',
     city: '',
     state: '',
@@ -113,7 +122,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
   const loadProducts = async () => {
     try {
-      const res = await api.getProducts({ isActive: 'true' });
+      const res = await api.getProducts({ limit: 200, isActive: 'true' });
       setProducts(res.products || res.data || []);
     } catch (err) {
       console.error('Failed to load product catalog', err);
@@ -185,6 +194,60 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     setShowEditModal(true);
   };
 
+  const handleVerifyEmail = async () => {
+    setEmailVerifyError(null);
+    const email = formData.primary_email?.trim();
+    if (!email) {
+      setEmailVerifyError('Please enter an email address.');
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setEmailVerifyError('Please enter a valid email address.');
+      return;
+    }
+
+    setVerifyingEmail(true);
+    try {
+      const res = await api.verifyCustomerEmail(email);
+      if (res && res.verified) {
+        setEmailVerified(true);
+        setVerifiedEmail(email);
+        setEmailVerifyError(null);
+      } else {
+        setEmailVerified(false);
+        setEmailVerifyError(res?.message || 'Unable to send verification email. Please try again.');
+      }
+    } catch (err: any) {
+      setEmailVerified(false);
+      setEmailVerifyError(err.message || 'Unable to send verification email. Please try again.');
+    } finally {
+      setVerifyingEmail(false);
+    }
+  };
+
+  const validateCompanyStep1 = (data: typeof formData): string | null => {
+    if (!data.company_name || !data.company_name.trim()) return 'Company / Organization name is required.';
+    if (!data.primary_email || !data.primary_email.trim()) return 'Primary corporate email is required.';
+    if (!isValidEmail(data.primary_email)) return 'Please enter a valid primary corporate email (e.g. name@company.com).';
+    if (!emailVerified || data.primary_email.trim().toLowerCase() !== verifiedEmail?.toLowerCase()) {
+      return 'Please verify the corporate email before continuing.';
+    }
+    if (data.gstn && !isValidGSTN(data.gstn)) return 'Please enter a valid 15-character GSTIN (e.g. 27AABCU9603R1ZM).';
+    if (!data.address || !data.address.trim()) return 'Full corporate address is required.';
+    if (!data.contact_person || !data.contact_person.trim()) return 'Primary contact person name is required.';
+    if (!data.contact_phone || !data.contact_phone.trim()) return 'Contact phone is required.';
+    const phoneVal = validatePhoneDetailed(data.contact_phone);
+    if (!phoneVal.valid) return phoneVal.error || 'Please enter a valid contact phone number.';
+    if (data.alternate_contact_phone && data.alternate_contact_phone.trim()) {
+      const altVal = validatePhoneDetailed(data.alternate_contact_phone);
+      if (!altVal.valid) return `Alternate Phone: ${altVal.error}`;
+    }
+    if (data.alternate_contact_email && !isValidEmail(data.alternate_contact_email)) {
+      return 'Please enter a valid alternate contact email.';
+    }
+    return null;
+  };
+
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingCompany) return;
@@ -194,20 +257,40 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       setEditFormError('Company name is required.');
       return;
     }
-    if (!editFormData.address.trim()) {
-      setEditFormError('Address is required.');
-      return;
-    }
     if (!editFormData.primary_email.trim()) {
       setEditFormError('Primary email is required.');
       return;
     }
+    if (!isValidEmail(editFormData.primary_email)) {
+      setEditFormError('Please enter a valid primary corporate email (e.g. name@company.com).');
+      return;
+    }
+    if (editFormData.gstn && !isValidGSTN(editFormData.gstn)) {
+      setEditFormError('Please enter a valid 15-character GSTIN (e.g. 27AABCU9603R1ZM).');
+      return;
+    }
+    if (!editFormData.address.trim()) {
+      setEditFormError('Full corporate address is required.');
+      return;
+    }
     if (!editFormData.contact_person.trim()) {
-      setEditFormError('Contact person is required.');
+      setEditFormError('Primary contact person is required.');
       return;
     }
     if (!editFormData.contact_phone.trim()) {
       setEditFormError('Contact phone is required.');
+      return;
+    }
+    if (!isValidPhone(editFormData.contact_phone)) {
+      setEditFormError('Please enter a valid 10 to 15 digit contact phone number.');
+      return;
+    }
+    if (editFormData.alternate_contact_phone && !isValidPhone(editFormData.alternate_contact_phone)) {
+      setEditFormError('Please enter a valid 10 to 15 digit alternate contact phone number.');
+      return;
+    }
+    if (editFormData.alternate_contact_email && !isValidEmail(editFormData.alternate_contact_email)) {
+      setEditFormError('Please enter a valid alternate contact email.');
       return;
     }
 
@@ -241,6 +324,13 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const handleCreateSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
+
+    const step1Err = validateCompanyStep1(formData);
+    if (step1Err) {
+      setFormError(step1Err);
+      setCreateStep(1);
+      return;
+    }
 
     // Business Rule 2: At least ONE product required
     if (formData.product_ids.length === 0) {
@@ -318,6 +408,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     setEditingBranch(null);
     setBranchForm({
       branch_name: '',
+      gstn: '',
       address: '',
       city: '',
       state: '',
@@ -336,6 +427,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     const assignedIds = (branch.branchProducts || branch.products || []).map((bp: any) => bp.productId || bp.product_id);
     setBranchForm({
       branch_name: branch.branch_name || (branch as any).branchName || '',
+      gstn: branch.gstn || '',
       address: branch.address || '',
       city: branch.city || '',
       state: branch.state || '',
@@ -352,8 +444,51 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const handleSaveBranch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedCompany) return;
-    setSavingBranch(true);
     setBranchError(null);
+
+    if (!branchForm.branch_name.trim()) {
+      setBranchError('Branch name is required.');
+      return;
+    }
+    if (branchForm.gstn && !isValidGSTN(branchForm.gstn)) {
+      setBranchError('Please enter a valid 15-character GSTIN (e.g. 27AABCU9603R1ZM).');
+      return;
+    }
+    if (!branchForm.address.trim()) {
+      setBranchError('Branch address is required.');
+      return;
+    }
+    if (!branchForm.city.trim()) {
+      setBranchError('City is required.');
+      return;
+    }
+    if (!branchForm.state.trim()) {
+      setBranchError('State is required.');
+      return;
+    }
+    if (!branchForm.pincode.trim()) {
+      setBranchError('PIN / Postal Code is required.');
+      return;
+    }
+    if (!branchForm.contact_person.trim()) {
+      setBranchError('Contact person is required.');
+      return;
+    }
+    if (!branchForm.contact_phone.trim()) {
+      setBranchError('Contact phone is required.');
+      return;
+    }
+    const branchPhoneVal = validatePhoneDetailed(branchForm.contact_phone);
+    if (!branchPhoneVal.valid) {
+      setBranchError(branchPhoneVal.error || 'Please enter a valid contact phone number.');
+      return;
+    }
+    if (branchForm.contact_email && !isValidEmail(branchForm.contact_email)) {
+      setBranchError('Please enter a valid contact email address.');
+      return;
+    }
+
+    setSavingBranch(true);
     try {
       if (editingBranch) {
         await api.updateBranch(selectedCompany.id, editingBranch.id, branchForm);
@@ -741,6 +876,11 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                               <span style={{ fontWeight: 700, color: '#0f172a' }}>{b.branch_name || (b as any).branchName}</span>
                               <span style={{ fontSize: 11, color: '#64748b' }}>({b.id})</span>
+                              {b.gstn && (
+                                <span style={{ fontSize: 11, color: '#0284c7', background: '#e0f2fe', padding: '1px 6px', borderRadius: 4, fontWeight: 600 }}>
+                                  GST: {b.gstn}
+                                </span>
+                              )}
                               {b.status === 'ACTIVE' ? (
                                 <span className="badge badge-resolved" style={{ fontSize: 10, padding: '1px 6px' }}>Active</span>
                               ) : (
@@ -1115,17 +1255,68 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
                       <div className="form-group">
                         <label className="form-label">Primary Corporate Email *</label>
-                        <input
-                          type="email"
-                          className="form-control"
-                          required
-                          placeholder="billing@company.com"
-                          value={formData.primary_email}
-                          onChange={(e) => setFormData({ ...formData, primary_email: e.target.value })}
-                        />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <input
+                            type="email"
+                            className="form-control"
+                            style={{ flex: 1 }}
+                            required
+                            placeholder="billing@company.com"
+                            value={formData.primary_email}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setFormData({ ...formData, primary_email: val });
+                              if (val.trim().toLowerCase() !== verifiedEmail?.toLowerCase()) {
+                                setEmailVerified(false);
+                                setEmailVerifyError(null);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            className="btn"
+                            style={{
+                              whiteSpace: 'nowrap',
+                              padding: '6px 14px',
+                              fontWeight: 600,
+                              fontSize: 12,
+                              borderRadius: 6,
+                              border: emailVerified ? '1px solid #86efac' : '1px solid #cbd5e1',
+                              background: emailVerified ? '#f0fdf4' : '#f8fafc',
+                              color: emailVerified ? '#16a34a' : '#1e293b',
+                              cursor: emailVerified || verifyingEmail ? 'default' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 6,
+                            }}
+                            disabled={verifyingEmail || emailVerified}
+                            onClick={handleVerifyEmail}
+                          >
+                            {verifyingEmail ? (
+                              'Sending...'
+                            ) : emailVerified ? (
+                              <>✓ Verified</>
+                            ) : (
+                              'Verify Email'
+                            )}
+                          </button>
+                        </div>
+
+                        {/* Status Message below field */}
+                        <div style={{ marginTop: 5, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          {verifyingEmail ? (
+                            <span style={{ color: '#2563eb' }}>Sending verification email...</span>
+                          ) : emailVerified ? (
+                            <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Email verified</span>
+                          ) : emailVerifyError ? (
+                            <span style={{ color: '#dc2626' }}>⚠ {emailVerifyError}</span>
+                          ) : formData.primary_email.trim() ? (
+                            <span style={{ color: '#d97706' }}>⚠ Email not verified</span>
+                          ) : null}
+                        </div>
                       </div>
 
                       <div className="form-group">
@@ -1167,13 +1358,10 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
                       <div className="form-group">
                         <label className="form-label">Contact Phone *</label>
-                        <input
-                          type="text"
-                          className="form-control"
+                        <PhoneInput
                           required
-                          placeholder="+91 98765 43210"
                           value={formData.contact_phone}
-                          onChange={(e) => setFormData({ ...formData, contact_phone: e.target.value })}
+                          onChange={(val) => setFormData({ ...formData, contact_phone: val })}
                         />
                       </div>
                     </div>
@@ -1244,7 +1432,12 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                         {formData.company_name}
                       </div>
                       <div style={{ color: '#475569', marginBottom: 4 }}>📍 {formData.address}</div>
-                      <div style={{ color: '#475569', marginBottom: 4 }}>✉️ {formData.primary_email}</div>
+                      <div style={{ color: '#475569', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>✉️ {formData.primary_email}</span>
+                        <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4 }}>
+                          ✓ Verified
+                        </span>
+                      </div>
                       <div style={{ color: '#475569' }}>👤 {formData.contact_person} ({formData.contact_phone})</div>
                     </div>
 
@@ -1299,9 +1492,12 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       type="button"
                       className="btn btn-primary"
                       onClick={() => {
-                        if (createStep === 1 && !formData.company_name) {
-                          setFormError('Company name is required');
-                          return;
+                        if (createStep === 1) {
+                          const step1Err = validateCompanyStep1(formData);
+                          if (step1Err) {
+                            setFormError(step1Err);
+                            return;
+                          }
                         }
                         if (createStep === 2 && formData.product_ids.length === 0) {
                           setFormError('At least one product must be selected before registering a customer.');
@@ -1428,6 +1624,17 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 </div>
 
                 <div className="form-group">
+                  <label className="form-label">GST Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="Enter GST Number (Optional)"
+                    value={branchForm.gstn}
+                    onChange={(e) => setBranchForm({ ...branchForm, gstn: e.target.value.toUpperCase() })}
+                  />
+                </div>
+
+                <div className="form-group">
                   <label className="form-label">Branch Address *</label>
                   <input
                     type="text"
@@ -1492,13 +1699,10 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
                   <div className="form-group">
                     <label className="form-label">Contact Phone *</label>
-                    <input
-                      type="text"
-                      className="form-control"
+                    <PhoneInput
                       required
-                      placeholder="+91 98200 XXXXX"
                       value={branchForm.contact_phone}
-                      onChange={(e) => setBranchForm({ ...branchForm, contact_phone: e.target.value })}
+                      onChange={(val) => setBranchForm({ ...branchForm, contact_phone: val })}
                     />
                   </div>
 

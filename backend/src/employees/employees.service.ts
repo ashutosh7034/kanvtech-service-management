@@ -1,7 +1,8 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
-import { EmployeeLevel, EmployeeAvailability, EmployeeStatus, AttendanceStatus, UserRole } from '@prisma/client';
+import { EmployeeLevel, EmployeeAvailability, EmployeeStatus, AttendanceStatus, UserRole, TicketStatus } from '@prisma/client';
+import { validateEmail, validatePhone, validateOptionalPhone } from '../common/validation.util';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
@@ -179,7 +180,12 @@ export class EmployeesService {
     },
     actorUserId?: number,
   ): Promise<string> {
-    const email = data.email.trim().toLowerCase();
+    const email = validateEmail(data.email, 'Employee email');
+    const phone = validatePhone(data.phone, 'Contact phone');
+    const name = (data.name || '').trim();
+    if (!name) {
+      throw new BadRequestException('Employee name is required.');
+    }
 
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -252,10 +258,10 @@ export class EmployeesService {
       data: {
         id: employeeId,
         userId: user.id,
-        name: data.name.trim(),
+        name,
         email,
         alternateEmails: data.alternate_emails?.trim() || null,
-        phone: data.phone.trim(),
+        phone,
         alternatePhones: data.alternate_phones?.trim() || null,
         department: departmentName,
         departmentId,
@@ -305,12 +311,14 @@ export class EmployeesService {
       }
     }
 
+    const validPhone = data.phone !== undefined ? validatePhone(data.phone, 'Contact phone') : undefined;
+
     await this.prisma.employee.update({
       where: { id },
       data: {
         name: data.name !== undefined ? data.name.trim() : undefined,
         alternateEmails: data.alternate_emails !== undefined ? data.alternate_emails.trim() : undefined,
-        phone: data.phone !== undefined ? data.phone.trim() : undefined,
+        phone: validPhone,
         alternatePhones: data.alternate_phones !== undefined ? data.alternate_phones.trim() : undefined,
         department: departmentName,
         departmentId,
@@ -342,7 +350,12 @@ export class EmployeesService {
     });
   }
 
-  async promoteEmployee(id: string, actorUserId?: number) {
+  async promoteEmployee(id: string, targetLevel?: EmployeeLevel, actorUserId?: number) {
+    const setting = await this.prisma.systemSetting.findUnique({ where: { settingKey: 'EMPLOYEE_LEVEL_MANAGEMENT_ENABLED' } });
+    if (setting && setting.settingValue === 'false') {
+      throw new BadRequestException('Employee level management is currently disabled by Admin.');
+    }
+
     const existing = await this.prisma.employee.findUnique({
       where: { id },
       include: { departmentRel: true },
@@ -351,18 +364,29 @@ export class EmployeesService {
 
     let nextLevel: EmployeeLevel;
     let nextRole: UserRole;
-
-    if (existing.level === 'L1') {
-      nextLevel = EmployeeLevel.L2;
-      nextRole = UserRole.L2_EMPLOYEE;
-    } else if (existing.level === 'L2') {
-      nextLevel = EmployeeLevel.L3;
-      nextRole = UserRole.L3_EMPLOYEE;
-    } else if (existing.level === 'L3') {
-      nextLevel = EmployeeLevel.MANAGER;
-      nextRole = UserRole.MANAGER;
+    if (targetLevel) {
+      if (['L1', 'L2', 'L3', 'MANAGER'].includes(targetLevel)) {
+        nextLevel = targetLevel as EmployeeLevel;
+        if (nextLevel === 'MANAGER') nextRole = UserRole.MANAGER;
+        else if (nextLevel === 'L3') nextRole = UserRole.L3_EMPLOYEE;
+        else if (nextLevel === 'L2') nextRole = UserRole.L2_EMPLOYEE;
+        else nextRole = UserRole.L1_EMPLOYEE;
+      } else {
+        throw new BadRequestException(`Invalid target level '${targetLevel}'.`);
+      }
     } else {
-      throw new BadRequestException(`Cannot promote employee with current level '${existing.level}'.`);
+      if (existing.level === 'L1') {
+        nextLevel = EmployeeLevel.L2;
+        nextRole = UserRole.L2_EMPLOYEE;
+      } else if (existing.level === 'L2') {
+        nextLevel = EmployeeLevel.L3;
+        nextRole = UserRole.L3_EMPLOYEE;
+      } else if (existing.level === 'L3') {
+        nextLevel = EmployeeLevel.MANAGER;
+        nextRole = UserRole.MANAGER;
+      } else {
+        throw new BadRequestException(`Cannot promote employee with current level '${existing.level}'.`);
+      }
     }
 
     await this.prisma.employee.update({
@@ -390,7 +414,12 @@ export class EmployeesService {
     return this.getEmployeeById(id);
   }
 
-  async demoteEmployee(id: string, actorUserId?: number) {
+  async demoteEmployee(id: string, targetLevel?: EmployeeLevel, actorUserId?: number) {
+    const setting = await this.prisma.systemSetting.findUnique({ where: { settingKey: 'EMPLOYEE_LEVEL_MANAGEMENT_ENABLED' } });
+    if (setting && setting.settingValue === 'false') {
+      throw new BadRequestException('Employee level management is currently disabled by Admin.');
+    }
+
     const existing = await this.prisma.employee.findUnique({
       where: { id },
       include: { departmentRel: true },
@@ -399,15 +428,29 @@ export class EmployeesService {
 
     let prevLevel: EmployeeLevel;
     let prevRole: UserRole;
-
-    if (existing.level === 'L3') {
-      prevLevel = EmployeeLevel.L2;
-      prevRole = UserRole.L2_EMPLOYEE;
-    } else if (existing.level === 'L2') {
-      prevLevel = EmployeeLevel.L1;
-      prevRole = UserRole.L1_EMPLOYEE;
+    if (targetLevel) {
+      if (['L1', 'L2', 'L3', 'MANAGER'].includes(targetLevel)) {
+        prevLevel = targetLevel as EmployeeLevel;
+        if (prevLevel === 'MANAGER') prevRole = UserRole.MANAGER;
+        else if (prevLevel === 'L3') prevRole = UserRole.L3_EMPLOYEE;
+        else if (prevLevel === 'L2') prevRole = UserRole.L2_EMPLOYEE;
+        else prevRole = UserRole.L1_EMPLOYEE;
+      } else {
+        throw new BadRequestException(`Invalid target level '${targetLevel}'.`);
+      }
     } else {
-      throw new BadRequestException(`Cannot demote employee with current level '${existing.level}'.`);
+      if (existing.level === 'MANAGER') {
+        prevLevel = EmployeeLevel.L3;
+        prevRole = UserRole.L3_EMPLOYEE;
+      } else if (existing.level === 'L3') {
+        prevLevel = EmployeeLevel.L2;
+        prevRole = UserRole.L2_EMPLOYEE;
+      } else if (existing.level === 'L2') {
+        prevLevel = EmployeeLevel.L1;
+        prevRole = UserRole.L1_EMPLOYEE;
+      } else {
+        throw new BadRequestException(`Cannot demote employee with current level '${existing.level}'.`);
+      }
     }
 
     await this.prisma.employee.update({
@@ -433,6 +476,27 @@ export class EmployeesService {
     });
 
     return this.getEmployeeById(id);
+  }
+
+  async isLevelManagementEnabled(): Promise<boolean> {
+    const setting = await this.prisma.systemSetting.findUnique({ where: { settingKey: 'EMPLOYEE_LEVEL_MANAGEMENT_ENABLED' } });
+    return setting ? setting.settingValue === 'true' : true; // Default true
+  }
+
+  async toggleLevelManagement(enabled: boolean, actorUserId?: number): Promise<void> {
+    await this.prisma.systemSetting.upsert({
+      where: { settingKey: 'EMPLOYEE_LEVEL_MANAGEMENT_ENABLED' },
+      update: { settingValue: enabled.toString() },
+      create: { settingKey: 'EMPLOYEE_LEVEL_MANAGEMENT_ENABLED', settingValue: enabled.toString() }
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'SETTINGS_UPDATED',
+      entityType: 'SYSTEM',
+      entityId: 'EMPLOYEE_LEVEL_MANAGEMENT_ENABLED',
+      newValues: { enabled }
+    });
   }
 
   async checkIn(params: { employeeId: string; lat?: number; lng?: number; address?: string }) {
@@ -481,5 +545,81 @@ export class EmployeesService {
       where: { id: params.employeeId },
       data: { availability: EmployeeAvailability.OFFLINE },
     });
+  }
+
+  async toggleEmployeeStatus(id: string, actorUserId?: number) {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    const newStatus = existing.status === EmployeeStatus.ACTIVE ? EmployeeStatus.INACTIVE : EmployeeStatus.ACTIVE;
+    const newIsActive = newStatus === EmployeeStatus.ACTIVE;
+
+    await this.prisma.employee.update({
+      where: { id },
+      data: {
+        status: newStatus,
+        availability: newIsActive ? EmployeeAvailability.AVAILABLE : EmployeeAvailability.OFFLINE,
+      },
+    });
+
+    if (existing.userId) {
+      await this.prisma.user.update({
+        where: { id: existing.userId },
+        data: { isActive: newIsActive },
+      });
+    }
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'EMPLOYEE_STATUS_TOGGLED',
+      entityType: 'EMPLOYEE',
+      entityId: id,
+      oldValues: { status: existing.status },
+      newValues: { status: newStatus },
+    });
+
+    return this.getEmployeeById(id);
+  }
+
+  async deleteEmployee(id: string, actorUserId?: number) {
+    const existing = await this.prisma.employee.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Employee not found');
+
+    const activeTickets = await this.prisma.ticket.count({
+      where: {
+        assignedEmployeeId: id,
+        status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.MANAGER_REVIEW, TicketStatus.CUSTOMER_FEEDBACK] },
+      },
+    });
+
+    if (activeTickets > 0) {
+      throw new BadRequestException(`Cannot deactivate/remove employee '${existing.name}' because they have ${activeTickets} active tickets assigned. Reassign or close tickets first.`);
+    }
+
+    await this.prisma.employee.update({
+      where: { id },
+      data: {
+        status: EmployeeStatus.INACTIVE,
+        availability: EmployeeAvailability.OFFLINE,
+      },
+    });
+
+    if (existing.userId) {
+      await this.prisma.user.update({
+        where: { id: existing.userId },
+        data: { isActive: false },
+      });
+    }
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'EMPLOYEE_DEACTIVATED',
+      entityType: 'EMPLOYEE',
+      entityId: id,
+      oldValues: { status: existing.status },
+      newValues: { status: EmployeeStatus.INACTIVE },
+    });
+
+    return { success: true, message: `Employee '${existing.name}' deactivated successfully.` };
   }
 }

@@ -94,7 +94,7 @@ async function runPhase2Suite() {
   await test('REQ1-A: Unknown email -> User not found', async () => {
     await assert.rejects(
       () => authService.login(`unknown_${ts}@notexist.invalid`, 'Password@123'),
-      (err: any) => { assert(err.message.toLowerCase().includes('not found')); return true; },
+      (err: any) => { assert(err.message.toLowerCase().includes('does not exist')); return true; },
     );
   });
 
@@ -160,7 +160,7 @@ async function runPhase2Suite() {
   });
 
   await test('REQ2-B: L1 -> L2 - ID unchanged, level=L2, audit logged', async () => {
-    await employeesService.promoteEmployee(empL1Id, 1);
+    await employeesService.promoteEmployee(empL1Id, undefined, 1);
     const after = await employeesService.getEmployeeById(empL1Id);
     assert.strictEqual(after?.id, empL1Id);
     assert.strictEqual(after?.level, 'L2');
@@ -168,14 +168,8 @@ async function runPhase2Suite() {
     assert(log, 'Promotion must be audited');
   });
 
-  await test('REQ2-C: L2 -> L3', async () => {
-    await employeesService.promoteEmployee(empL1Id, 1);
-    const after = await employeesService.getEmployeeById(empL1Id);
-    assert.strictEqual(after?.level, 'L3');
-  });
-
-  await test('REQ2-D: L3 -> MANAGER', async () => {
-    await employeesService.promoteEmployee(empL1Id, 1);
+  await test('REQ2-C: L2 -> MANAGER', async () => {
+    await employeesService.promoteEmployee(empL1Id, undefined, 1);
     const after = await employeesService.getEmployeeById(empL1Id);
     assert.strictEqual(after?.level, 'MANAGER');
     const user = await prisma.user.findFirst({ where: { email: `l1_${ts}@kanvtech.test` } });
@@ -183,12 +177,12 @@ async function runPhase2Suite() {
   });
 
   await test('REQ2-E: MANAGER cannot be promoted further', async () => {
-    await assert.rejects(() => employeesService.promoteEmployee(empL1Id, 1), /Cannot promote/);
+    await assert.rejects(() => employeesService.promoteEmployee(empL1Id, undefined, 1), /Cannot promote/);
   });
 
-  await test('REQ2-F: Audit log has 3 promotion entries', async () => {
+  await test('REQ2-F: Audit log has 2 promotion entries', async () => {
     const logs = await prisma.auditLog.findMany({ where: { entityId: empL1Id, action: 'EMPLOYEE_PROMOTED' } });
-    assert(logs.length >= 3, `Expected >=3 promotions, got ${logs.length}`);
+    assert(logs.length >= 2, `Expected >=2 promotions, got ${logs.length}`);
   });
 
   // ============================================================
@@ -490,6 +484,7 @@ async function runPhase2Suite() {
       contact_person: 'Timer Contact',
       contact_phone: '+91 94444 11111',
       product_ids: [prod!.id],
+      skipEmailVerification: true,
     });
     timerEmpId = await employeesService.createEmployee({
       name: `Timer Emp ${ts}`,
@@ -706,6 +701,7 @@ async function runPhase2Suite() {
       contact_person: 'Impl Contact',
       contact_phone: '+91 95555 11111',
       product_ids: [spineProdId],
+      skipEmailVerification: true,
     });
     assert(implCompanyId.startsWith('CMP-'));
   });
@@ -774,6 +770,7 @@ async function runPhase2Suite() {
       contact_person: 'AMC Contact',
       contact_phone: '+91 96666 11111',
       product_ids: [spineProdId],
+      skipEmailVerification: true,
     });
     assert(amcCompanyId.startsWith('CMP-'));
   });
@@ -859,6 +856,7 @@ async function runPhase2Suite() {
       contact_person: 'Master Contact',
       contact_phone: '+91 97777 11111',
       product_ids: [prod11A.id],
+      skipEmailVerification: true,
     });
     const c = await companiesService.getCompanyById(custId);
     assert.strictEqual(c.products.length, 1);

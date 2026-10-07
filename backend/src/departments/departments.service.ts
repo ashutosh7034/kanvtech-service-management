@@ -56,12 +56,33 @@ export class DepartmentsService {
       const l2Count = activeEmployees.filter((e) => e.level === EmployeeLevel.L2).length;
       const l3Count = activeEmployees.filter((e) => e.level === EmployeeLevel.L3).length;
 
+      let specializations: any[] = [];
+      if (d.specializationJson) {
+        try {
+          specializations = JSON.parse(d.specializationJson);
+        } catch {
+          specializations = [];
+        }
+      }
+      if (!specializations.length) {
+        specializations = d.products.map((dp) => ({
+          productId: dp.product?.id || (dp as any).productId,
+          productName: dp.product?.name,
+          productCode: dp.product?.code,
+          isComplete: true,
+          moduleIds: [],
+          submoduleIds: [],
+        }));
+      }
+
       return {
         id: d.id,
         name: d.name,
         code: d.code,
         description: d.description,
         products: d.products.map(dp => dp.product),
+        specializations,
+        specialization_json: d.specializationJson,
         manager_id: d.managerId,
         manager_name: d.manager?.name || null,
         manager_email: d.manager?.email || null,
@@ -108,12 +129,33 @@ export class DepartmentsService {
 
     if (!d) return null;
 
+    let specializations: any[] = [];
+    if (d.specializationJson) {
+      try {
+        specializations = JSON.parse(d.specializationJson);
+      } catch {
+        specializations = [];
+      }
+    }
+    if (!specializations.length) {
+      specializations = d.products.map((dp) => ({
+        productId: dp.product?.id || (dp as any).productId,
+        productName: dp.product?.name,
+        productCode: dp.product?.code,
+        isComplete: true,
+        moduleIds: [],
+        submoduleIds: [],
+      }));
+    }
+
     return {
       id: d.id,
       name: d.name,
       code: d.code,
       description: d.description,
       products: d.products.map(dp => dp.product),
+      specializations,
+      specialization_json: d.specializationJson,
       manager_id: d.managerId,
       manager: d.manager,
       is_active: d.isActive ? 1 : 0,
@@ -144,12 +186,124 @@ export class DepartmentsService {
     };
   }
 
+  async validateAndBuildSpecializations(
+    productIds?: string[],
+    specializationsInput?: any,
+  ): Promise<{ productIds: string[]; specializationJson: string; specializations: any[] }> {
+    let rawItems = specializationsInput;
+    if (typeof rawItems === 'string') {
+      try {
+        rawItems = JSON.parse(rawItems);
+      } catch {
+        rawItems = [];
+      }
+    }
+
+    const validated: any[] = [];
+
+    if (Array.isArray(rawItems) && rawItems.length > 0) {
+      for (const item of rawItems) {
+        if (!item || !item.productId) {
+          throw new BadRequestException('Specialization item missing productId.');
+        }
+        const prod = await this.prisma.product.findUnique({
+          where: { id: item.productId },
+          include: {
+            modules: {
+              include: {
+                submodules: true,
+              },
+            },
+          },
+        });
+        if (!prod) {
+          throw new BadRequestException(`Product '${item.productId}' not found.`);
+        }
+
+        const validModuleIds = prod.modules.map((m) => m.id);
+        const allValidSubmoduleMap = new Map<string, string>(); // submodId -> modId
+        for (const m of prod.modules) {
+          for (const s of m.submodules) {
+            allValidSubmoduleMap.set(s.id, m.id);
+          }
+        }
+
+        const itemModuleIds = Array.isArray(item.moduleIds) ? item.moduleIds : [];
+        const itemSubmoduleIds = Array.isArray(item.submoduleIds) ? item.submoduleIds : [];
+
+        // Validate moduleIds belong to this product
+        for (const mId of itemModuleIds) {
+          if (!validModuleIds.includes(mId)) {
+            const existsElsewhere = await this.prisma.productModule.findUnique({ where: { id: mId } });
+            if (existsElsewhere) {
+              throw new BadRequestException(`Module '${mId}' does not belong to product '${prod.name}' (${prod.id}).`);
+            } else {
+              throw new BadRequestException(`Module '${mId}' not found.`);
+            }
+          }
+        }
+
+        // Validate submoduleIds belong to this product
+        for (const sId of itemSubmoduleIds) {
+          if (!allValidSubmoduleMap.has(sId)) {
+            const existsElsewhere = await this.prisma.productSubmodule.findUnique({ where: { id: sId } });
+            if (existsElsewhere) {
+              throw new BadRequestException(`Submodule '${sId}' does not belong to product '${prod.name}' (${prod.id}).`);
+            } else {
+              throw new BadRequestException(`Submodule '${sId}' not found.`);
+            }
+          }
+        }
+
+        const isComplete = Boolean(item.isComplete) || (itemModuleIds.length === 0 && itemSubmoduleIds.length === 0);
+
+        validated.push({
+          productId: prod.id,
+          productName: prod.name,
+          productCode: prod.code,
+          isComplete,
+          moduleIds: itemModuleIds,
+          submoduleIds: itemSubmoduleIds,
+        });
+      }
+    } else if (Array.isArray(productIds) && productIds.length > 0) {
+      for (const pid of productIds) {
+        const prod = await this.prisma.product.findUnique({ where: { id: pid } });
+        if (!prod) {
+          throw new BadRequestException(`Product '${pid}' not found.`);
+        }
+        validated.push({
+          productId: prod.id,
+          productName: prod.name,
+          productCode: prod.code,
+          isComplete: true,
+          moduleIds: [],
+          submoduleIds: [],
+        });
+      }
+    }
+
+    if (validated.length === 0) {
+      throw new BadRequestException('At least one valid product specialization must be selected.');
+    }
+
+    const uniqueProductIds = Array.from(new Set(validated.map((v) => v.productId)));
+
+    return {
+      productIds: uniqueProductIds,
+      specializationJson: JSON.stringify(validated),
+      specializations: validated,
+    };
+  }
+
   async createDepartment(
     data: {
       name: string;
       code: string;
       description?: string;
       productIds?: string[];
+      specializations?: any[];
+      specializationJson?: string;
       managerId?: string;
       isActive?: boolean;
     },
@@ -179,12 +333,10 @@ export class DepartmentsService {
       throw new BadRequestException(`Department code '${code}' already exists.`);
     }
 
-    if (data.productIds && data.productIds.length > 0) {
-      for (const pid of data.productIds) {
-        const prod = await this.prisma.product.findUnique({ where: { id: pid } });
-        if (!prod) throw new BadRequestException(`Product '${pid}' not found.`);
-      }
-    }
+    const specResult = await this.validateAndBuildSpecializations(
+      data.productIds,
+      data.specializations || data.specializationJson,
+    );
 
     if (data.managerId) {
       const mgr = await this.prisma.employee.findUnique({ where: { id: data.managerId } });
@@ -212,10 +364,14 @@ export class DepartmentsService {
         code,
         description: data.description?.trim() || null,
         managerId: data.managerId || null,
+        specializationJson: specResult.specializationJson,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
         products: {
-          create: (data.productIds || []).map(pid => ({ productId: pid }))
-        }
+          create: specResult.productIds.map((pid) => ({ productId: pid })),
+        },
+      },
+      include: {
+        products: { include: { product: true } },
       },
     });
 
@@ -224,22 +380,56 @@ export class DepartmentsService {
       action: 'DEPARTMENT_CREATED',
       entityType: 'DEPARTMENT',
       entityId: departmentId,
-      newValues: { id: departmentId, name, code, productIds: data.productIds, managerId: data.managerId },
+      newValues: {
+        id: departmentId,
+        name,
+        code,
+        productIds: specResult.productIds,
+        specializations: specResult.specializations,
+        managerId: data.managerId,
+      },
     });
 
-    return department;
+    return {
+      ...department,
+      specializations: specResult.specializations,
+      specialization_json: specResult.specializationJson,
+    };
   }
 
   async updateDepartment(id: string, data: any, actorUserId?: number) {
-    const existing = await this.prisma.department.findUnique({ where: { id } });
+    const existing = await this.prisma.department.findUnique({
+      where: { id },
+      include: { products: true },
+    });
     if (!existing) throw new NotFoundException('Department not found');
 
     const name = data.name !== undefined ? data.name.trim() : undefined;
     const code = data.code !== undefined ? data.code.trim().toUpperCase() : undefined;
     const description = data.description !== undefined ? data.description.trim() : undefined;
-    const productIds = data.productIds !== undefined ? data.productIds : undefined;
     const managerId = data.managerId !== undefined ? (data.managerId || null) : undefined;
     const isActive = data.isActive !== undefined ? Boolean(data.isActive) : undefined;
+
+    if (name !== undefined) {
+      if (!name) throw new BadRequestException('Department name is required.');
+      const duplicateName = await this.prisma.department.findFirst({
+        where: { name: { equals: name, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (duplicateName) throw new BadRequestException(`Department '${name}' already exists.`);
+    }
+
+    if (code !== undefined) {
+      if (!code) throw new BadRequestException('Department code is required.');
+      const duplicateCode = await this.prisma.department.findFirst({
+        where: { code: { equals: code, mode: 'insensitive' }, id: { not: id } },
+      });
+      if (duplicateCode) throw new BadRequestException(`Department code '${code}' already exists.`);
+    }
+
+    if (managerId) {
+      const mgr = await this.prisma.employee.findUnique({ where: { id: managerId } });
+      if (!mgr) throw new BadRequestException(`Manager '${managerId}' not found.`);
+    }
 
     let updateData: any = {
       name,
@@ -249,16 +439,25 @@ export class DepartmentsService {
       isActive,
     };
 
-    if (productIds !== undefined) {
+    let specResult: { productIds: string[]; specializationJson: string; specializations: any[] } | null = null;
+    if (data.specializations !== undefined || data.specializationJson !== undefined || data.productIds !== undefined) {
+      specResult = await this.validateAndBuildSpecializations(
+        data.productIds,
+        data.specializations || data.specializationJson,
+      );
+      updateData.specializationJson = specResult.specializationJson;
       updateData.products = {
         deleteMany: {},
-        create: productIds.map((pid: string) => ({ productId: pid }))
+        create: specResult.productIds.map((pid: string) => ({ productId: pid })),
       };
     }
 
     const updated = await this.prisma.department.update({
       where: { id },
       data: updateData,
+      include: {
+        products: { include: { product: true } },
+      },
     });
 
     await this.auditService.log({
@@ -270,7 +469,20 @@ export class DepartmentsService {
       newValues: data,
     });
 
-    return updated;
+    let specializations: any[] = [];
+    if (updated.specializationJson) {
+      try {
+        specializations = JSON.parse(updated.specializationJson);
+      } catch {
+        specializations = [];
+      }
+    }
+
+    return {
+      ...updated,
+      specializations,
+      specialization_json: updated.specializationJson,
+    };
   }
 
   async toggleDepartmentStatus(id: string, isActive: boolean, actorUserId?: number) {

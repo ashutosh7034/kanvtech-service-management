@@ -250,6 +250,7 @@ model CompanyBranch {
   id                String   @id @db.VarChar(50) // BR-0001
   companyId         String   @map("company_id") @db.VarChar(50)
   branchName        String   @map("branch_name") @db.VarChar(150)
+  gstn              String?  @db.VarChar(50)
   address           String   @db.Text
   city              String   @db.VarChar(100)
   state             String   @db.VarChar(100)
@@ -312,6 +313,7 @@ model Department {
   code        String   @unique @db.VarChar(50)
   description String?  @db.Text
   managerId   String?  @map("manager_id") @db.VarChar(50)
+  specializationJson String? @map("specialization_json") @db.Text
   isActive    Boolean  @default(true) @map("is_active")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
@@ -861,23 +863,28 @@ model Prospect {
 
 // 31. Employee Task Reminders
 model EmployeeTask {
-  id           String    @id @db.VarChar(50) // ETSK-0001
-  title        String    @db.VarChar(255)
-  description  String?   @db.Text
-  dueDate      DateTime? @map("due_date")
-  dueTime      String?   @map("due_time") @db.VarChar(20)
-  priority     String    @default("MEDIUM") @db.VarChar(50)
-  reminderTime DateTime? @map("reminder_time")
-  status       String    @default("PENDING") @db.VarChar(50)
-  createdBy    String    @map("created_by") @db.VarChar(50)
-  assignedTo   String    @map("assigned_to") @db.VarChar(50)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  completedAt  DateTime? @map("completed_at")
+  id                  String    @id @db.VarChar(50) // ETSK-0001
+  title               String    @db.VarChar(255)
+  description         String?   @db.Text
+  category            String?   @db.VarChar(100)
+  dueDate             DateTime? @map("due_date")
+  dueTime             String?   @map("due_time") @db.VarChar(20)
+  taskType            String    @default("SELF TASK") @map("task_type") @db.VarChar(50)
+  priority            String    @default("MEDIUM") @db.VarChar(50)
+  reminderTime        DateTime? @map("reminder_time")
+  reminderTriggeredAt DateTime? @map("reminder_triggered_at")
+  status              String    @default("PENDING") @db.VarChar(50)
+  createdBy           String    @map("created_by") @db.VarChar(50)
+  assignedTo          String    @map("assigned_to") @db.VarChar(50)
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @default(now()) @updatedAt @map("updated_at")
+  completedAt         DateTime? @map("completed_at")
 
   creator  Employee @relation("TaskCreatedBy", fields: [createdBy], references: [id], onDelete: Restrict)
   assignee Employee @relation("TaskAssignedTo", fields: [assignedTo], references: [id], onDelete: Restrict)
 
   @@index([assignedTo], name: "idx_emp_tasks_assignee")
+  @@index([reminderTime, status, reminderTriggeredAt], name: "idx_emp_tasks_reminder")
   @@map("employee_tasks")
 }
 

@@ -65,6 +65,49 @@ export class TicketsService {
     }
   }
 
+  async getAutoAssignmentLevel(): Promise<EmployeeLevel> {
+    const setting = await this.prisma.systemSetting.findUnique({
+      where: { settingKey: 'TICKET_AUTO_ASSIGNMENT_LEVEL' },
+    });
+    const val = setting?.settingValue?.trim()?.toUpperCase();
+    if (val === 'L2') return EmployeeLevel.L2;
+    if (val === 'L3') return EmployeeLevel.L3;
+    return EmployeeLevel.L1;
+  }
+
+  async setAutoAssignmentLevel(level: string, actorUserId?: number): Promise<string> {
+    const normalized = (level || '').trim().toUpperCase();
+    if (!['L1', 'L2', 'L3'].includes(normalized)) {
+      throw new BadRequestException(`Invalid assignment level '${level}'. Must be L1, L2, or L3.`);
+    }
+
+    const existing = await this.prisma.systemSetting.findUnique({
+      where: { settingKey: 'TICKET_AUTO_ASSIGNMENT_LEVEL' },
+    });
+    const oldLevel = existing?.settingValue || 'L1';
+
+    await this.prisma.systemSetting.upsert({
+      where: { settingKey: 'TICKET_AUTO_ASSIGNMENT_LEVEL' },
+      update: { settingValue: normalized, description: 'Automatic ticket routing support tier level' },
+      create: {
+        settingKey: 'TICKET_AUTO_ASSIGNMENT_LEVEL',
+        settingValue: normalized,
+        description: 'Automatic ticket routing support tier level',
+      },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'TICKET_ASSIGNMENT_LEVEL_CHANGED',
+      entityType: 'SYSTEM',
+      entityId: 'TICKET_AUTO_ASSIGNMENT_LEVEL',
+      oldValues: { level: oldLevel },
+      newValues: { level: normalized },
+    });
+
+    return normalized;
+  }
+
   async createTicket(params: {
     companyId: string;
     customerContactId?: number;
@@ -189,21 +232,29 @@ export class TicketsService {
     const now = new Date();
     const slaDeadline = await this.slaService.calculateDeadline(params.priority, now);
 
-    // 6. Automatic Workload-Based Assignment to Eligible L1 within Department
+    // 6. Automatic Workload-Based Assignment to Configured Level within Department
     let assignedEmployeeId = params.assignedEmployeeId || null;
     let initialAssignmentType: AssignmentType = AssignmentType.MANUAL;
     let assignedWorkload = 0;
 
+    const targetLevel = await this.getAutoAssignmentLevel();
+    const assignedTicketLevel =
+      targetLevel === EmployeeLevel.L3
+        ? TicketLevel.L3
+        : targetLevel === EmployeeLevel.L2
+          ? TicketLevel.L2
+          : TicketLevel.L1;
+
     if (!assignedEmployeeId) {
-      // Find lowest workload active L1 engineer in this department
-      const bestL1 = await this.assignmentsService.findBestAvailableEmployee(
-        EmployeeLevel.L1,
+      // Find lowest workload active engineer at the configured level in this department
+      const bestEmp = await this.assignmentsService.findBestAvailableEmployee(
+        targetLevel,
         departmentId || undefined,
       );
 
-      if (bestL1) {
-        assignedEmployeeId = bestL1.id;
-        assignedWorkload = bestL1.active_workload || 0;
+      if (bestEmp) {
+        assignedEmployeeId = bestEmp.id;
+        assignedWorkload = bestEmp.active_workload || 0;
         initialAssignmentType = AssignmentType.AUTO;
       }
     }
@@ -225,7 +276,7 @@ export class TicketsService {
         description: (params.description || '').trim(),
         createdBy: params.createdByUserId,
         assignedEmployeeId,
-        assignedLevel: TicketLevel.L1,
+        assignedLevel: assignedEmployeeId ? assignedTicketLevel : TicketLevel.L1,
         status: TicketStatus.OPEN,
         slaPriority: params.priority,
         slaDeadline,
@@ -250,6 +301,7 @@ export class TicketsService {
           branchId,
           departmentId,
           departmentName: department?.name,
+          configuredAssignmentLevel: targetLevel,
         }),
       },
     });
@@ -259,12 +311,12 @@ export class TicketsService {
       await this.assignmentsService.assignTicket({
         ticketId,
         employeeId: assignedEmployeeId,
-        level: TicketLevel.L1,
+        level: assignedTicketLevel,
         assignedByUserId: params.createdByUserId,
         assignmentType: initialAssignmentType,
         notes:
           initialAssignmentType === AssignmentType.AUTO
-            ? `Auto-routed to available L1 specialist in ${department?.name || 'Support'} (workload: ${assignedWorkload})`
+            ? `Auto-routed to available ${targetLevel} specialist in ${department?.name || 'Support'} (workload: ${assignedWorkload})`
             : 'Assigned upon ticket creation',
       });
 
@@ -279,19 +331,30 @@ export class TicketsService {
           productName: product.name,
           departmentId,
           departmentName: department?.name,
-          level: 'L1',
+          level: targetLevel,
           assignedEmployeeId,
           workloadAtAssignment: assignedWorkload,
         },
       });
     } else {
-      // Alert when no L1 engineer is available in this department
+      // Record unassigned history timeline entry
+      await this.prisma.ticketHistory.create({
+        data: {
+          ticketId,
+          actorUserId: params.createdByUserId,
+          actionType: 'ROUTING_UNASSIGNED',
+          title: 'Unassigned in Queue',
+          description: `No eligible ${targetLevel} employee is available for automatic assignment in ${department?.name || 'General Support'}. Ticket placed in queue.`,
+        },
+      });
+
+      // Alert when no engineer is available at configured level in this department
       if (department) {
         await this.notificationsService.broadcastTicketEvent({
           eventType: 'NO_ENGINEER_AVAILABLE',
           ticketId,
           title: `Unassigned Ticket Alert: ${ticketId}`,
-          message: `No active L1 engineer is currently available in the ${department.name} department for ticket ${ticketId}.`,
+          message: `No active ${targetLevel} engineer is currently available in the ${department.name} department for ticket ${ticketId}.`,
           linkUrl: `/tickets/${ticketId}`,
         });
       }
@@ -307,7 +370,7 @@ export class TicketsService {
           eventType: 'TICKET_CREATED',
           ticketId,
           title: `Ticket Confirmed: ${ticketId}`,
-          message: `Your ticket for ${product.name} has been logged and assigned ID ${ticketId}. Our ${department?.name || 'L1 support'} team will begin work promptly.`,
+          message: `Your ticket for ${product.name} has been logged and assigned ID ${ticketId}. Our ${department?.name || `${targetLevel} support`} team will begin work promptly.`,
           recipientUserId: contact.userId || undefined,
           recipientEmail: contact.email,
           linkUrl: `/tickets/${ticketId}`,

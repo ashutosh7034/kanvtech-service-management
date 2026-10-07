@@ -48,11 +48,12 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       if (path === 'implementations') return 'implementations';
       if (path === 'maintenance' || path === 'annual-maintenance') return 'maintenance';
       if (path === 'prospects') return 'prospects';
+      if (path === 'task_reminders' || path === 'task-reminders' || path === 'my-tasks') return 'task_reminders';
       if (path === 'chat') return 'chat';
       if (path === 'verify-email') return 'verify_email';
       if (path === 'reports') return 'reports';
       if (path === 'import') return 'import';
-      if (path === 'sla_settings' || path === 'sla-settings') return 'sla_settings';
+      if (path === 'sla_settings' || path === 'sla-settings' || path === 'settings/sla' || path === 'sla') return 'sla_settings';
       if (path === 'audit_logs' || path === 'audit-logs') return 'audit_logs';
       if (path === 'customer_mobile' || path === 'customer-mobile') return 'customer_mobile';
       if (path === 'employee_mobile' || path === 'employee-mobile') return 'employee_mobile';
@@ -62,6 +63,8 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
 
   const [currentView, setCurrentView] = useState<string>(getViewFromPath);
   const [activeTicketId, setActiveTicketId] = useState<string | null>(null);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -76,7 +79,13 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
   }
 
   const navigateTo = (view: string, id?: string) => {
-    if (id) setActiveTicketId(id);
+    if (view === 'chat' && id) {
+      setActiveConversationId(id);
+    } else if (view === 'task_reminders' && id) {
+      setActiveTaskId(id);
+    } else if (id) {
+      setActiveTicketId(id);
+    }
     setCurrentView(view);
     if (typeof window !== 'undefined') {
       const pathToViewMap: Record<string, string> = {
@@ -135,9 +144,11 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       case 'implementations':
         return 'New Client Implementations';
       case 'prospects':
-        return 'Prospects & Leads';
+        return 'Enquiries';
+      case 'chat':
+        return 'Internal Messages';
       case 'task_reminders':
-        return 'Task Reminders';
+        return 'My Tasks & Reminders';
       case 'maintenance':
         return 'Annual Maintenance & Subscriptions';
       case 'reports':
@@ -180,6 +191,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       case 'maintenance':
         return userRole === 'MANAGER';
       case 'task_reminders':
+      case 'chat':
         return userRole !== 'CUSTOMER';
       case 'escalations':
         return ['MANAGER', 'L2_EMPLOYEE', 'L3_EMPLOYEE'].includes(userRole);
@@ -230,8 +242,10 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
           {currentView === 'products' && <ProductsPage />}
           {currentView === 'implementations' && <ImplementationsPage />}
           {currentView === 'prospects' && <ProspectsPage />}
-          {currentView === 'task_reminders' && <TaskRemindersPage />}
-          {currentView === 'chat' && <ChatPage />}
+          {currentView === 'task_reminders' && <TaskRemindersPage initialTaskId={activeTaskId} />}
+          {currentView === 'chat' && (
+            <ChatPage initialConversationId={activeConversationId ? Number(activeConversationId) : undefined} />
+          )}
           {currentView === 'verify_email' && <EmailVerificationPage />}
         {currentView === 'maintenance' && <MaintenancePage />}
           {currentView === 'reports' && <ReportsPage />}

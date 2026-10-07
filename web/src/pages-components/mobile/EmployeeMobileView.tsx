@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../../api/client';
 import { Ticket } from '../../types';
 import { useAuth } from '../../context/AuthContext';
@@ -28,13 +28,20 @@ export const EmployeeMobileView: React.FC = () => {
 
   // Attendance state
   const [isCheckedIn, setIsCheckedIn] = useState(false);
+  const [isRecentlyCheckedOut, setIsRecentlyCheckedOut] = useState(false);
   const [locationText, setLocationText] = useState('Bangalore Technology Center - Floor 4');
+  const checkOutTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Work note state
   const [noteText, setNoteText] = useState('');
 
   useEffect(() => {
     loadAssignedTickets();
+    return () => {
+      if (checkOutTimerRef.current) {
+        clearTimeout(checkOutTimerRef.current);
+      }
+    };
   }, [user]);
 
   const loadAssignedTickets = async () => {
@@ -131,8 +138,19 @@ export const EmployeeMobileView: React.FC = () => {
       if (isCheckedIn) {
         await api.checkOut({ employeeId: user.employeeId, address: locationText });
         setIsCheckedIn(false);
+        setIsRecentlyCheckedOut(true);
+        if (checkOutTimerRef.current) {
+          clearTimeout(checkOutTimerRef.current);
+        }
+        checkOutTimerRef.current = setTimeout(() => {
+          setIsRecentlyCheckedOut(false);
+        }, 3500);
         showToast('Checked out. Availability set to Offline.', 'info');
       } else {
+        if (checkOutTimerRef.current) {
+          clearTimeout(checkOutTimerRef.current);
+        }
+        setIsRecentlyCheckedOut(false);
         await api.checkIn({ employeeId: user.employeeId, address: locationText });
         setIsCheckedIn(true);
         showToast('Checked in. Availability set to Available.', 'success');
@@ -170,15 +188,29 @@ export const EmployeeMobileView: React.FC = () => {
             style={{
               fontSize: 11,
               fontWeight: 600,
-              padding: '4px 8px',
+              padding: '5px 10px',
               borderRadius: 6,
-              background: isCheckedIn ? '#16a34a' : '#d97706',
+              background: isCheckedIn
+                ? '#16a34a'
+                : isRecentlyCheckedOut
+                ? '#dc2626'
+                : '#334155',
               color: 'white',
-              border: 'none',
+              border: isCheckedIn
+                ? '1px solid #15803d'
+                : isRecentlyCheckedOut
+                ? '1px solid #b91c1c'
+                : '1px solid #475569',
               cursor: 'pointer',
+              transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: isCheckedIn
+                ? '0 1px 3px rgba(22, 163, 74, 0.4)'
+                : isRecentlyCheckedOut
+                ? '0 1px 3px rgba(220, 38, 38, 0.4)'
+                : 'none',
             }}
           >
-            {isCheckedIn ? 'Checked In' : 'Check In'}
+            {isCheckedIn ? '● Checked In' : isRecentlyCheckedOut ? '● Checked Out' : '○ Check In'}
           </button>
         </div>
 

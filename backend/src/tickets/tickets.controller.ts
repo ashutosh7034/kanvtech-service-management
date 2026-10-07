@@ -71,6 +71,25 @@ export class TicketsController {
     return { success: true, tickets: result.data, ...result };
   }
 
+  @Get('settings/auto-assignment-level')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Get current automatic ticket assignment level (Admin only)' })
+  async getAutoAssignmentLevel() {
+    const level = await this.ticketsService.getAutoAssignmentLevel();
+    return { success: true, level };
+  }
+
+  @Post('settings/auto-assignment-level')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Update automatic ticket assignment level (Admin only)' })
+  async setAutoAssignmentLevel(@Body() body: { level: 'L1' | 'L2' | 'L3' }, @Request() req: any) {
+    const updated = await this.ticketsService.setAutoAssignmentLevel(
+      body.level,
+      req.user?.userId || req.user?.id,
+    );
+    return { success: true, level: updated, message: `Automatic ticket assignment level updated to ${updated}` };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get complete ticket details, timeline, timer, and notes' })
   async getTicket(@Param('id') id: string, @Request() req: any) {

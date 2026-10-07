@@ -50,7 +50,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User not found. Please contact Admin.');
+      throw new UnauthorizedException('User does not exist. Please contact admin.');
     }
 
     if (!user.isActive) {
