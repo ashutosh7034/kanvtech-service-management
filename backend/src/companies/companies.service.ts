@@ -335,23 +335,9 @@ export class CompaniesService {
       throw new BadRequestException('Contact person is required.');
     }
 
-    // MANDATORY CORPORATE EMAIL VERIFICATION:
-    // Backend verification check ensuring the primary corporate email was verified via the verification service.
-    let isEmailVerified = Boolean(data.skipEmailVerification);
-    if (!isEmailVerified) {
-      if (this.emailVerificationService) {
-        isEmailVerified = await this.emailVerificationService.isCustomerEmailVerified(primaryEmail);
-      } else {
-        const rec = await this.prisma.emailVerificationToken.findFirst({
-          where: { email: primaryEmail, usedAt: { not: null } },
-        });
-        isEmailVerified = !!rec;
-      }
-    }
+    // CORPORATE EMAIL VERIFICATION: Disabled per release configuration
+    // Primary corporate email is accepted directly without verification blocker.
 
-    if (!isEmailVerified) {
-      throw new BadRequestException('Please verify the corporate email before continuing.');
-    }
 
     // MANDATORY CUSTOMER PRODUCT VALIDATION:
     // A customer cannot become an active KANVTECH customer without purchasing at least ONE KANVTECH product.

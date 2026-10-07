@@ -229,9 +229,6 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     if (!data.company_name || !data.company_name.trim()) return 'Company / Organization name is required.';
     if (!data.primary_email || !data.primary_email.trim()) return 'Primary corporate email is required.';
     if (!isValidEmail(data.primary_email)) return 'Please enter a valid primary corporate email (e.g. name@company.com).';
-    if (!emailVerified || data.primary_email.trim().toLowerCase() !== verifiedEmail?.toLowerCase()) {
-      return 'Please verify the corporate email before continuing.';
-    }
     if (data.gstn && !isValidGSTN(data.gstn)) return 'Please enter a valid 15-character GSTIN (e.g. 27AABCU9603R1ZM).';
     if (!data.address || !data.address.trim()) return 'Full corporate address is required.';
     if (!data.contact_person || !data.contact_person.trim()) return 'Primary contact person name is required.';
@@ -1255,68 +1252,17 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                       <div className="form-group">
                         <label className="form-label">Primary Corporate Email *</label>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <input
-                            type="email"
-                            className="form-control"
-                            style={{ flex: 1 }}
-                            required
-                            placeholder="billing@company.com"
-                            value={formData.primary_email}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setFormData({ ...formData, primary_email: val });
-                              if (val.trim().toLowerCase() !== verifiedEmail?.toLowerCase()) {
-                                setEmailVerified(false);
-                                setEmailVerifyError(null);
-                              }
-                            }}
-                          />
-                          <button
-                            type="button"
-                            className="btn"
-                            style={{
-                              whiteSpace: 'nowrap',
-                              padding: '6px 14px',
-                              fontWeight: 600,
-                              fontSize: 12,
-                              borderRadius: 6,
-                              border: emailVerified ? '1px solid #86efac' : '1px solid #cbd5e1',
-                              background: emailVerified ? '#f0fdf4' : '#f8fafc',
-                              color: emailVerified ? '#16a34a' : '#1e293b',
-                              cursor: emailVerified || verifyingEmail ? 'default' : 'pointer',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: 6,
-                            }}
-                            disabled={verifyingEmail || emailVerified}
-                            onClick={handleVerifyEmail}
-                          >
-                            {verifyingEmail ? (
-                              'Sending...'
-                            ) : emailVerified ? (
-                              <>✓ Verified</>
-                            ) : (
-                              'Verify Email'
-                            )}
-                          </button>
-                        </div>
-
-                        {/* Status Message below field */}
-                        <div style={{ marginTop: 5, fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {verifyingEmail ? (
-                            <span style={{ color: '#2563eb' }}>Sending verification email...</span>
-                          ) : emailVerified ? (
-                            <span style={{ color: '#16a34a', fontWeight: 600 }}>✓ Email verified</span>
-                          ) : emailVerifyError ? (
-                            <span style={{ color: '#dc2626' }}>⚠ {emailVerifyError}</span>
-                          ) : formData.primary_email.trim() ? (
-                            <span style={{ color: '#d97706' }}>⚠ Email not verified</span>
-                          ) : null}
-                        </div>
+                        <input
+                          type="email"
+                          className="form-control"
+                          required
+                          placeholder="billing@company.com"
+                          value={formData.primary_email}
+                          onChange={(e) => setFormData({ ...formData, primary_email: e.target.value })}
+                        />
                       </div>
 
                       <div className="form-group">
