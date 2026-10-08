@@ -84,9 +84,29 @@ export class CompaniesController {
   @Post(':id/products')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Add a purchased product to customer' })
-  async addProduct(@Param('id') id: string, @Body() body: { productId: string; notes?: string; purchaseType?: string; modules?: string[] }, @Request() req: any) {
+  async addProduct(@Param('id') id: string, @Body() body: { productId: string; notes?: string; purchaseType?: string; modules?: any[] }, @Request() req: any) {
     const result = await this.companiesService.addCompanyProduct(id, body.productId, body.notes, body.purchaseType, body.modules, req.user?.id || req.user?.userId);
     return { success: true, product: result, message: 'Product added to customer successfully' };
+  }
+
+  @Put(':id/products/:productId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Update a customer product entitlement' })
+  async updateProductEntitlement(
+    @Param('id') id: string,
+    @Param('productId') productId: string,
+    @Body() body: { notes?: string; purchaseType?: string; modules?: any[] },
+    @Request() req: any,
+  ) {
+    const result = await this.companiesService.addCompanyProduct(
+      id,
+      productId,
+      body.notes,
+      body.purchaseType,
+      body.modules,
+      req.user?.id || req.user?.userId,
+    );
+    return { success: true, product: result, message: 'Customer product entitlement updated successfully' };
   }
 
   @Delete(':id/products/:productId')

@@ -1,10 +1,29 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { api } from '../../api/client';
 import { Ticket, Company, Product, Branch } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { SLABadge } from '../../components/common/SLABadge';
-import { Search, Plus, Eye, Play, AlertCircle, Package, MapPin, Layers } from 'lucide-react';
+import {
+  Search,
+  Plus,
+  Eye,
+  Play,
+  AlertCircle,
+  Package,
+  MapPin,
+  Layers,
+  Building,
+  User,
+  CheckCircle2,
+  X,
+  ChevronDown,
+  RefreshCw,
+  Edit3,
+  Phone,
+  Mail,
+  Check,
+} from 'lucide-react';
 
 interface Props {
   onNavigateDetail: (id: string) => void;
@@ -25,12 +44,23 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
   const [slaFilter, setSlaFilter] = useState('');
   const [search, setSearch] = useState('');
 
-  // Create Modal
+  // Create Modal & Customer Search States
   const [showCreateModal, setShowCreateModal] = useState(openCreateImmediately);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+  const [customerSearchResults, setCustomerSearchResults] = useState<Company[]>([]);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
   const [selectedCompanyId, setSelectedCompanyId] = useState('');
+  const [loadingCustomerDetails, setLoadingCustomerDetails] = useState(false);
+
+  // Contact Person Searchable States
   const [selectedContactId, setSelectedContactId] = useState<number | ''>('');
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [showContactDropdown, setShowContactDropdown] = useState(false);
   const [companyContacts, setCompanyContacts] = useState<any[]>([]);
+
+  // Branches & Products
   const [companyBranches, setCompanyBranches] = useState<Branch[]>([]);
   const [companyProducts, setCompanyProducts] = useState<any[]>([]);
 
@@ -50,13 +80,38 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
   const [createError, setCreateError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const customerDropdownRef = useRef<HTMLDivElement>(null);
+  const contactDropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     loadTickets();
   }, [page, statusFilter, priorityFilter, levelFilter, slaFilter, search]);
 
   useEffect(() => {
-    loadCompaniesForModal();
     loadDepartmentsForModal();
+  }, []);
+
+  // Search customers with debounce
+  useEffect(() => {
+    if (!showCreateModal) return;
+    const timer = setTimeout(() => {
+      searchCustomers(customerSearchQuery);
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [customerSearchQuery, showCreateModal]);
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (customerDropdownRef.current && !customerDropdownRef.current.contains(event.target as Node)) {
+        setShowCustomerDropdown(false);
+      }
+      if (contactDropdownRef.current && !contactDropdownRef.current.contains(event.target as Node)) {
+        setShowContactDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const loadTickets = async () => {
@@ -80,89 +135,135 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     }
   };
 
-  const loadCompaniesForModal = async () => {
+  const searchCustomers = async (query: string) => {
+    setIsSearchingCustomers(true);
     try {
-      const res = await api.getCompanies({ limit: 100, isActive: '1' });
-      setCompanies(res.data);
-      if (res.data.length > 0 && !selectedCompanyId) {
-        handleCompanyChange(res.data[0].id);
-      }
+      const res = await api.getCompanies({
+        search: query.trim() || undefined,
+        limit: 20,
+        isActive: '1',
+      });
+      setCustomerSearchResults(res.data || []);
     } catch (err) {
-      console.error(err);
+      console.error('Failed to search customers', err);
+    } finally {
+      setIsSearchingCustomers(false);
     }
   };
 
-  const handleCompanyChange = async (compId: string) => {
-    setSelectedCompanyId(compId);
+  const handleSelectCompany = async (company: Company) => {
+    setSelectedCompany(company);
+    setSelectedCompanyId(company.id);
+    setCustomerSearchQuery('');
+    setShowCustomerDropdown(false);
+    setLoadingCustomerDetails(true);
+    setCreateError(null);
+
+    // 9. CLEARING CUSTOMER: Clear all stale dependent selections immediately
+    setSelectedContactId('');
+    setContactSearchQuery('');
     setSelectedBranchId('');
     setSelectedProductId('');
+    setSelectedModuleId('');
+    setSelectedSubmoduleId('');
+    setProductModules([]);
+    setModuleSubmodules([]);
+    setCompanyContacts([]);
+    setCompanyBranches([]);
+    setCompanyProducts([]);
+    setDerivedDepartmentName('Auto-derived from product');
+
     try {
       const [compRes, branchRes] = await Promise.all([
-        api.getCompany(compId),
-        api.getCustomerBranches(compId),
+        api.getCompany(company.id),
+        api.getCustomerBranches(company.id),
       ]);
-      const comp = compRes.company;
-      if (comp?.contacts) {
-        setCompanyContacts(comp.contacts);
-        if (comp.contacts.length > 0) {
-          setSelectedContactId(comp.contacts[0].id);
-        }
+
+      const comp = compRes.company || compRes.data || compRes;
+
+      // 3. CONTACT PERSON: Load contacts and auto-select primary if present
+      const contacts = comp?.contacts || [];
+      setCompanyContacts(contacts);
+      if (contacts.length > 0) {
+        const primary = contacts.find((ct: any) => ct.is_primary === 1 || ct.isPrimary === true);
+        setSelectedContactId(primary ? primary.id : contacts[0].id);
       }
+
+      // 4. BRANCH: Load branches
+      const branches = branchRes.branches || comp?.branches || [];
+      setCompanyBranches(branches);
+
+      // 5. PURCHASED PRODUCT: Load only purchased products
       const prods = comp?.products || [];
       setCompanyProducts(prods);
-      setCompanyBranches(branchRes.branches || []);
-      if (prods.length > 0) {
-        const firstProdId = prods[0].product_id || prods[0].productId;
+
+      if (prods.length === 1) {
+        const firstProdId = prods[0].product_id || prods[0].productId || prods[0].id;
         setSelectedProductId(firstProdId);
         updateDerivedDepartment(firstProdId);
+        if (Array.isArray(prods[0].modules)) {
+          setProductModules(prods[0].modules);
+        }
       }
     } catch (err) {
-      console.error(err);
+      console.error('Error fetching customer details:', err);
+    } finally {
+      setLoadingCustomerDetails(false);
     }
+  };
+
+  const handleClearCompany = () => {
+    setSelectedCompany(null);
+    setSelectedCompanyId('');
+    setCustomerSearchQuery('');
+    setSelectedContactId('');
+    setContactSearchQuery('');
+    setSelectedBranchId('');
+    setSelectedProductId('');
+    setSelectedModuleId('');
+    setSelectedSubmoduleId('');
+    setProductModules([]);
+    setModuleSubmodules([]);
+    setCompanyContacts([]);
+    setCompanyBranches([]);
+    setCompanyProducts([]);
+    setDerivedDepartmentName('Auto-derived from product');
+    setShowCustomerDropdown(true);
   };
 
   const handleBranchChange = (branchId: string) => {
     setSelectedBranchId(branchId);
-    if (!branchId) {
-      // Revert to all company products
-      if (companyProducts.length > 0) {
-        const firstProdId = companyProducts[0].product_id || companyProducts[0].productId;
-        setSelectedProductId(firstProdId);
-        updateDerivedDepartment(firstProdId);
-      }
-    } else {
-      // Filter products to branch-owned products
-      const branch = companyBranches.find((b) => b.id === branchId);
-      const branchProds = branch?.branchProducts || branch?.products || [];
-      if (branchProds.length > 0) {
-        const firstBranchProdId = (branchProds[0] as any).productId || (branchProds[0] as any).product_id;
-        setSelectedProductId(firstBranchProdId);
-        updateDerivedDepartment(firstBranchProdId);
-      } else {
-        setSelectedProductId('');
-        setDerivedDepartmentName('No products assigned to this branch');
-      }
+    setSelectedProductId('');
+    setSelectedModuleId('');
+    setSelectedSubmoduleId('');
+    setProductModules([]);
+    setModuleSubmodules([]);
+    setDerivedDepartmentName('Auto-derived from product');
+
+    const selectable = getSelectableProducts(branchId);
+    if (selectable.length === 1) {
+      const pId = selectable[0].product_id || selectable[0].productId || selectable[0].id;
+      handleProductChange(pId, selectable);
     }
   };
 
-  const handleProductChange = (productId: string) => {
+  const handleProductChange = (productId: string, currentProds: any[] = companyProducts) => {
     setSelectedProductId(productId);
     setSelectedModuleId('');
     setSelectedSubmoduleId('');
     setProductModules([]);
     setModuleSubmodules([]);
     updateDerivedDepartment(productId);
-    if (productId) {
-      loadProductModules(productId);
-    }
-  };
 
-  const loadProductModules = async (productId: string) => {
-    try {
-      const res = await api.getProductModules(productId);
-      setProductModules(res.modules || []);
-    } catch (err) {
-      console.error('Failed to load modules', err);
+    if (productId) {
+      const ownedProduct = currentProds.find(
+        (p: any) => (p.productId || p.product_id || p.id) === productId
+      );
+
+      // 6. MODULE / SUBMODULE: Load ONLY customer-owned modules
+      if (ownedProduct && Array.isArray(ownedProduct.modules)) {
+        setProductModules(ownedProduct.modules);
+      }
     }
   };
 
@@ -171,7 +272,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     setSelectedSubmoduleId('');
     setModuleSubmodules([]);
     if (moduleId) {
-      const mod = productModules.find((m: any) => m.id === moduleId);
+      const mod = productModules.find((m: any) => (m.id || m.moduleId) === moduleId);
       if (mod && mod.submodules && mod.submodules.length > 0) {
         setModuleSubmodules(mod.submodules);
       }
@@ -208,17 +309,23 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
   };
 
   // Get selectable products based on branch
-  const getSelectableProducts = () => {
-    if (!selectedBranchId) {
+  const getSelectableProducts = (branchId: string = selectedBranchId) => {
+    if (!branchId) {
       return companyProducts;
     }
-    const branch = companyBranches.find((b) => b.id === selectedBranchId);
+    const branch = companyBranches.find((b) => b.id === branchId);
     if (!branch) return companyProducts;
-    const branchProds = branch.branchProducts || branch.products || [];
+    const branchProds = branch.branchProducts || (branch as any).products || [];
+    if (branchProds.length === 0) return companyProducts;
+
     return branchProds.map((bp: any) => ({
-      product_id: bp.productId || bp.product_id,
-      product_name: bp.productName || bp.product?.name || bp.productId,
-      product_code: bp.productCode || bp.product?.code || '',
+      product_id: bp.productId || bp.product_id || bp.id,
+      productId: bp.productId || bp.product_id || bp.id,
+      product_name: bp.productName || bp.product?.name || bp.name,
+      name: bp.productName || bp.product?.name || bp.name,
+      product_code: bp.productCode || bp.product?.code || bp.code || '',
+      code: bp.productCode || bp.product?.code || bp.code || '',
+      modules: bp.modules?.map((m: any) => m.module || m) || [],
     }));
   };
 
@@ -226,8 +333,18 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     e.preventDefault();
     setCreateError(null);
 
+    if (!selectedCompanyId) {
+      setCreateError('Please select a customer organization.');
+      return;
+    }
+
+    if (!selectedContactId) {
+      setCreateError('Please select a valid customer contact person.');
+      return;
+    }
+
     if (!selectedProductId) {
-      setCreateError('Please select a valid purchased product for this ticket.');
+      setCreateError('Please select a purchased product for this ticket.');
       return;
     }
 
@@ -250,14 +367,29 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
       setShowCreateModal(false);
       setFormProblem('');
       setFormDescription('');
+      handleClearCompany();
       loadTickets();
       onNavigateDetail(res.ticket.id);
     } catch (err: any) {
-      setCreateError(err.message);
+      setCreateError(err.message || 'Failed to create ticket');
     } finally {
       setCreating(false);
     }
   };
+
+  // Filtered contacts for contact searchable combobox
+  const filteredContacts = companyContacts.filter((ct) => {
+    const q = contactSearchQuery.toLowerCase().trim();
+    if (!q) return true;
+    return (
+      ct.name?.toLowerCase().includes(q) ||
+      ct.email?.toLowerCase().includes(q) ||
+      ct.phone?.toLowerCase().includes(q) ||
+      ct.designation?.toLowerCase().includes(q)
+    );
+  });
+
+  const selectedContactObj = companyContacts.find((ct) => ct.id === selectedContactId);
 
   return (
     <div>
@@ -271,7 +403,14 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
           </h2>
           <div className="page-subtitle">Central queue with automatic product department routing and lowest-workload L1 assignment</div>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setShowCreateModal(true);
+            if (!selectedCompany) setShowCustomerDropdown(true);
+          }}
+          style={{ background: '#0b3b60', borderColor: '#0b3b60' }}
+        >
           <Plus size={15} /> Log Support Ticket
         </button>
       </div>
@@ -431,22 +570,25 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
         </table>
       </div>
 
-      {/* Log Ticket Modal with Branch, Product & Auto Department Routing */}
+      {/* Log Ticket Modal with Searchable Customer Selector & Auto Routing */}
       {showCreateModal && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 680 }}>
+          <div className="modal-content" style={{ maxWidth: 720 }}>
             <div className="modal-header">
-              <div className="modal-title">Log New Support Ticket</div>
+              <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Building size={18} color="#0b3b60" />
+                <span>Log New Support Ticket</span>
+              </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#64748b' }}
               >
                 ✕
               </button>
             </div>
 
             <form onSubmit={handleCreateSubmit}>
-              <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+              <div className="modal-body" style={{ maxHeight: '72vh', overflowY: 'auto', padding: '18px 24px' }}>
                 {createError && (
                   <div
                     style={{
@@ -467,139 +609,507 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                   </div>
                 )}
 
-                {/* Customer Organization Selection */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Customer Organization <span className="required">*</span></label>
-                    <select
-                      className="form-control"
-                      required
-                      value={selectedCompanyId}
-                      onChange={(e) => handleCompanyChange(e.target.value)}
+                {/* 1 & 10. SEARCHABLE CUSTOMER SELECTOR */}
+                <div className="form-group" style={{ marginBottom: 16, position: 'relative' }} ref={customerDropdownRef}>
+                  <label className="form-label" style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 6 }}>
+                    Customer Organization <span className="required">*</span>
+                  </label>
+
+                  {selectedCompany ? (
+                    /* 10. Selected Customer Badge/Card */
+                    <div
+                      style={{
+                        padding: '12px 14px',
+                        background: '#f8fafc',
+                        border: '1.5px solid #0b3b60',
+                        borderRadius: 8,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 12,
+                      }}
                     >
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.company_name} ({c.id})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div
+                          style={{
+                            width: 38,
+                            height: 38,
+                            borderRadius: 6,
+                            background: '#e6f0f8',
+                            color: '#0b3b60',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 800,
+                            fontSize: 14,
+                          }}
+                        >
+                          <Building size={20} />
+                        </div>
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <span style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+                              {selectedCompany.company_name}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                background: '#0b3b60',
+                                color: '#ffffff',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                                fontFamily: 'var(--font-mono)',
+                              }}
+                            >
+                              {selectedCompany.id}
+                            </span>
+                            <span
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 700,
+                                background: '#dcfce7',
+                                color: '#15803d',
+                                padding: '1px 6px',
+                                borderRadius: 4,
+                              }}
+                            >
+                              Active
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                            {selectedCompany.primary_email ? `✉ ${selectedCompany.primary_email}` : ''}
+                            {selectedCompany.contact_person ? ` • 👤 ${selectedCompany.contact_person}` : ''}
+                          </div>
+                        </div>
+                      </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Contact Person <span className="required">*</span></label>
-                    <select
-                      className="form-control"
-                      required
-                      value={selectedContactId}
-                      onChange={(e) => setSelectedContactId(Number(e.target.value))}
-                    >
-                      {companyContacts.map((ct) => (
-                        <option key={ct.id} value={ct.id}>
-                          {ct.name} ({ct.phone || ct.email})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Branch and Product Selection */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Customer Branch (Optional)</label>
-                    <select
-                      className="form-control"
-                      value={selectedBranchId}
-                      onChange={(e) => handleBranchChange(e.target.value)}
-                    >
-                      <option value="">Headquarters / Main Organization</option>
-                      {companyBranches.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.branch_name || (b as any).branchName} ({b.city})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Purchased Product <span className="required">*</span></label>
-                    <select
-                      className="form-control"
-                      required
-                      value={selectedProductId}
-                      onChange={(e) => handleProductChange(e.target.value)}
-                    >
-                      <option value="">Select Owned Product</option>
-                      {getSelectableProducts().map((p: any) => (
-                        <option key={p.product_id || p.id} value={p.product_id || p.id}>
-                          {p.product_name || p.name} ({p.product_code || p.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Auto-derived Department Display (Read-Only) */}
-                <div
-                  style={{
-                    background: '#eff6ff',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 6,
-                    padding: '8px 12px',
-                    marginBottom: 12,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    fontSize: 12,
-                    color: '#1e40af',
-                  }}
-                >
-                  <Layers size={14} color="#2563eb" />
-                  <span>
-                    <strong>Automated Routing:</strong> {derivedDepartmentName} → Lowest Workload L1 Specialist
-                  </span>
-                </div>
-
-                {/* Module / Submodule Selection (Cascading) */}
-                {productModules.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div className="form-group">
-                      <label className="form-label">Product Module (Optional)</label>
-                      <select
-                        className="form-control"
-                        value={selectedModuleId}
-                        onChange={(e) => handleModuleChange(e.target.value)}
+                      <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        onClick={handleClearCompany}
+                        style={{ fontSize: 12, padding: '4px 10px', display: 'inline-flex', alignItems: 'center', gap: 4 }}
                       >
-                        <option value="">All Modules</option>
-                        {productModules.map((m: any) => (
-                          <option key={m.id} value={m.id}>
-                            {m.name}
-                          </option>
-                        ))}
-                      </select>
+                        <Edit3 size={12} /> Change Customer
+                      </button>
                     </div>
+                  ) : (
+                    /* 1. Searchable Combobox Input */
+                    <div>
+                      <div style={{ position: 'relative' }}>
+                        <Search
+                          size={15}
+                          color="#94a3b8"
+                          style={{ position: 'absolute', left: 12, top: 11 }}
+                        />
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Search customer by name (e.g. Zenith), ID (CMP-0002), or email..."
+                          value={customerSearchQuery}
+                          onChange={(e) => {
+                            setCustomerSearchQuery(e.target.value);
+                            setShowCustomerDropdown(true);
+                          }}
+                          onFocus={() => setShowCustomerDropdown(true)}
+                          style={{ paddingLeft: 36, height: 38, fontSize: 13 }}
+                          autoFocus
+                        />
+                        {isSearchingCustomers && (
+                          <RefreshCw
+                            size={14}
+                            className="animate-spin"
+                            style={{ position: 'absolute', right: 12, top: 12, color: '#94a3b8' }}
+                          />
+                        )}
+                      </div>
 
-                    {moduleSubmodules.length > 0 && (
+                      {/* Dropdown Results */}
+                      {showCustomerDropdown && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: '100%',
+                            left: 0,
+                            right: 0,
+                            marginTop: 4,
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 8,
+                            boxShadow: '0 10px 20px -5px rgba(0, 0, 0, 0.15)',
+                            zIndex: 1060,
+                            maxHeight: 240,
+                            overflowY: 'auto',
+                          }}
+                        >
+                          <div style={{ padding: '6px 12px', background: '#f8fafc', fontSize: 11, fontWeight: 700, color: '#64748b', borderBottom: '1px solid #e2e8f0' }}>
+                            {customerSearchResults.length > 0 ? `Matching Customers (${customerSearchResults.length})` : 'Customers'}
+                          </div>
+
+                          {customerSearchResults.length === 0 ? (
+                            <div style={{ padding: '16px 12px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+                              {isSearchingCustomers ? 'Searching...' : `No customer found matching "${customerSearchQuery}"`}
+                            </div>
+                          ) : (
+                            customerSearchResults.map((comp) => (
+                              <div
+                                key={comp.id}
+                                onClick={() => handleSelectCompany(comp)}
+                                style={{
+                                  padding: '10px 14px',
+                                  borderBottom: '1px solid #f1f5f9',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  transition: 'background 0.1s',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                              >
+                                <div>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                                      {comp.company_name}
+                                    </span>
+                                    <span
+                                      style={{
+                                        fontSize: 11,
+                                        fontWeight: 600,
+                                        background: '#e6f0f8',
+                                        color: '#0b3b60',
+                                        padding: '1px 5px',
+                                        borderRadius: 3,
+                                        fontFamily: 'var(--font-mono)',
+                                      }}
+                                    >
+                                      {comp.id}
+                                    </span>
+                                  </div>
+                                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                                    {comp.primary_email ? `✉ ${comp.primary_email}` : ''}
+                                    {comp.contact_person ? ` • 👤 ${comp.contact_person}` : ''}
+                                    {comp.address ? ` • 📍 ${comp.address}` : ''}
+                                  </div>
+                                </div>
+                                <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>Active</span>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* 2 & 7. DEPENDENT SECTIONS: Only enabled/loaded when customer is selected */}
+                {loadingCustomerDetails ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: '#64748b' }}>
+                    <RefreshCw size={20} className="animate-spin" style={{ margin: '0 auto 8px', display: 'block' }} />
+                    Loading customer data, branches & purchased entitlements...
+                  </div>
+                ) : selectedCompany ? (
+                  <>
+                    {/* 3 & 4. Contact Person and Branch Row */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      {/* 3. SEARCHABLE CONTACT PERSON SELECTOR */}
+                      <div className="form-group" style={{ position: 'relative' }} ref={contactDropdownRef}>
+                        <label className="form-label">
+                          Contact Person <span className="required">*</span>
+                        </label>
+
+                        {companyContacts.length === 0 ? (
+                          <div
+                            style={{
+                              height: 38,
+                              padding: '8px 12px',
+                              background: '#f8fafc',
+                              border: '1px solid #e2e8f0',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              color: '#94a3b8',
+                            }}
+                          >
+                            No contacts registered
+                          </div>
+                        ) : companyContacts.length === 1 ? (
+                          /* Single contact view */
+                          <div
+                            style={{
+                              height: 38,
+                              padding: '6px 12px',
+                              background: '#f8fafc',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: 6,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              fontSize: 13,
+                              color: '#0f172a',
+                            }}
+                          >
+                            <span style={{ fontWeight: 600 }}>
+                              {companyContacts[0].name} {companyContacts[0].phone ? `(${companyContacts[0].phone})` : ''}
+                            </span>
+                            <span style={{ fontSize: 10, background: '#e6f0f8', color: '#0b3b60', padding: '1px 6px', borderRadius: 4, fontWeight: 700 }}>
+                              Primary
+                            </span>
+                          </div>
+                        ) : (
+                          /* Multiple contacts searchable selector */
+                          <div>
+                            <div
+                              style={{
+                                height: 38,
+                                padding: '6px 12px',
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 6,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                cursor: 'pointer',
+                              }}
+                              onClick={() => setShowContactDropdown((prev) => !prev)}
+                            >
+                              {selectedContactObj ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden' }}>
+                                  <span style={{ fontWeight: 600, fontSize: 13, color: '#0f172a', whiteSpace: 'nowrap' }}>
+                                    {selectedContactObj.name}
+                                  </span>
+                                  <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
+                                    {selectedContactObj.phone || selectedContactObj.email || ''}
+                                  </span>
+                                  {(selectedContactObj.is_primary || selectedContactObj.isPrimary) && (
+                                    <span style={{ fontSize: 10, background: '#e6f0f8', color: '#0b3b60', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>
+                                      ★ Primary
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span style={{ color: '#94a3b8', fontSize: 13 }}>Select contact person...</span>
+                              )}
+                              <ChevronDown size={14} color="#94a3b8" />
+                            </div>
+
+                            {/* Contact Dropdown */}
+                            {showContactDropdown && (
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '100%',
+                                  left: 0,
+                                  right: 0,
+                                  marginTop: 4,
+                                  background: '#ffffff',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: 6,
+                                  boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)',
+                                  zIndex: 1070,
+                                  maxHeight: 200,
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  overflow: 'hidden',
+                                }}
+                              >
+                                <div style={{ padding: 6, borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                                  <input
+                                    type="text"
+                                    placeholder="Search contact..."
+                                    value={contactSearchQuery}
+                                    onChange={(e) => setContactSearchQuery(e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    style={{ width: '100%', padding: '4px 8px', fontSize: 12, border: '1px solid #cbd5e1', borderRadius: 4 }}
+                                    autoFocus
+                                  />
+                                </div>
+
+                                <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
+                                  {filteredContacts.length === 0 ? (
+                                    <div style={{ padding: 8, textAlign: 'center', fontSize: 11, color: '#94a3b8' }}>
+                                      No contacts found
+                                    </div>
+                                  ) : (
+                                    filteredContacts.map((ct) => {
+                                      const isSelected = selectedContactId === ct.id;
+                                      return (
+                                        <div
+                                          key={ct.id}
+                                          onClick={() => {
+                                            setSelectedContactId(ct.id);
+                                            setShowContactDropdown(false);
+                                            setContactSearchQuery('');
+                                          }}
+                                          style={{
+                                            padding: '7px 12px',
+                                            cursor: 'pointer',
+                                            fontSize: 12,
+                                            background: isSelected ? '#f0f9ff' : 'transparent',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                          }}
+                                          onMouseEnter={(e) => {
+                                            if (!isSelected) e.currentTarget.style.background = '#f8fafc';
+                                          }}
+                                          onMouseLeave={(e) => {
+                                            if (!isSelected) e.currentTarget.style.background = 'transparent';
+                                          }}
+                                        >
+                                          <div>
+                                            <div style={{ fontWeight: isSelected ? 700 : 500, color: '#0f172a' }}>
+                                              {ct.name}
+                                              {(ct.is_primary || ct.isPrimary) && (
+                                                <span style={{ marginLeft: 6, fontSize: 10, color: '#0b3b60', fontWeight: 700 }}>
+                                                  ★ Primary
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div style={{ fontSize: 10, color: '#64748b' }}>
+                                              {ct.phone || ct.email || ''} {ct.designation ? `• ${ct.designation}` : ''}
+                                            </div>
+                                          </div>
+                                          {isSelected && <Check size={14} color="#0284c7" />}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* 4. BRANCH */}
                       <div className="form-group">
-                        <label className="form-label">Submodule (Optional)</label>
+                        <label className="form-label">Customer Branch (Optional)</label>
                         <select
                           className="form-control"
-                          value={selectedSubmoduleId}
-                          onChange={(e) => setSelectedSubmoduleId(e.target.value)}
+                          value={selectedBranchId}
+                          onChange={(e) => handleBranchChange(e.target.value)}
                         >
-                          <option value="">All Submodules</option>
-                          {moduleSubmodules.map((sm: any) => (
-                            <option key={sm.id} value={sm.id}>
-                              {sm.name}
+                          <option value="">Headquarters / Main Organization</option>
+                          {companyBranches.map((b) => (
+                            <option key={b.id} value={b.id}>
+                              {b.branch_name || (b as any).branchName} ({b.city})
                             </option>
                           ))}
                         </select>
                       </div>
+                    </div>
+
+                    {/* 5. PURCHASED PRODUCT */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className="form-group">
+                        <label className="form-label">
+                          Purchased Product <span className="required">*</span>
+                        </label>
+                        <select
+                          className="form-control"
+                          required
+                          value={selectedProductId}
+                          onChange={(e) => handleProductChange(e.target.value)}
+                        >
+                          <option value="">
+                            {getSelectableProducts().length === 0
+                              ? 'No purchased products found'
+                              : `Select Purchased Product (${getSelectableProducts().length} available)...`}
+                          </option>
+                          {getSelectableProducts().map((p: any) => (
+                            <option key={p.product_id || p.productId || p.id} value={p.product_id || p.productId || p.id}>
+                              {p.product_name || p.name} ({p.product_code || p.code})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {/* 8. Auto-derived Department Display */}
+                      <div className="form-group">
+                        <label className="form-label">Automated Routing Department</label>
+                        <div
+                          style={{
+                            background: '#eff6ff',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: 6,
+                            padding: '8px 12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 8,
+                            fontSize: 12,
+                            color: '#1e40af',
+                            height: 38,
+                          }}
+                        >
+                          <Layers size={14} color="#2563eb" style={{ flexShrink: 0 }} />
+                          <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            <strong>{derivedDepartmentName}</strong>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 6. MODULE & SUBMODULE SELECTION (Only Customer-Owned Entitlements) */}
+                    {productModules.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="form-group">
+                          <label className="form-label">Purchased Module (Optional)</label>
+                          <select
+                            className="form-control"
+                            value={selectedModuleId}
+                            onChange={(e) => handleModuleChange(e.target.value)}
+                          >
+                            <option value="">All Modules / General Product Support</option>
+                            {productModules.map((m: any) => (
+                              <option key={m.id || m.moduleId} value={m.id || m.moduleId}>
+                                {m.name || m.moduleName}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {moduleSubmodules.length > 0 && (
+                          <div className="form-group">
+                            <label className="form-label">Purchased Submodule (Optional)</label>
+                            <select
+                              className="form-control"
+                              value={selectedSubmoduleId}
+                              onChange={(e) => setSelectedSubmoduleId(e.target.value)}
+                            >
+                              <option value="">All Submodules</option>
+                              {moduleSubmodules.map((sm: any) => (
+                                <option key={sm.id || sm.submoduleId} value={sm.id || sm.submoduleId}>
+                                  {sm.name || sm.submoduleName}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
                     )}
+                  </>
+                ) : (
+                  <div
+                    style={{
+                      padding: 16,
+                      background: '#f8fafc',
+                      border: '1px dashed #cbd5e1',
+                      borderRadius: 6,
+                      textAlign: 'center',
+                      color: '#64748b',
+                      fontSize: 13,
+                      marginBottom: 14,
+                    }}
+                  >
+                    Please search and select a customer organization above to load contacts, branches, and purchased products.
                   </div>
                 )}
 
+                {/* Ticket Details Form Fields */}
                 <div className="form-group">
-                  <label className="form-label">Problem Title / Issue Summary <span className="required">*</span></label>
+                  <label className="form-label">
+                    Problem Title / Issue Summary <span className="required">*</span>
+                  </label>
                   <input
                     type="text"
                     className="form-control"
@@ -612,7 +1122,9 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div className="form-group">
-                    <label className="form-label">Priority / SLA Class <span className="required">*</span></label>
+                    <label className="form-label">
+                      Priority / SLA Class <span className="required">*</span>
+                    </label>
                     <select
                       className="form-control"
                       value={formPriority}
@@ -625,7 +1137,9 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Problem Category <span className="required">*</span></label>
+                    <label className="form-label">
+                      Problem Category <span className="required">*</span>
+                    </label>
                     <select
                       className="form-control"
                       value={formCategory}
@@ -641,7 +1155,9 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Detailed Description of Symptoms <span className="required">*</span></label>
+                  <label className="form-label">
+                    Detailed Description of Symptoms <span className="required">*</span>
+                  </label>
                   <textarea
                     className="form-control"
                     required
@@ -661,7 +1177,12 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={creating}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={creating || !selectedCompanyId || !selectedProductId}
+                  style={{ background: '#0b3b60', borderColor: '#0b3b60' }}
+                >
                   {creating ? 'Validating & Routing...' : 'Submit Service Ticket'}
                 </button>
               </div>

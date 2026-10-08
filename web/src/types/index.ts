@@ -191,6 +191,15 @@ export interface DepartmentSpecialization {
   submoduleIds?: string[];
 }
 
+export interface CustomerProductEntitlement {
+  productId: string;
+  purchaseType?: 'SELECTED_MODULES' | 'COMPLETE';
+  modules: Array<{
+    moduleId: string;
+    submoduleIds: string[];
+  }>;
+}
+
 export interface Department {
   id: string;
   name: string;

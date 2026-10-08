@@ -24,21 +24,43 @@ import {
   Trash2,
   Edit3,
   ListTodo,
+  Layers,
+  ChevronDown,
+  ChevronRight,
+  Clock,
+  Check,
 } from 'lucide-react';
 import { formatDate } from '../../utils/date';
 
 interface ImplementationTask {
   id: string;
   implementation_id: string;
+  module_id?: string | null;
+  module_name?: string | null;
   task_name: string;
   description?: string | null;
   priority?: string | null;
   status: 'PENDING' | 'COMPLETED';
   order_index: number;
+  assigned_employee_id?: string | null;
+  assigned_employee_name?: string | null;
+  assigned_employee_level?: string | null;
+  assigned_employee_designation?: string | null;
+  due_date?: string | null;
   completed_by?: number | null;
   completed_by_name?: string | null;
   completed_at?: string | null;
   created_at: string;
+}
+
+interface ModuleProgress {
+  id: string;
+  name: string;
+  description?: string | null;
+  tasks: ImplementationTask[];
+  totalCount: number;
+  completedCount: number;
+  progressPercentage: number;
 }
 
 interface Implementation {
@@ -65,6 +87,15 @@ interface Implementation {
   completed_at: string | null;
   created_at: string;
   tasks?: ImplementationTask[];
+  generalTasks?: ImplementationTask[];
+  modules?: ModuleProgress[];
+  entitledModules?: Array<{ id: string; name: string; description?: string; submodules?: any[] }>;
+  metrics?: {
+    totalTasks: number;
+    completedTasks: number;
+    pendingTasks: number;
+    progressPercentage: number;
+  };
 }
 
 export const ImplementationsPage: React.FC = () => {
@@ -82,38 +113,52 @@ export const ImplementationsPage: React.FC = () => {
   const [companyFilter, setCompanyFilter] = useState('ALL');
   const [error, setError] = useState<string | null>(null);
 
-  // Add Project Modal
+  // Add Project Modal State
   const [showAddModal, setShowAddModal] = useState(false);
-  const [formData, setFormData] = useState({
-    companyId: '',
-    productId: '',
-    ownerEmployeeId: '',
-    teamMembers: '',
-    startDate: new Date().toISOString().split('T')[0],
-    targetGoLiveDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    status: 'PLANNING',
-    pendingActivities: '',
-    notes: '',
-  });
+  const [addCompanyId, setAddCompanyId] = useState('');
+  const [addProductId, setAddProductId] = useState('');
+  const [addOwnerEmployeeId, setAddOwnerEmployeeId] = useState('');
+  const [addTeamMembers, setAddTeamMembers] = useState('');
+  const [addStartDate, setAddStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [addTargetGoLiveDate, setAddTargetGoLiveDate] = useState(
+    new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  );
+  const [addStatus, setAddStatus] = useState('PLANNING');
+  const [addPendingActivities, setAddPendingActivities] = useState('');
+  const [addNotes, setAddNotes] = useState('');
 
-  // Manage / Update Modal
+  // Entitled Modules for Add Modal
+  const [entitledModules, setEntitledModules] = useState<any[]>([]);
+  const [loadingEntitledModules, setLoadingEntitledModules] = useState(false);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>([]);
+  const [initialModuleTasks, setInitialModuleTasks] = useState<Record<string, Array<{ taskName: string; assignedEmployeeId?: string; priority: string; dueDate?: string }>>>({});
+
+  // Manage / Detail Modal State
   const [selectedImp, setSelectedImp] = useState<Implementation | null>(null);
-  const [tasks, setTasks] = useState<ImplementationTask[]>([]);
-  const [loadingTasks, setLoadingTasks] = useState(false);
+  const [impDetail, setImpDetail] = useState<Implementation | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<any>('IN_PROGRESS');
   const [updatePending, setUpdatePending] = useState('');
   const [updateNotes, setUpdateNotes] = useState('');
 
-  // Add Task inside modal
+  // Add Task inside detail modal
+  const [taskModuleId, setTaskModuleId] = useState<string>('');
   const [newTaskName, setNewTaskName] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
+  const [newTaskAssignee, setNewTaskAssignee] = useState('');
   const [newTaskPriority, setNewTaskPriority] = useState('MEDIUM');
+  const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [addingTask, setAddingTask] = useState(false);
+  const [showAddTaskFormForModule, setShowAddTaskFormForModule] = useState<string | null>(null);
 
-  // Editing Task
+  // Editing Task State
   const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
   const [editTaskName, setEditTaskName] = useState('');
   const [editTaskDesc, setEditTaskDesc] = useState('');
+  const [editTaskAssignee, setEditTaskAssignee] = useState('');
+  const [editTaskPriority, setEditTaskPriority] = useState('MEDIUM');
+  const [editTaskDueDate, setEditTaskDueDate] = useState('');
+  const [editTaskModuleId, setEditTaskModuleId] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
 
@@ -162,20 +207,107 @@ export const ImplementationsPage: React.FC = () => {
     fetchData();
   }, [statusFilter, companyFilter]);
 
+  // When Customer & Product change in Add Modal, load ONLY that customer's purchased/entitled modules
+  useEffect(() => {
+    if (!addCompanyId || !addProductId) {
+      setEntitledModules([]);
+      setSelectedModuleIds([]);
+      setInitialModuleTasks({});
+      return;
+    }
+
+    setLoadingEntitledModules(true);
+    api.getEntitledImplementationModules(addCompanyId, addProductId)
+      .then((res) => {
+        const mods = res.modules || res.data || [];
+        setEntitledModules(mods);
+        // By default, select all entitled modules for ease of onboarding
+        setSelectedModuleIds(mods.map((m: any) => m.id));
+        const initTasks: Record<string, any[]> = {};
+        for (const m of mods) {
+          initTasks[m.id] = [];
+        }
+        setInitialModuleTasks(initTasks);
+      })
+      .catch(() => {
+        setEntitledModules([]);
+        setSelectedModuleIds([]);
+        setInitialModuleTasks({});
+      })
+      .finally(() => {
+        setLoadingEntitledModules(false);
+      });
+  }, [addCompanyId, addProductId]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     fetchData();
   };
 
+  const handleToggleModuleSelection = (moduleId: string) => {
+    setSelectedModuleIds((prev) =>
+      prev.includes(moduleId) ? prev.filter((id) => id !== moduleId) : [...prev, moduleId]
+    );
+  };
+
+  const handleAddInitialTaskItem = (moduleId: string, taskName: string) => {
+    if (!taskName.trim()) return;
+    setInitialModuleTasks((prev) => ({
+      ...prev,
+      [moduleId]: [
+        ...(prev[moduleId] || []),
+        {
+          taskName: taskName.trim(),
+          priority: 'MEDIUM',
+          assignedEmployeeId: addOwnerEmployeeId || '',
+        },
+      ],
+    }));
+  };
+
+  const handleRemoveInitialTaskItem = (moduleId: string, index: number) => {
+    setInitialModuleTasks((prev) => ({
+      ...prev,
+      [moduleId]: (prev[moduleId] || []).filter((_, i) => i !== index),
+    }));
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.companyId || !formData.productId || !formData.startDate || !formData.targetGoLiveDate) {
-      alert('Please fill all required fields');
+    if (!addCompanyId || !addProductId || !addStartDate || !addTargetGoLiveDate) {
+      alert('Please select Customer Company, Product Suite, Start Date, and Target Go-Live Date');
       return;
     }
+
     setSubmitting(true);
     try {
-      await api.createImplementation(formData);
+      const tasksToCreate: any[] = [];
+      for (const modId of selectedModuleIds) {
+        const modTasks = initialModuleTasks[modId] || [];
+        for (const t of modTasks) {
+          tasksToCreate.push({
+            moduleId: modId,
+            taskName: t.taskName,
+            assignedEmployeeId: t.assignedEmployeeId || undefined,
+            priority: t.priority || 'MEDIUM',
+            dueDate: t.dueDate || undefined,
+          });
+        }
+      }
+
+      await api.createImplementation({
+        companyId: addCompanyId,
+        productId: addProductId,
+        ownerEmployeeId: addOwnerEmployeeId || undefined,
+        teamMembers: addTeamMembers || undefined,
+        startDate: addStartDate,
+        targetGoLiveDate: addTargetGoLiveDate,
+        status: addStatus,
+        pendingActivities: addPendingActivities || undefined,
+        notes: addNotes || undefined,
+        tasks: tasksToCreate,
+      });
+
       setShowAddModal(false);
       fetchData();
     } catch (err: any) {
@@ -192,57 +324,78 @@ export const ImplementationsPage: React.FC = () => {
     setUpdateNotes(imp.notes || '');
     setNewTaskName('');
     setNewTaskDesc('');
+    setNewTaskAssignee('');
+    setNewTaskDueDate('');
+    setNewTaskPriority('MEDIUM');
+    setTaskModuleId('');
     setEditingTaskId(null);
+    setShowAddTaskFormForModule(null);
 
-    setLoadingTasks(true);
+    setLoadingDetail(true);
     try {
-      const res = await api.getImplementationTasks(imp.id);
-      setTasks(res.tasks || res.data || []);
+      const res = await api.getImplementation(imp.id);
+      if (res.implementation) {
+        setImpDetail(res.implementation);
+      }
     } catch (err) {
-      setTasks([]);
+      console.error(err);
     } finally {
-      setLoadingTasks(false);
+      setLoadingDetail(false);
+    }
+  };
+
+  const refreshDetail = async (impId: string) => {
+    try {
+      const res = await api.getImplementation(impId);
+      if (res.implementation) {
+        setImpDetail(res.implementation);
+        // Sync table progress
+        setImplementations((prev) =>
+          prev.map((i) =>
+            i.id === impId
+              ? { ...i, progress_percentage: res.implementation.progress_percentage, status: res.implementation.status }
+              : i
+          )
+        );
+      }
+    } catch (err) {
+      console.error(err);
     }
   };
 
   const handleToggleTask = async (task: ImplementationTask) => {
     const isCompleted = task.status !== 'COMPLETED';
     try {
-      const res = await api.toggleImplementationTask(task.id, isCompleted);
-      // Update local task state
-      setTasks((prev) =>
-        prev.map((t) => (t.id === task.id ? { ...t, status: isCompleted ? 'COMPLETED' : 'PENDING' } : t))
-      );
-      if (selectedImp && res.progressPercentage !== undefined) {
-        setSelectedImp({ ...selectedImp, progress_percentage: res.progressPercentage });
-        setImplementations((prev) =>
-          prev.map((i) => (i.id === selectedImp.id ? { ...i, progress_percentage: res.progressPercentage } : i))
-        );
+      await api.toggleImplementationTask(task.id, isCompleted);
+      if (selectedImp) {
+        await refreshDetail(selectedImp.id);
       }
     } catch (err: any) {
       alert(`Failed to update task: ${err.message}`);
     }
   };
 
-  const handleAddTask = async (e: React.FormEvent) => {
+  const handleAddTask = async (e: React.FormEvent, forcedModuleId?: string | null) => {
     e.preventDefault();
     if (!selectedImp || !newTaskName.trim()) return;
     setAddingTask(true);
     try {
-      const res = await api.addImplementationTask(selectedImp.id, {
+      const modId = forcedModuleId !== undefined ? forcedModuleId : (taskModuleId || undefined);
+      await api.addImplementationTask(selectedImp.id, {
+        moduleId: modId || undefined,
         taskName: newTaskName.trim(),
         description: newTaskDesc.trim() || undefined,
+        assignedEmployeeId: newTaskAssignee || undefined,
         priority: newTaskPriority,
+        dueDate: newTaskDueDate || undefined,
       });
-      setTasks((prev) => [...prev, res.task]);
+
       setNewTaskName('');
       setNewTaskDesc('');
-      if (res.progressPercentage !== undefined) {
-        setSelectedImp({ ...selectedImp, progress_percentage: res.progressPercentage });
-        setImplementations((prev) =>
-          prev.map((i) => (i.id === selectedImp.id ? { ...i, progress_percentage: res.progressPercentage } : i))
-        );
-      }
+      setNewTaskAssignee('');
+      setNewTaskDueDate('');
+      setShowAddTaskFormForModule(null);
+      await refreshDetail(selectedImp.id);
     } catch (err: any) {
       alert(`Failed to add task: ${err.message}`);
     } finally {
@@ -253,7 +406,7 @@ export const ImplementationsPage: React.FC = () => {
   const handleRemoveTask = async (task: ImplementationTask) => {
     if (task.status === 'COMPLETED') {
       const ok = window.confirm(
-        'This task is already completed. Removing it will change the implementation progress calculation and historical record. Are you sure you want to delete it?'
+        'This task is completed. Removing it will update the progress metrics. Delete this checklist item?'
       );
       if (!ok) return;
     } else {
@@ -262,17 +415,23 @@ export const ImplementationsPage: React.FC = () => {
     }
 
     try {
-      const res = await api.removeImplementationTask(task.id);
-      setTasks((prev) => prev.filter((t) => t.id !== task.id));
-      if (selectedImp && res.progressPercentage !== undefined) {
-        setSelectedImp({ ...selectedImp, progress_percentage: res.progressPercentage });
-        setImplementations((prev) =>
-          prev.map((i) => (i.id === selectedImp.id ? { ...i, progress_percentage: res.progressPercentage } : i))
-        );
+      await api.removeImplementationTask(task.id);
+      if (selectedImp) {
+        await refreshDetail(selectedImp.id);
       }
     } catch (err: any) {
       alert(`Failed to remove task: ${err.message}`);
     }
+  };
+
+  const handleStartEditTask = (task: ImplementationTask) => {
+    setEditingTaskId(task.id);
+    setEditTaskName(task.task_name);
+    setEditTaskDesc(task.description || '');
+    setEditTaskAssignee(task.assigned_employee_id || '');
+    setEditTaskPriority(task.priority || 'MEDIUM');
+    setEditTaskDueDate(task.due_date ? task.due_date.split('T')[0] : '');
+    setEditTaskModuleId(task.module_id || '');
   };
 
   const handleSaveEditTask = async (taskId: string) => {
@@ -281,13 +440,15 @@ export const ImplementationsPage: React.FC = () => {
       await api.updateImplementationTask(taskId, {
         taskName: editTaskName.trim(),
         description: editTaskDesc.trim() || undefined,
+        assignedEmployeeId: editTaskAssignee || undefined,
+        priority: editTaskPriority,
+        dueDate: editTaskDueDate || undefined,
+        moduleId: editTaskModuleId || undefined,
       });
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId ? { ...t, task_name: editTaskName.trim(), description: editTaskDesc.trim() || null } : t
-        )
-      );
       setEditingTaskId(null);
+      if (selectedImp) {
+        await refreshDetail(selectedImp.id);
+      }
     } catch (err: any) {
       alert(`Failed to edit task: ${err.message}`);
     }
@@ -304,6 +465,7 @@ export const ImplementationsPage: React.FC = () => {
         notes: updateNotes,
       });
       setSelectedImp(null);
+      setImpDetail(null);
       fetchData();
     } catch (err: any) {
       alert(`Update failed: ${err.message}`);
@@ -311,10 +473,6 @@ export const ImplementationsPage: React.FC = () => {
       setSubmitting(false);
     }
   };
-
-  const completedCount = tasks.filter((t) => t.status === 'COMPLETED').length;
-  const totalCount = tasks.length;
-  const computedProgress = totalCount === 0 ? (selectedImp?.progress_percentage || 0) : Math.round((completedCount / totalCount) * 100);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -336,6 +494,22 @@ export const ImplementationsPage: React.FC = () => {
     }
   };
 
+  const getPriorityBadge = (priority?: string | null) => {
+    const p = (priority || 'MEDIUM').toUpperCase();
+    switch (p) {
+      case 'URGENT':
+      case 'CRITICAL':
+      case 'HIGH':
+        return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#fee2e2', color: '#b91c1c' }}>{p}</span>;
+      case 'MEDIUM':
+        return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#e0f2fe', color: '#0369a1' }}>MED</span>;
+      case 'LOW':
+        return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: '#f1f5f9', color: '#475569' }}>LOW</span>;
+      default:
+        return null;
+    }
+  };
+
   return (
     <div style={{ padding: '24px 32px' }}>
       {/* Header */}
@@ -343,27 +517,25 @@ export const ImplementationsPage: React.FC = () => {
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: 0, display: 'flex', alignItems: 'center', gap: 10 }}>
             <Rocket className="text-primary" size={24} />
-            New Customer Implementations
+            Customer Implementations & Module Rollout
           </h1>
           <p style={{ fontSize: 13, color: '#64748b', margin: '4px 0 0 0' }}>
-            Track client onboarding, architecture configuration, task milestones, and automatic go-live readiness
+            Module-wise onboarding checklists, task allocations, progress tracking, and go-live milestone governance
           </p>
         </div>
         {isAdminOrManager && (
           <button
             className="btn btn-primary"
             onClick={() => {
-              setFormData({
-                companyId: companies[0]?.id || '',
-                productId: products[0]?.id || '',
-                ownerEmployeeId: employees[0]?.id || '',
-                teamMembers: '',
-                startDate: new Date().toISOString().split('T')[0],
-                targetGoLiveDate: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                status: 'PLANNING',
-                pendingActivities: '',
-                notes: '',
-              });
+              setAddCompanyId(companies[0]?.id || '');
+              setAddProductId(products[0]?.id || '');
+              setAddOwnerEmployeeId(employees[0]?.id || '');
+              setAddTeamMembers('');
+              setAddStartDate(new Date().toISOString().split('T')[0]);
+              setAddTargetGoLiveDate(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+              setAddStatus('PLANNING');
+              setAddPendingActivities('');
+              setAddNotes('');
               setShowAddModal(true);
             }}
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}
@@ -472,7 +644,7 @@ export const ImplementationsPage: React.FC = () => {
                 <th style={{ padding: '12px 16px' }}>CUSTOMER COMPANY</th>
                 <th style={{ padding: '12px 16px' }}>PRODUCT</th>
                 <th style={{ padding: '12px 16px' }}>LEAD & TEAM</th>
-                <th style={{ padding: '12px 16px' }}>AUTO PROGRESS</th>
+                <th style={{ padding: '12px 16px' }}>CHECKLIST PROGRESS</th>
                 <th style={{ padding: '12px 16px' }}>TARGET GO-LIVE</th>
                 <th style={{ padding: '12px 16px' }}>STATUS</th>
                 <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTIONS</th>
@@ -497,14 +669,14 @@ export const ImplementationsPage: React.FC = () => {
                       <User size={13} color="#0284c7" />
                       {imp.owner_employee_name || 'Unassigned'}
                     </div>
-                    {imp.team_members.length > 0 && (
+                    {imp.team_members && imp.team_members.length > 0 && (
                       <div style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <Users size={11} />
                         {imp.team_members.join(', ')}
                       </div>
                     )}
                   </td>
-                  <td style={{ padding: '12px 16px', width: 140 }}>
+                  <td style={{ padding: '12px 16px', width: 150 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, fontWeight: 700, marginBottom: 4 }}>
                       <span>{imp.progress_percentage}%</span>
                     </div>
@@ -532,7 +704,7 @@ export const ImplementationsPage: React.FC = () => {
                       style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                     >
                       <ListTodo size={13} />
-                      Tasks & Progress
+                      Modules & Tasks
                     </button>
                   </td>
                 </tr>
@@ -542,14 +714,23 @@ export const ImplementationsPage: React.FC = () => {
         )}
       </div>
 
-      {/* Add Implementation Modal */}
+      {/* ========================================================= */}
+      {/* 1. ADD IMPLEMENTATION MODAL WITH MODULE ENTITLEMENT       */}
+      {/* ========================================================= */}
       {showAddModal && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 540, padding: 24, background: 'white', borderRadius: 8 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', padding: 24, background: 'white', borderRadius: 8 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: '#0f172a' }}>Create New Customer Implementation</h3>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+                  Create New Customer Implementation
+                </h3>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  Configure customer entitlement, module scope, and assign initial implementation tasks
+                </div>
+              </div>
               <button onClick={() => setShowAddModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
-                <X size={18} color="#64748b" />
+                <X size={20} color="#64748b" />
               </button>
             </div>
 
@@ -559,30 +740,128 @@ export const ImplementationsPage: React.FC = () => {
                   <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Customer Company *</label>
                   <select
                     className="form-control"
-                    value={formData.companyId}
-                    onChange={(e) => setFormData({ ...formData, companyId: e.target.value })}
+                    value={addCompanyId}
+                    onChange={(e) => setAddCompanyId(e.target.value)}
                     required
                   >
                     <option value="">-- Choose Company --</option>
                     {companies.map((c) => (
-                      <option key={c.id} value={c.id}>{c.company_name || c.companyName}</option>
+                      <option key={c.id} value={c.id}>{c.company_name || c.companyName} ({c.id})</option>
                     ))}
                   </select>
                 </div>
+
                 <div className="form-group">
                   <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Product Suite *</label>
                   <select
                     className="form-control"
-                    value={formData.productId}
-                    onChange={(e) => setFormData({ ...formData, productId: e.target.value })}
+                    value={addProductId}
+                    onChange={(e) => setAddProductId(e.target.value)}
                     required
                   >
                     <option value="">-- Choose Product --</option>
                     {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
+                      <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
                     ))}
                   </select>
                 </div>
+              </div>
+
+              {/* Implementation Modules Section (Customer Entitlement) */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Layers size={16} color="#0284c7" />
+                    Implementation Modules (Customer Purchased Entitlement)
+                  </div>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                    Select modules to include in this rollout
+                  </span>
+                </div>
+
+                {loadingEntitledModules ? (
+                  <div style={{ padding: 12, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                    <RefreshCw size={14} className="animate-spin" style={{ display: 'inline', marginRight: 6 }} />
+                    Loading entitled modules for customer...
+                  </div>
+                ) : !addCompanyId || !addProductId ? (
+                  <div style={{ padding: 12, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
+                    Please select a Customer Company and Product to view purchased modules.
+                  </div>
+                ) : entitledModules.length === 0 ? (
+                  <div style={{ padding: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, color: '#b45309', fontSize: 12 }}>
+                    No purchased modules found for this customer and product. Customer might own other products or no modules are allocated.
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {entitledModules.map((mod: any) => {
+                      const isChecked = selectedModuleIds.includes(mod.id);
+                      const modTasks = initialModuleTasks[mod.id] || [];
+                      return (
+                        <div
+                          key={mod.id}
+                          style={{
+                            background: isChecked ? '#ffffff' : '#f1f5f9',
+                            border: `1px solid ${isChecked ? '#cbd5e1' : '#e2e8f0'}`,
+                            borderRadius: 6,
+                            padding: 10,
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', margin: 0, fontWeight: 600, fontSize: 13, color: isChecked ? '#0f172a' : '#64748b' }}>
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={() => handleToggleModuleSelection(mod.id)}
+                              />
+                              {mod.name}
+                            </label>
+                            <span style={{ fontSize: 11, color: '#64748b' }}>
+                              {modTasks.length} initial tasks
+                            </span>
+                          </div>
+
+                          {/* Quick checklist tasks for selected module */}
+                          {isChecked && (
+                            <div style={{ marginTop: 8, paddingLeft: 24, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
+                              {modTasks.length > 0 && (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 8 }}>
+                                  {modTasks.map((t, idx) => (
+                                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f8fafc', padding: '4px 8px', borderRadius: 4, fontSize: 12 }}>
+                                      <span>☐ {t.taskName}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveInitialTaskItem(mod.id, idx)}
+                                        style={{ background: 'transparent', border: 'none', color: '#ef4444', cursor: 'pointer', padding: 0 }}
+                                      >
+                                        <X size={12} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <input
+                                  type="text"
+                                  placeholder={`+ Add checklist task for ${mod.name} (e.g. Database Setup)`}
+                                  className="form-control"
+                                  style={{ fontSize: 12, padding: '4px 8px', height: 28 }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleAddInitialTaskItem(mod.id, (e.target as HTMLInputElement).value);
+                                      (e.target as HTMLInputElement).value = '';
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
@@ -590,10 +869,10 @@ export const ImplementationsPage: React.FC = () => {
                   <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Implementation Lead</label>
                   <select
                     className="form-control"
-                    value={formData.ownerEmployeeId}
-                    onChange={(e) => setFormData({ ...formData, ownerEmployeeId: e.target.value })}
+                    value={addOwnerEmployeeId}
+                    onChange={(e) => setAddOwnerEmployeeId(e.target.value)}
                   >
-                    <option value="">-- Choose Lead --</option>
+                    <option value="">-- Choose Lead Specialist --</option>
                     {employees.map((emp) => (
                       <option key={emp.id} value={emp.id}>{emp.name} ({emp.level})</option>
                     ))}
@@ -603,8 +882,8 @@ export const ImplementationsPage: React.FC = () => {
                   <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Initial Status</label>
                   <select
                     className="form-control"
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                    value={addStatus}
+                    onChange={(e) => setAddStatus(e.target.value)}
                   >
                     {statuses.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
@@ -619,8 +898,8 @@ export const ImplementationsPage: React.FC = () => {
                   type="text"
                   className="form-control"
                   placeholder="e.g. Amit Sharma, Vikram Malhotra, Priya Nair"
-                  value={formData.teamMembers}
-                  onChange={(e) => setFormData({ ...formData, teamMembers: e.target.value })}
+                  value={addTeamMembers}
+                  onChange={(e) => setAddTeamMembers(e.target.value)}
                 />
               </div>
 
@@ -630,8 +909,8 @@ export const ImplementationsPage: React.FC = () => {
                   <input
                     type="date"
                     className="form-control"
-                    value={formData.startDate}
-                    onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                    value={addStartDate}
+                    onChange={(e) => setAddStartDate(e.target.value)}
                     required
                   />
                 </div>
@@ -640,8 +919,8 @@ export const ImplementationsPage: React.FC = () => {
                   <input
                     type="date"
                     className="form-control"
-                    value={formData.targetGoLiveDate}
-                    onChange={(e) => setFormData({ ...formData, targetGoLiveDate: e.target.value })}
+                    value={addTargetGoLiveDate}
+                    onChange={(e) => setAddTargetGoLiveDate(e.target.value)}
                     required
                   />
                 </div>
@@ -652,9 +931,9 @@ export const ImplementationsPage: React.FC = () => {
                 <textarea
                   className="form-control"
                   rows={2}
-                  placeholder="e.g. Database schema mapping, custom plugin configuration..."
-                  value={formData.pendingActivities}
-                  onChange={(e) => setFormData({ ...formData, pendingActivities: e.target.value })}
+                  placeholder="e.g. Database schema mapping, active directory integration..."
+                  value={addPendingActivities}
+                  onChange={(e) => setAddPendingActivities(e.target.value)}
                 />
               </div>
 
@@ -663,7 +942,7 @@ export const ImplementationsPage: React.FC = () => {
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Creating...' : 'Create Project'}
+                  {submitting ? 'Creating Project...' : 'Create Implementation Project'}
                 </button>
               </div>
             </form>
@@ -671,289 +950,594 @@ export const ImplementationsPage: React.FC = () => {
         </div>
       )}
 
-      {/* Task Checklist & Management Modal (Updates #4 & #7) */}
+      {/* ========================================================= */}
+      {/* 2. MANAGE / DETAIL MODAL WITH MODULE-WISE TASKS & ROLLS  */}
+      {/* ========================================================= */}
       {selectedImp && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', padding: 24, background: 'white', borderRadius: 8 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 840, maxHeight: '92vh', overflowY: 'auto', padding: 24, background: 'white', borderRadius: 8 }}>
+            
+            {/* Modal Header */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
-                  Implementation Checklist & Progress • {selectedImp.id}
-                </h3>
-                <div style={{ fontSize: 13, color: '#64748b', marginTop: 2 }}>
-                  {selectedImp.company_name} • <strong>{selectedImp.product_name}</strong>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Rocket size={20} color="#0284c7" />
+                  <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
+                    {selectedImp.company_name} • {selectedImp.product_name}
+                  </h3>
+                  <code>{selectedImp.id}</code>
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 4 }}>
+                  Lead: <strong>{selectedImp.owner_employee_name || 'Unassigned'}</strong> • Start: {formatDate(selectedImp.start_date)} • Target Go-Live: {formatDate(selectedImp.target_go_live_date)}
                 </div>
               </div>
-              <button onClick={() => setSelectedImp(null)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+              <button onClick={() => { setSelectedImp(null); setImpDetail(null); }} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
                 <X size={20} color="#64748b" />
               </button>
             </div>
 
-            {/* Dynamic Progress Indicator */}
-            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
-                  AUTOMATIC TASK-BASED PROGRESS
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: computedProgress === 100 ? '#16a34a' : '#0284c7' }}>
-                  {totalCount > 0 ? `${completedCount} / ${totalCount} Tasks (${computedProgress}%)` : `${computedProgress}% (No Tasks)`}
-                </div>
+            {loadingDetail ? (
+              <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+                <RefreshCw size={24} className="animate-spin" style={{ margin: '0 auto 10px auto', display: 'block' }} />
+                Loading implementation modules & tasks...
               </div>
-              <div style={{ width: '100%', height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
-                <div
-                  style={{
-                    width: `${computedProgress}%`,
-                    height: '100%',
-                    background: computedProgress === 100 ? '#16a34a' : (updateStatus === 'BLOCKED' ? '#ef4444' : '#0284c7'),
-                    transition: 'width 0.3s ease',
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Interactive Task Checklist */}
-            <div style={{ marginBottom: 24 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <ListTodo size={16} color="#0284c7" />
-                  Implementation Tasks
-                </h4>
-                <span style={{ fontSize: 11, color: '#64748b' }}>
-                  Check off tasks as completed to update progress
-                </span>
-              </div>
-
-              {loadingTasks ? (
-                <div style={{ padding: 20, textAlign: 'center', color: '#64748b' }}>
-                  <RefreshCw size={18} className="animate-spin" style={{ margin: '0 auto 6px auto', display: 'block' }} />
-                  Loading tasks...
-                </div>
-              ) : tasks.length === 0 ? (
-                <div style={{ padding: 20, background: '#f8fafc', borderRadius: 6, textAlign: 'center', border: '1px dashed #cbd5e1' }}>
-                  <div style={{ fontSize: 13, color: '#64748b' }}>No tasks assigned yet. Add tasks below to start tracking.</div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {tasks.map((task) => (
+            ) : (
+              <div>
+                {/* Overall Dynamic Progress Banner */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, marginBottom: 20 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Overall Implementation Progress
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: (impDetail?.metrics?.progressPercentage || selectedImp.progress_percentage) === 100 ? '#16a34a' : '#0284c7' }}>
+                      {impDetail?.metrics?.totalTasks
+                        ? `${impDetail.metrics.completedTasks} / ${impDetail.metrics.totalTasks} Tasks Completed (${impDetail.metrics.progressPercentage}%)`
+                        : `${selectedImp.progress_percentage}% (Checklist Active)`}
+                    </div>
+                  </div>
+                  <div style={{ width: '100%', height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
                     <div
-                      key={task.id}
                       style={{
-                        display: 'flex',
-                        alignItems: 'flex-start',
-                        gap: 12,
-                        padding: '10px 14px',
-                        background: task.status === 'COMPLETED' ? '#f0fdf4' : '#ffffff',
-                        border: `1px solid ${task.status === 'COMPLETED' ? '#bbf7d0' : '#e2e8f0'}`,
-                        borderRadius: 6,
-                        transition: 'all 0.2s ease',
+                        width: `${impDetail?.metrics?.progressPercentage !== undefined ? impDetail.metrics.progressPercentage : selectedImp.progress_percentage}%`,
+                        height: '100%',
+                        background: (impDetail?.metrics?.progressPercentage || selectedImp.progress_percentage) === 100 ? '#16a34a' : (updateStatus === 'BLOCKED' ? '#ef4444' : '#0284c7'),
+                        transition: 'width 0.3s ease',
                       }}
-                    >
-                      {/* Checkbox Toggle */}
-                      <button
-                        type="button"
-                        onClick={() => handleToggleTask(task)}
-                        style={{
-                          background: 'transparent',
-                          border: 'none',
-                          cursor: 'pointer',
-                          padding: 0,
-                          marginTop: 2,
-                          color: task.status === 'COMPLETED' ? '#16a34a' : '#94a3b8',
-                        }}
-                      >
-                        {task.status === 'COMPLETED' ? <CheckSquare size={18} /> : <Square size={18} />}
-                      </button>
+                    />
+                  </div>
+                </div>
 
-                      {/* Task Content / Inline Edit */}
-                      <div style={{ flex: 1 }}>
-                        {editingTaskId === task.id ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <input
-                              type="text"
-                              className="form-control"
-                              value={editTaskName}
-                              onChange={(e) => setEditTaskName(e.target.value)}
-                              style={{ fontSize: 13, padding: '4px 8px' }}
-                            />
-                            <input
-                              type="text"
-                              className="form-control"
-                              placeholder="Description (optional)"
-                              value={editTaskDesc}
-                              onChange={(e) => setEditTaskDesc(e.target.value)}
-                              style={{ fontSize: 12, padding: '4px 8px' }}
-                            />
-                            <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
-                              <button
-                                type="button"
-                                className="btn btn-primary btn-xs"
-                                onClick={() => handleSaveEditTask(task.id)}
-                              >
-                                Save
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-secondary btn-xs"
-                                onClick={() => setEditingTaskId(null)}
-                              >
-                                Cancel
-                              </button>
+                {/* Module-wise Sections */}
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Layers size={16} color="#0284c7" />
+                      Implementation Modules & Checklists
+                    </h4>
+                    {isAdminOrManager && (
+                      <button
+                        className="btn btn-secondary btn-xs"
+                        onClick={() => {
+                          setTaskModuleId(impDetail?.modules?.[0]?.id || '');
+                          setShowAddTaskFormForModule('CUSTOM_NEW');
+                        }}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                      >
+                        <Plus size={12} /> Add Task
+                      </button>
+                    )}
+                  </div>
+
+                  {(!impDetail?.modules || impDetail.modules.length === 0) && (!impDetail?.generalTasks || impDetail.generalTasks.length === 0) ? (
+                    <div style={{ padding: 20, background: '#f8fafc', borderRadius: 6, textAlign: 'center', border: '1px dashed #cbd5e1' }}>
+                      <div style={{ fontSize: 13, color: '#64748b' }}>No modules or tasks configured. Click "+ Add Task" to create checklist items.</div>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                      {impDetail?.modules?.map((mod) => (
+                        <div
+                          key={mod.id}
+                          style={{
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 8,
+                            overflow: 'hidden',
+                            background: '#ffffff',
+                          }}
+                        >
+                          {/* Module Header with Progress */}
+                          <div
+                            style={{
+                              background: '#f8fafc',
+                              borderBottom: '1px solid #e2e8f0',
+                              padding: '10px 14px',
+                              display: 'flex',
+                              justifyContent: 'space-between',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <span>{mod.name}</span>
+                                <span
+                                  style={{
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    padding: '2px 8px',
+                                    borderRadius: 12,
+                                    background: mod.totalCount > 0 && mod.completedCount === mod.totalCount ? '#dcfce7' : '#e0f2fe',
+                                    color: mod.totalCount > 0 && mod.completedCount === mod.totalCount ? '#15803d' : '#0369a1',
+                                  }}
+                                >
+                                  {mod.completedCount} / {mod.totalCount} Completed ({mod.progressPercentage}%)
+                                </span>
+                              </div>
+                              {mod.description && (
+                                <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{mod.description}</div>
+                              )}
                             </div>
+
+                            {isAdminOrManager && (
+                              <button
+                                className="btn btn-outline btn-xs"
+                                onClick={() => {
+                                  setTaskModuleId(mod.id);
+                                  setShowAddTaskFormForModule(showAddTaskFormForModule === mod.id ? null : mod.id);
+                                }}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              >
+                                <Plus size={12} /> Add Checklist Item
+                              </button>
+                            )}
                           </div>
-                        ) : (
-                          <div>
-                            <div
+
+                          {/* Inline Add Task Form for this module */}
+                          {showAddTaskFormForModule === mod.id && (
+                            <form
+                              onSubmit={(e) => handleAddTask(e, mod.id)}
                               style={{
-                                fontSize: 13,
-                                fontWeight: 600,
-                                color: task.status === 'COMPLETED' ? '#166534' : '#1e293b',
-                                textDecoration: task.status === 'COMPLETED' ? 'line-through' : 'none',
+                                background: '#f0fdf4',
+                                borderBottom: '1px solid #bbf7d0',
+                                padding: 12,
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: 8,
                               }}
                             >
-                              {task.task_name}
-                            </div>
-                            {task.description && (
-                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{task.description}</div>
-                            )}
-                            {task.completed_by_name && (
-                              <div style={{ fontSize: 10, color: '#15803d', marginTop: 3 }}>
-                                Completed by: {task.completed_by_name}
+                              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                <input
+                                  type="text"
+                                  className="form-control"
+                                  placeholder={`+ Checklist task for ${mod.name} (e.g. Data Migration, Device Setup)`}
+                                  value={newTaskName}
+                                  onChange={(e) => setNewTaskName(e.target.value)}
+                                  style={{ flex: 3, minWidth: 220, fontSize: 13 }}
+                                  required
+                                  autoFocus
+                                />
+                                <select
+                                  className="form-control"
+                                  value={newTaskAssignee}
+                                  onChange={(e) => setNewTaskAssignee(e.target.value)}
+                                  style={{ flex: 2, minWidth: 160, fontSize: 12 }}
+                                >
+                                  <option value="">-- Assign Employee --</option>
+                                  {employees.map((emp) => (
+                                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.level})</option>
+                                  ))}
+                                </select>
+                                <select
+                                  className="form-control"
+                                  value={newTaskPriority}
+                                  onChange={(e) => setNewTaskPriority(e.target.value)}
+                                  style={{ width: 100, fontSize: 12 }}
+                                >
+                                  <option value="LOW">Low</option>
+                                  <option value="MEDIUM">Medium</option>
+                                  <option value="HIGH">High</option>
+                                  <option value="URGENT">Urgent</option>
+                                </select>
+                                <input
+                                  type="date"
+                                  className="form-control"
+                                  value={newTaskDueDate}
+                                  onChange={(e) => setNewTaskDueDate(e.target.value)}
+                                  style={{ width: 130, fontSize: 12 }}
+                                />
+                                <button type="submit" className="btn btn-primary btn-sm" disabled={addingTask}>
+                                  {addingTask ? 'Saving...' : 'Add'}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setShowAddTaskFormForModule(null)}
+                                >
+                                  Cancel
+                                </button>
                               </div>
-                            )}
-                          </div>
-                        )}
-                      </div>
+                              <input
+                                type="text"
+                                className="form-control"
+                                placeholder="Description / scope notes for this checklist item (optional)"
+                                value={newTaskDesc}
+                                onChange={(e) => setNewTaskDesc(e.target.value)}
+                                style={{ fontSize: 12 }}
+                              />
+                            </form>
+                          )}
 
-                      {/* Admin Task Actions */}
-                      {isAdminOrManager && editingTaskId !== task.id && (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setEditingTaskId(task.id);
-                              setEditTaskName(task.task_name);
-                              setEditTaskDesc(task.description || '');
-                            }}
-                            title="Edit Task"
-                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', padding: 2 }}
-                          >
-                            <Edit3 size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveTask(task)}
-                            title="Remove Task"
-                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 2 }}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {/* Task Checklist Items */}
+                          {mod.tasks.length === 0 ? (
+                            <div style={{ padding: '12px 16px', color: '#94a3b8', fontSize: 12, fontStyle: 'italic' }}>
+                              No checklist tasks added for {mod.name} yet.
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                              {mod.tasks.map((task) => (
+                                <div
+                                  key={task.id}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: 12,
+                                    padding: '10px 14px',
+                                    borderBottom: '1px solid #f1f5f9',
+                                    background: task.status === 'COMPLETED' ? '#f0fdf4' : '#ffffff',
+                                  }}
+                                >
+                                  {/* Checkbox Toggle */}
+                                  <button
+                                    type="button"
+                                    onClick={() => handleToggleTask(task)}
+                                    style={{
+                                      background: 'transparent',
+                                      border: 'none',
+                                      cursor: 'pointer',
+                                      padding: 0,
+                                      color: task.status === 'COMPLETED' ? '#16a34a' : '#94a3b8',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                    }}
+                                  >
+                                    {task.status === 'COMPLETED' ? <CheckSquare size={18} /> : <Square size={18} />}
+                                  </button>
+
+                                  {/* Task Info / Inline Edit */}
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    {editingTaskId === task.id ? (
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '4px 0' }}>
+                                        <div style={{ display: 'flex', gap: 6 }}>
+                                          <input
+                                            type="text"
+                                            className="form-control"
+                                            value={editTaskName}
+                                            onChange={(e) => setEditTaskName(e.target.value)}
+                                            style={{ flex: 2, fontSize: 13 }}
+                                            placeholder="Task Name"
+                                          />
+                                          <select
+                                            className="form-control"
+                                            value={editTaskAssignee}
+                                            onChange={(e) => setEditTaskAssignee(e.target.value)}
+                                            style={{ flex: 1, fontSize: 12 }}
+                                          >
+                                            <option value="">-- Assign Employee --</option>
+                                            {employees.map((emp) => (
+                                              <option key={emp.id} value={emp.id}>{emp.name} ({emp.level})</option>
+                                            ))}
+                                          </select>
+                                          <select
+                                            className="form-control"
+                                            value={editTaskPriority}
+                                            onChange={(e) => setEditTaskPriority(e.target.value)}
+                                            style={{ width: 90, fontSize: 12 }}
+                                          >
+                                            <option value="LOW">Low</option>
+                                            <option value="MEDIUM">Medium</option>
+                                            <option value="HIGH">High</option>
+                                            <option value="URGENT">Urgent</option>
+                                          </select>
+                                          <input
+                                            type="date"
+                                            className="form-control"
+                                            value={editTaskDueDate}
+                                            onChange={(e) => setEditTaskDueDate(e.target.value)}
+                                            style={{ width: 130, fontSize: 12 }}
+                                          />
+                                        </div>
+                                        <input
+                                          type="text"
+                                          className="form-control"
+                                          placeholder="Description (optional)"
+                                          value={editTaskDesc}
+                                          onChange={(e) => setEditTaskDesc(e.target.value)}
+                                          style={{ fontSize: 12 }}
+                                        />
+                                        <div style={{ display: 'flex', gap: 6, marginTop: 2 }}>
+                                          <button
+                                            type="button"
+                                            className="btn btn-primary btn-xs"
+                                            onClick={() => handleSaveEditTask(task.id)}
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btn btn-secondary btn-xs"
+                                            onClick={() => setEditingTaskId(null)}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                          <span
+                                            style={{
+                                              fontSize: 13,
+                                              fontWeight: 600,
+                                              color: task.status === 'COMPLETED' ? '#166534' : '#1e293b',
+                                              textDecoration: task.status === 'COMPLETED' ? 'line-through' : 'none',
+                                            }}
+                                          >
+                                            {task.task_name}
+                                          </span>
+                                          {getPriorityBadge(task.priority)}
+                                        </div>
+                                        {task.description && (
+                                          <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{task.description}</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Assignee Badge & Due Date */}
+                                  {editingTaskId !== task.id && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                      {task.assigned_employee_name ? (
+                                        <span
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            padding: '2px 8px',
+                                            borderRadius: 12,
+                                            background: '#f1f5f9',
+                                            color: '#0f172a',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: 4,
+                                          }}
+                                        >
+                                          <User size={11} color="#0284c7" />
+                                          {task.assigned_employee_name}
+                                          {task.assigned_employee_level && (
+                                            <span style={{ fontSize: 10, color: '#64748b' }}>({task.assigned_employee_level})</span>
+                                          )}
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: 11, color: '#94a3b8' }}>Unassigned</span>
+                                      )}
+
+                                      {task.due_date && (
+                                        <span style={{ fontSize: 11, color: '#64748b', display: 'flex', alignItems: 'center', gap: 3 }}>
+                                          <Calendar size={11} /> {formatDate(task.due_date)}
+                                        </span>
+                                      )}
+
+                                      {isAdminOrManager && (
+                                        <div style={{ display: 'flex', gap: 4 }}>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleStartEditTask(task)}
+                                            title="Edit Task"
+                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b', padding: 2 }}
+                                          >
+                                            <Edit3 size={14} />
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => handleRemoveTask(task)}
+                                            title="Remove Task"
+                                            style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: 2 }}
+                                          >
+                                            <Trash2 size={14} />
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* General / Unassigned Tasks if any */}
+                      {impDetail?.generalTasks && impDetail.generalTasks.length > 0 && (
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden', background: '#ffffff' }}>
+                          <div style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', padding: '10px 14px', fontWeight: 700, fontSize: 13, color: '#475569' }}>
+                            General Project Checklists
+                          </div>
+                          {impDetail.generalTasks.map((task) => (
+                            <div
+                              key={task.id}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 12,
+                                padding: '10px 14px',
+                                borderBottom: '1px solid #f1f5f9',
+                                background: task.status === 'COMPLETED' ? '#f0fdf4' : '#ffffff',
+                              }}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => handleToggleTask(task)}
+                                style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, color: task.status === 'COMPLETED' ? '#16a34a' : '#94a3b8' }}
+                              >
+                                {task.status === 'COMPLETED' ? <CheckSquare size={18} /> : <Square size={18} />}
+                              </button>
+                              <div style={{ flex: 1 }}>
+                                <span style={{ fontSize: 13, fontWeight: 600, textDecoration: task.status === 'COMPLETED' ? 'line-through' : 'none' }}>
+                                  {task.task_name}
+                                </span>
+                              </div>
+                              {task.assigned_employee_name && (
+                                <span style={{ fontSize: 11, color: '#0f172a' }}>{task.assigned_employee_name}</span>
+                              )}
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
-                  ))}
-                </div>
-              )}
+                  )}
 
-              {/* Admin Add Task Form */}
-              {isAdminOrManager && (
-                <form
-                  onSubmit={handleAddTask}
-                  style={{
-                    marginTop: 12,
-                    display: 'flex',
-                    gap: 8,
-                    flexWrap: 'wrap',
-                    background: '#f8fafc',
-                    padding: 12,
-                    borderRadius: 6,
-                    border: '1px solid #e2e8f0',
-                  }}
-                >
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="+ Task Name (e.g. Configure Client Firewall)"
-                    value={newTaskName}
-                    onChange={(e) => setNewTaskName(e.target.value)}
-                    style={{ flex: 2, minWidth: 200, fontSize: 13 }}
-                    required
-                  />
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Description (Optional)"
-                    value={newTaskDesc}
-                    onChange={(e) => setNewTaskDesc(e.target.value)}
-                    style={{ flex: 2, minWidth: 160, fontSize: 13 }}
-                  />
-                  <select
-                    className="form-control"
-                    value={newTaskPriority}
-                    onChange={(e) => setNewTaskPriority(e.target.value)}
-                    style={{ width: 100, fontSize: 12 }}
-                  >
-                    <option value="LOW">Low</option>
-                    <option value="MEDIUM">Medium</option>
-                    <option value="HIGH">High</option>
-                  </select>
-                  <button type="submit" className="btn btn-primary btn-sm" disabled={addingTask}>
-                    {addingTask ? 'Adding...' : '+ Add Task'}
-                  </button>
+                  {/* General Add Task Form when "+ Add Task" button clicked */}
+                  {showAddTaskFormForModule === 'CUSTOM_NEW' && (
+                    <form
+                      onSubmit={(e) => handleAddTask(e, taskModuleId)}
+                      style={{
+                        marginTop: 12,
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 8,
+                        padding: 14,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>+ Add Implementation Checklist Task</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10 }}>
+                        <select
+                          className="form-control"
+                          value={taskModuleId}
+                          onChange={(e) => setTaskModuleId(e.target.value)}
+                          style={{ fontSize: 12 }}
+                        >
+                          <option value="">General (No specific module)</option>
+                          {impDetail?.modules?.map((m) => (
+                            <option key={m.id} value={m.id}>{m.name}</option>
+                          ))}
+                        </select>
+                        <input
+                          type="text"
+                          className="form-control"
+                          placeholder="Task Name (e.g. Custom Validation Rules)"
+                          value={newTaskName}
+                          onChange={(e) => setNewTaskName(e.target.value)}
+                          style={{ fontSize: 13 }}
+                          required
+                        />
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 10 }}>
+                        <select
+                          className="form-control"
+                          value={newTaskAssignee}
+                          onChange={(e) => setNewTaskAssignee(e.target.value)}
+                          style={{ fontSize: 12 }}
+                        >
+                          <option value="">-- Assign Employee --</option>
+                          {employees.map((emp) => (
+                            <option key={emp.id} value={emp.id}>{emp.name} ({emp.level})</option>
+                          ))}
+                        </select>
+                        <select
+                          className="form-control"
+                          value={newTaskPriority}
+                          onChange={(e) => setNewTaskPriority(e.target.value)}
+                          style={{ fontSize: 12 }}
+                        >
+                          <option value="LOW">Low</option>
+                          <option value="MEDIUM">Medium</option>
+                          <option value="HIGH">High</option>
+                          <option value="URGENT">Urgent</option>
+                        </select>
+                        <input
+                          type="date"
+                          className="form-control"
+                          value={newTaskDueDate}
+                          onChange={(e) => setNewTaskDueDate(e.target.value)}
+                          style={{ fontSize: 12 }}
+                        />
+                      </div>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        placeholder="Task description / specific configuration deliverables (optional)"
+                        value={newTaskDesc}
+                        onChange={(e) => setNewTaskDesc(e.target.value)}
+                        style={{ fontSize: 12 }}
+                      />
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                        <button
+                          type="button"
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => setShowAddTaskFormForModule(null)}
+                        >
+                          Cancel
+                        </button>
+                        <button type="submit" className="btn btn-primary btn-sm" disabled={addingTask}>
+                          {addingTask ? 'Saving Task...' : 'Save Task Item'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
+
+                {/* Lifecycle Details & Notes Form */}
+                <form onSubmit={handleSaveDetails}>
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
+                    <div className="form-group" style={{ marginBottom: 14 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Lifecycle Status</label>
+                      <select
+                        className="form-control"
+                        value={updateStatus}
+                        onChange={(e) => setUpdateStatus(e.target.value)}
+                      >
+                        {statuses.map((s) => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 14 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Pending Activities / Next Deliverables</label>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        value={updatePending}
+                        onChange={(e) => setUpdatePending(e.target.value)}
+                        placeholder="e.g. UAT sign-off scheduled for Friday."
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 20 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Progress Notes & Status Updates</label>
+                      <textarea
+                        className="form-control"
+                        rows={2}
+                        value={updateNotes}
+                        onChange={(e) => setUpdateNotes(e.target.value)}
+                      />
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+                      <button type="button" className="btn btn-secondary" onClick={() => { setSelectedImp(null); setImpDetail(null); }}>
+                        Close
+                      </button>
+                      <button type="submit" className="btn btn-primary" disabled={submitting}>
+                        {submitting ? 'Saving...' : 'Save Project Updates'}
+                      </button>
+                    </div>
+                  </div>
                 </form>
-              )}
-            </div>
-
-            {/* Lifecycle Details & Notes */}
-            <form onSubmit={handleSaveDetails}>
-              <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 16 }}>
-                <div className="form-group" style={{ marginBottom: 14 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Lifecycle Status</label>
-                  <select
-                    className="form-control"
-                    value={updateStatus}
-                    onChange={(e) => setUpdateStatus(e.target.value)}
-                  >
-                    {statuses.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 14 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Pending Activities / Next Deliverables</label>
-                  <textarea
-                    className="form-control"
-                    rows={2}
-                    value={updatePending}
-                    onChange={(e) => setUpdatePending(e.target.value)}
-                    placeholder="e.g. UAT sign-off scheduled for Friday."
-                  />
-                </div>
-
-                <div className="form-group" style={{ marginBottom: 20 }}>
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Progress Notes & Status Updates</label>
-                  <textarea
-                    className="form-control"
-                    rows={2}
-                    value={updateNotes}
-                    onChange={(e) => setUpdateNotes(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button type="button" className="btn btn-secondary" onClick={() => setSelectedImp(null)}>
-                    Close
-                  </button>
-                  <button type="submit" className="btn btn-primary" disabled={submitting}>
-                    {submitting ? 'Saving...' : 'Save Project Updates'}
-                  </button>
-                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
     </div>
   );
 };
-

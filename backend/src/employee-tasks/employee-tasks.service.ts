@@ -13,6 +13,37 @@ export class EmployeeTasksService {
     private readonly auditService: AuditService,
   ) {}
 
+  /**
+   * Authority level ranking according to platform hierarchy:
+   * Rank 5: SUPER ADMIN / ADMIN
+   * Rank 4: MANAGER
+   * Rank 3: L3 EMPLOYEE
+   * Rank 2: L2 EMPLOYEE
+   * Rank 1: L1 EMPLOYEE
+   * Rank 0: Others / Inactive
+   */
+  getAuthorityRank(role?: string, level?: string): number {
+    const r = (role || '').toUpperCase();
+    const l = (level || '').toUpperCase();
+
+    if (r === 'ADMIN' || r === 'SUPER_ADMIN') {
+      return 5;
+    }
+    if (r === 'MANAGER' || l === 'MANAGER') {
+      return 4;
+    }
+    if (r === 'L3_EMPLOYEE' || l === 'L3') {
+      return 3;
+    }
+    if (r === 'L2_EMPLOYEE' || l === 'L2') {
+      return 2;
+    }
+    if (r === 'L1_EMPLOYEE' || l === 'L1') {
+      return 1;
+    }
+    return 0;
+  }
+
   async resolveEmployeeId(user: any): Promise<string> {
     if (user?.employeeId) {
       return String(user.employeeId);
@@ -30,6 +61,35 @@ export class EmployeeTasksService {
       });
       if (empByEmail) return empByEmail.id;
     }
+
+    // Auto-create/ensure employee profile for Admin/Super Admin/Manager if not already linked
+    const role = (user?.role || '').toUpperCase();
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'MANAGER') {
+      const userIdNum = Number(userId || 1);
+      const email = user?.email || (role === 'ADMIN' ? 'admin@kanvtech.com' : `manager_${userIdNum}@kanvtech.com`);
+      const name = role === 'ADMIN' || role === 'SUPER_ADMIN' ? 'System Administrator' : 'Operations Manager';
+      const empId = `EMP-${String(userIdNum).padStart(3, '0')}`;
+
+      const existingEmp = await this.prisma.employee.findUnique({ where: { id: empId } });
+      if (existingEmp) return existingEmp.id;
+
+      const created = await this.prisma.employee.create({
+        data: {
+          id: empId,
+          userId: userIdNum,
+          name,
+          email,
+          phone: '+91 98000 00000',
+          department: 'Executive Management',
+          designation: role === 'ADMIN' || role === 'SUPER_ADMIN' ? 'Chief Administrator' : 'Operations Manager',
+          level: 'MANAGER',
+          availability: 'AVAILABLE',
+          status: 'ACTIVE',
+        },
+      });
+      return created.id;
+    }
+
     throw new ForbiddenException('Employee account required to manage personal tasks.');
   }
 
@@ -47,11 +107,71 @@ export class EmployeeTasksService {
   }
 
   /**
-   * Create a new personal self-task with due date/time and reminder.
+   * Get list of employees the current user is authorized to assign tasks to.
+   * Super Admin / Admin -> Manager, L3, L2, L1 (excludes Admins, self)
+   * Manager -> L3, L2, L1 (excludes Managers, Admins, self)
+   * L3 -> L2, L1
+   * L2 -> L1
+   * L1 -> [] (Cannot assign to anyone)
+   */
+  async getEligibleAssignees(
+    requestingEmployeeId: string,
+    requestingUserId: number | undefined,
+    requestingUserRole: string | undefined,
+  ) {
+    let requestingLevel: string | undefined;
+    if (requestingEmployeeId) {
+      const emp = await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { level: true },
+      });
+      requestingLevel = emp?.level;
+    }
+
+    const creatorRank = this.getAuthorityRank(requestingUserRole, requestingLevel);
+
+    // If rank is 1 or less (L1 or unrecognized), cannot assign to anyone
+    if (creatorRank <= 1) {
+      return [];
+    }
+
+    // Fetch all active employees
+    const allEmployees = await this.prisma.employee.findMany({
+      where: { status: 'ACTIVE' },
+      include: {
+        user: { select: { role: true, isActive: true } },
+        departmentRel: { select: { name: true } },
+      },
+      orderBy: [{ level: 'desc' }, { name: 'asc' }],
+    });
+
+    // Filter employees where targetRank < creatorRank and target is not the requester
+    const eligible = allEmployees.filter((emp) => {
+      if (emp.id === requestingEmployeeId) return false;
+      const targetRank = this.getAuthorityRank(emp.user?.role, emp.level);
+      return targetRank < creatorRank;
+    });
+
+    return eligible.map((e) => ({
+      id: e.id,
+      name: e.name,
+      email: e.email,
+      level: e.level,
+      role: e.user?.role,
+      department_name: e.departmentRel?.name || e.department,
+      designation: e.designation,
+    }));
+  }
+
+  /**
+   * Create a new personal or assigned task with due date/time, attachments, and reminders.
+   * Backend strictly enforces the hierarchy authority rule:
+   * Creator authority rank must be strictly higher than target employee rank for assignments.
    */
   async createTask(
     creatorEmployeeId: string,
     creatorUserId: number | undefined,
+    creatorRole: string | undefined,
     data: {
       title: string;
       description?: string;
@@ -61,6 +181,8 @@ export class EmployeeTasksService {
       taskType?: string;
       priority?: string;
       reminderTime?: string;
+      assignedToIds?: string[];
+      attachments?: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }>;
     },
   ) {
     if (!data.title?.trim()) {
@@ -100,48 +222,124 @@ export class EmployeeTasksService {
       }
     }
 
-    const id = await this.generateTaskId();
     const priority = data.priority ? data.priority.toUpperCase() : 'MEDIUM';
 
-    const task = await this.prisma.employeeTask.create({
-      data: {
-        id,
-        title: data.title.trim(),
-        description: data.description?.trim() || null,
-        category: data.category?.trim() || null,
-        dueDate: dueDateTime,
-        dueTime: data.dueTime?.trim() || null,
-        taskType: data.taskType || 'SELF TASK',
-        priority,
-        reminderTime: reminderDateTime,
-        reminderTriggeredAt: null,
-        status: 'PENDING',
-        createdBy: creatorEmployeeId,
-        assignedTo: creatorEmployeeId, // Strictly personal to owner
-      },
-      include: {
-        creator: { select: { id: true, name: true, email: true, userId: true } },
-        assignee: { select: { id: true, name: true, email: true, userId: true } },
-      },
-    });
-
-    if (creatorUserId) {
-      await this.auditService.log({
-        actorUserId: creatorUserId,
-        action: 'TASK_CREATED',
-        entityType: 'EMPLOYEE_TASK',
-        entityId: task.id,
-        newValues: {
-          title: task.title,
-          priority: task.priority,
-          dueDate: task.dueDate,
-          dueTime: task.dueTime,
-          reminderTime: task.reminderTime,
-        },
+    // Resolve creator authority rank
+    let creatorLevel: string | undefined;
+    if (creatorEmployeeId) {
+      const cEmp = await this.prisma.employee.findUnique({
+        where: { id: creatorEmployeeId },
+        select: { level: true },
       });
+      creatorLevel = cEmp?.level;
+    }
+    const creatorRank = this.getAuthorityRank(creatorRole, creatorLevel);
+
+    // Normalize assignees
+    let targetAssigneeIds: string[] = [];
+    if (Array.isArray(data.assignedToIds) && data.assignedToIds.length > 0) {
+      targetAssigneeIds = data.assignedToIds;
+    } else {
+      targetAssigneeIds = [creatorEmployeeId];
     }
 
-    return this.formatTask(task);
+    // Map 'MYSELF' to creatorEmployeeId and remove duplicates
+    const resolvedAssigneeIds = Array.from(
+      new Set(targetAssigneeIds.map((id) => (id === 'MYSELF' || id === 'myself' ? creatorEmployeeId : id)))
+    );
+
+    // Validate authority for each target assignee
+    for (const assigneeId of resolvedAssigneeIds) {
+      if (assigneeId !== creatorEmployeeId) {
+        const targetEmp = await this.prisma.employee.findUnique({
+          where: { id: assigneeId },
+          include: { user: { select: { role: true, isActive: true } } },
+        });
+
+        if (!targetEmp || targetEmp.status !== 'ACTIVE') {
+          throw new BadRequestException(`Target employee '${assigneeId}' not found or inactive.`);
+        }
+
+        const targetRank = this.getAuthorityRank(targetEmp.user?.role, targetEmp.level);
+
+        // Security check: Must have strictly higher rank than target
+        if (creatorRank <= targetRank) {
+          throw new ForbiddenException(
+            `Unauthorized task assignment: You cannot assign tasks to ${targetEmp.name} (${targetEmp.level || targetEmp.user?.role || 'employee'}) as their hierarchy level is at or above your authority level.`,
+          );
+        }
+      }
+    }
+
+    // Format description with attachments metadata if present
+    let rawDescription = data.description?.trim() || null;
+    if (data.attachments && Array.isArray(data.attachments) && data.attachments.length > 0) {
+      const meta = `<!--ATTACHMENTS:${JSON.stringify(data.attachments)}-->`;
+      rawDescription = rawDescription ? `${rawDescription}\n\n${meta}` : meta;
+    }
+
+    const createdTasks: any[] = [];
+
+    for (const assigneeId of resolvedAssigneeIds) {
+      const id = await this.generateTaskId();
+      const isSelf = assigneeId === creatorEmployeeId;
+      const taskType = isSelf ? 'Personal' : 'Assigned Task';
+
+      const task = await this.prisma.employeeTask.create({
+        data: {
+          id,
+          title: data.title.trim(),
+          description: rawDescription,
+          category: data.category?.trim() || null,
+          dueDate: dueDateTime,
+          dueTime: data.dueTime?.trim() || null,
+          taskType,
+          priority,
+          reminderTime: reminderDateTime,
+          reminderTriggeredAt: null,
+          status: 'PENDING',
+          createdBy: creatorEmployeeId,
+          assignedTo: assigneeId,
+        },
+        include: {
+          creator: { select: { id: true, name: true, email: true, userId: true } },
+          assignee: { select: { id: true, name: true, email: true, userId: true } },
+        },
+      });
+
+      // If assigned to another employee, create in-app notification
+      if (!isSelf && task.assignee?.userId) {
+        const creatorName = task.creator?.name || (creatorRank >= 5 ? 'Admin' : 'Manager');
+        await this.notificationsService.createInAppNotification(
+          task.assignee.userId,
+          'New Task Assigned',
+          `New task assigned by ${creatorName}: ${task.title}`,
+          'TASK_ASSIGNED',
+          '/task_reminders',
+        );
+      }
+
+      if (creatorUserId) {
+        await this.auditService.log({
+          actorUserId: creatorUserId,
+          action: 'TASK_CREATED',
+          entityType: 'EMPLOYEE_TASK',
+          entityId: task.id,
+          newValues: {
+            title: task.title,
+            priority: task.priority,
+            assignedTo: assigneeId,
+            dueDate: task.dueDate,
+            dueTime: task.dueTime,
+            reminderTime: task.reminderTime,
+          },
+        });
+      }
+
+      createdTasks.push(this.formatTask(task));
+    }
+
+    return createdTasks.length === 1 ? createdTasks[0] : createdTasks;
   }
 
   /**
@@ -491,10 +689,26 @@ export class EmployeeTasksService {
    * Format employee task for API responses.
    */
   private formatTask(task: any) {
+    let description = task.description;
+    let attachments: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }> = [];
+
+    if (description && description.includes('<!--ATTACHMENTS:')) {
+      const match = description.match(/<!--ATTACHMENTS:(.*?)-->/);
+      if (match && match[1]) {
+        try {
+          attachments = JSON.parse(match[1]);
+        } catch {
+          attachments = [];
+        }
+      }
+      description = description.replace(/<!--ATTACHMENTS:.*?-->/, '').trim();
+    }
+
     return {
       id: task.id,
       title: task.title,
-      description: task.description,
+      description,
+      attachments,
       category: task.category,
       due_date: task.dueDate ? (task.dueDate instanceof Date ? task.dueDate.toISOString() : task.dueDate) : null,
       due_time: task.dueTime,

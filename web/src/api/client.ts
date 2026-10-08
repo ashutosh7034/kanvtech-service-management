@@ -11,7 +11,10 @@ export async function request<T = any>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('kanvtech_token') : null;
+  const token =
+    typeof window !== 'undefined'
+      ? localStorage.getItem('kanvtech_token') || sessionStorage.getItem('kanvtech_token')
+      : null;
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
@@ -32,7 +35,9 @@ export async function request<T = any>(
 
   if (response.status === 401 && typeof window !== 'undefined') {
     localStorage.removeItem('kanvtech_token');
+    sessionStorage.removeItem('kanvtech_token');
     localStorage.removeItem('kanvtech_user');
+    sessionStorage.removeItem('kanvtech_user');
     window.dispatchEvent(new Event('auth_unauthorized'));
   }
 
@@ -50,6 +55,24 @@ export async function request<T = any>(
   return data as T;
 }
 
+export function toQueryString(params: any = {}): string {
+  if (!params || typeof params !== 'object') return '';
+  const searchParams = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (
+      val !== undefined &&
+      val !== null &&
+      val !== '' &&
+      val !== 'undefined' &&
+      val !== 'null'
+    ) {
+      searchParams.append(key, String(val));
+    }
+  }
+  const str = searchParams.toString();
+  return str ? `?${str}` : '';
+}
+
 export const api = {
   // Auth
   login: (credentials: any) => request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
@@ -65,10 +88,7 @@ export const api = {
   markAllNotificationsRead: () => request('/notifications/read-all', { method: 'POST' }),
 
   // Companies / Customer Master
-  getCompanies: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/companies?${qs}`);
-  },
+  getCompanies: (params: any = {}) => request(`/companies${toQueryString(params)}`),
   getCompany: (id: string) => request(`/companies/${id}`),
   createCompany: (data: any) => request('/companies', { method: 'POST', body: JSON.stringify(data) }),
   updateCompany: (id: string, data: any) => request(`/companies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -76,8 +96,16 @@ export const api = {
     request(`/companies/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
 
   // Customer Products
-  addCustomerProduct: (companyId: string, productId: string) =>
-    request(`/companies/${companyId}/products`, { method: 'POST', body: JSON.stringify({ productId }) }),
+  addCustomerProduct: (companyId: string, data: any) =>
+    request(`/companies/${companyId}/products`, {
+      method: 'POST',
+      body: JSON.stringify(typeof data === 'string' ? { productId: data } : data),
+    }),
+  updateCustomerProductEntitlement: (companyId: string, productId: string, data: any) =>
+    request(`/companies/${companyId}/products/${productId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   removeCustomerProduct: (companyId: string, productId: string) =>
     request(`/companies/${companyId}/products/${productId}`, { method: 'DELETE' }),
 
@@ -94,10 +122,7 @@ export const api = {
     request(`/companies/${companyId}/branches/${branchId}/products`, { method: 'POST', body: JSON.stringify({ productIds }) }),
 
   // Departments
-  getDepartments: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/departments?${qs}`);
-  },
+  getDepartments: (params: any = {}) => request(`/departments${toQueryString(params)}`),
   getDepartment: (id: string) => request(`/departments/${id}`),
   createDepartment: (data: any) => request('/departments', { method: 'POST', body: JSON.stringify(data) }),
   updateDepartment: (id: string, data: any) => request(`/departments/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -105,10 +130,7 @@ export const api = {
     request(`/departments/${id}/status`, { method: 'POST', body: JSON.stringify({ isActive }) }),
 
   // Employees
-  getEmployees: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/employees?${qs}`);
-  },
+  getEmployees: (params: any = {}) => request(`/employees${toQueryString(params)}`),
   getEmployee: (id: string) => request(`/employees/${id}`),
   createEmployee: (data: any) => request('/employees', { method: 'POST', body: JSON.stringify(data) }),
   updateEmployee: (id: string, data: any) => request(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -122,10 +144,7 @@ export const api = {
   checkOut: (data: any) => request('/employees/attendance/check-out', { method: 'POST', body: JSON.stringify(data) }),
 
   // Tickets
-  getTickets: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/tickets?${qs}`);
-  },
+  getTickets: (params: any = {}) => request(`/tickets${toQueryString(params)}`),
   getTicket: (id: string) => request(`/tickets/${id}`),
   createTicket: (data: any) => request('/tickets', { method: 'POST', body: JSON.stringify(data) }),
   assignTicket: (id: string, data: any) => request(`/tickets/${id}/assign`, { method: 'POST', body: JSON.stringify(data) }),
@@ -161,19 +180,13 @@ export const api = {
   updateSLASettings: (data: any) => request('/reports/sla', { method: 'PUT', body: JSON.stringify(data) }),
 
   // Products
-  getProducts: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/products?${qs}`);
-  },
+  getProducts: (params: any = {}) => request(`/products${toQueryString(params)}`),
   getProduct: (id: string) => request(`/products/${id}`),
   createProduct: (data: any) => request('/products', { method: 'POST', body: JSON.stringify(data) }),
   updateProduct: (id: string, data: any) => request(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Prospects / Enquiries
-  getProspects: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/prospects?${qs}`);
-  },
+  getProspects: (params: any = {}) => request(`/prospects${toQueryString(params)}`),
   getProspect: (id: string) => request(`/prospects/${id}`),
   createProspect: (data: any) => request('/prospects', { method: 'POST', body: JSON.stringify(data) }),
   updateProspect: (id: string, data: any) => request(`/prospects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -189,9 +202,11 @@ export const api = {
   },
   getConversationDetails: (conversationId: number) =>
     request(`/chat/conversations/${conversationId}`).then((r) => r.conversation),
-  composeMessage: (data: { toUserIds: number[]; ccUserIds?: number[]; subject: string; message: string }) =>
+  composeMessage: (data: { toUserIds: number[]; ccUserIds?: number[]; subject: string; message: string; attachments?: any[] }) =>
     request('/chat/compose', { method: 'POST', body: JSON.stringify(data) }),
-  replyMessage: (conversationId: number, data: { message: string; isReplyAll?: boolean }) =>
+  uploadChatAttachment: (formData: FormData) =>
+    request('/chat/upload', { method: 'POST', body: formData }),
+  replyMessage: (conversationId: number, data: { message: string; isReplyAll?: boolean; attachments?: any[] }) =>
     request(`/chat/conversations/${conversationId}/reply`, { method: 'POST', body: JSON.stringify(data) }),
   getInternalEmployees: () => request('/chat/employees').then((r) => r.employees || []),
   searchEmployeesForMessaging: (q: string) =>
@@ -234,10 +249,7 @@ export const api = {
     request(`/products/submodules/${submoduleId}`, { method: 'DELETE' }),
 
   // Subscriptions & AMC
-  getSubscriptions: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/subscriptions?${qs}`);
-  },
+  getSubscriptions: (params: any = {}) => request(`/subscriptions${toQueryString(params)}`),
   getSubscription: (id: string) => request(`/subscriptions/${id}`),
   createSubscription: (data: any) => request('/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
   updateSubscription: (id: string, data: any) => request(`/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -248,11 +260,10 @@ export const api = {
   getSubscriptionStats: () => request('/subscriptions/stats'),
 
   // Implementations
-  getImplementations: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/implementations?${qs}`);
-  },
+  getImplementations: (params: any = {}) => request(`/implementations${toQueryString(params)}`),
   getImplementation: (id: string) => request(`/implementations/${id}`),
+  getEntitledImplementationModules: (companyId: string, productId: string) =>
+    request(`/implementations/entitled-modules?companyId=${encodeURIComponent(companyId)}&productId=${encodeURIComponent(productId)}`),
   createImplementation: (data: any) => request('/implementations', { method: 'POST', body: JSON.stringify(data) }),
   updateImplementation: (id: string, data: any) =>
     request(`/implementations/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -272,10 +283,7 @@ export const api = {
     request(`/implementations/${id}/tasks/reorder`, { method: 'POST', body: JSON.stringify({ taskIds }) }),
 
   // Task Allotment
-  getTaskAllotmentQueue: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/task-allotment/queue?${qs}`);
-  },
+  getTaskAllotmentQueue: (params: any = {}) => request(`/task-allotment/queue${toQueryString(params)}`),
   getEligibleEmployees: () => request('/task-allotment/eligible-employees'),
   getAllotmentStats: () => request('/task-allotment/stats'),
   directAssignTicket: (data: any) => request('/task-allotment/assign', { method: 'POST', body: JSON.stringify(data) }),
@@ -284,15 +292,15 @@ export const api = {
   getAuditLogs: () => request('/audit-logs'),
 
   // Employee Tasks (Task Reminders)
-  getMyTasks: (params: any = {}) => {
-    const qs = new URLSearchParams(params).toString();
-    return request(`/employee-tasks?${qs}`);
-  },
+  getMyTasks: (params: any = {}) => request(`/employee-tasks${toQueryString(params)}`),
   getMyTaskSummary: () => request('/employee-tasks/summary'),
+  getEligibleTaskAssignees: () => request('/employee-tasks/eligible-assignees'),
   getTaskById: (id: string) => request(`/employee-tasks/${id}`),
   getDueReminders: () => request('/employee-tasks/reminders'),
   createTask: (data: any) => request('/employee-tasks', { method: 'POST', body: JSON.stringify(data) }),
+  uploadTaskAttachment: (formData: FormData) => request('/employee-tasks/upload', { method: 'POST', body: formData }),
   updateTask: (id: string, data: any) => request(`/employee-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   completeTask: (id: string) => request(`/employee-tasks/${id}/complete`, { method: 'POST' }),
   deleteTask: (id: string) => request(`/employee-tasks/${id}`, { method: 'DELETE' }),
 };
+

@@ -216,7 +216,7 @@ model CompanyProduct {
   id           Int      @id @default(autoincrement())
   companyId    String   @map("company_id") @db.VarChar(50)
   productId    String   @map("product_id") @db.VarChar(50)
-  purchaseType String   @default("COMPLETE") @map("purchase_type") @db.VarChar(50) // COMPLETE, SELECTED_MODULES
+  purchaseType String   @default("SELECTED_MODULES") @map("purchase_type") @db.VarChar(50) // COMPLETE, SELECTED_MODULES
   purchasedAt  DateTime @default(now()) @map("purchased_at")
   isActive     Boolean  @default(true) @map("is_active")
   notes        String?  @db.Text
@@ -234,9 +234,10 @@ model CompanyProduct {
 }
 
 model CompanyProductModule {
-  id               Int    @id @default(autoincrement())
-  companyProductId Int    @map("company_product_id")
-  moduleId         String @map("module_id") @db.VarChar(50)
+  id               Int     @id @default(autoincrement())
+  companyProductId Int     @map("company_product_id")
+  moduleId         String  @map("module_id") @db.VarChar(50)
+  submoduleIds     String? @map("submodule_ids") @db.Text
 
   companyProduct CompanyProduct @relation(fields: [companyProductId], references: [id], onDelete: Cascade)
   module         ProductModule  @relation(fields: [moduleId], references: [id], onDelete: Restrict)
@@ -295,9 +296,10 @@ model BranchProduct {
 }
 
 model BranchProductModule {
-  id              Int    @id @default(autoincrement())
-  branchProductId Int    @map("branch_product_id")
-  moduleId        String @map("module_id") @db.VarChar(50)
+  id              Int     @id @default(autoincrement())
+  branchProductId Int     @map("branch_product_id")
+  moduleId        String  @map("module_id") @db.VarChar(50)
+  submoduleIds    String? @map("submodule_ids") @db.Text
 
   branchProduct BranchProduct @relation(fields: [branchProductId], references: [id], onDelete: Cascade)
   module        ProductModule @relation(fields: [moduleId], references: [id], onDelete: Restrict)
@@ -374,6 +376,7 @@ model Employee {
   ownedImplementations Implementation[]
   createdTasks         EmployeeTask[]            @relation("TaskCreatedBy")
   assignedTasks        EmployeeTask[]            @relation("TaskAssignedTo")
+  assignedImplementationTasks ImplementationTask[] @relation("ImplementationTaskAssignee")
 
   @@index([level], name: "idx_employees_level")
   @@index([status], name: "idx_employees_status")
@@ -713,9 +716,10 @@ model ProductModule {
 
   product         Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
   submodules      ProductSubmodule[]
-  companyProducts CompanyProductModule[]
-  branchProducts  BranchProductModule[]
-  tickets         Ticket[]
+  companyProducts     CompanyProductModule[]
+  branchProducts      BranchProductModule[]
+  tickets             Ticket[]
+  implementationTasks ImplementationTask[]
 
   @@map("product_modules")
 }
@@ -816,23 +820,30 @@ model TicketReopenHistory {
 
 // 29. Implementation Tasks (Checklist & Dynamic Progress)
 model ImplementationTask {
-  id               String     @id @db.VarChar(50) // TSK-0001
-  implementationId String     @map("implementation_id") @db.VarChar(50)
-  moduleId         String?    @map("module_id") @db.VarChar(50)
-  taskName         String     @map("task_name") @db.VarChar(255)
-  description      String?    @db.Text
-  priority         String?    @default("MEDIUM") @db.VarChar(50)
-  status           TaskStatus @default(PENDING)
-  orderIndex       Int        @default(0) @map("order_index")
-  completedBy      Int?       @map("completed_by")
-  completedAt      DateTime?  @map("completed_at")
-  createdAt        DateTime   @default(now()) @map("created_at")
-  updatedAt        DateTime   @default(now()) @updatedAt @map("updated_at")
+  id                 String     @id @db.VarChar(50) // TSK-0001
+  implementationId   String     @map("implementation_id") @db.VarChar(50)
+  moduleId           String?    @map("module_id") @db.VarChar(50)
+  taskName           String     @map("task_name") @db.VarChar(255)
+  description        String?    @db.Text
+  priority           String?    @default("MEDIUM") @db.VarChar(50)
+  status             TaskStatus @default(PENDING)
+  orderIndex         Int        @default(0) @map("order_index")
+  assignedEmployeeId String?    @map("assigned_employee_id") @db.VarChar(50)
+  dueDate            DateTime?  @map("due_date")
+  employeeTaskId     String?    @map("employee_task_id") @db.VarChar(50)
+  completedBy        Int?       @map("completed_by")
+  completedAt        DateTime?  @map("completed_at")
+  createdAt          DateTime   @default(now()) @map("created_at")
+  updatedAt          DateTime   @default(now()) @updatedAt @map("updated_at")
 
-  implementation  Implementation @relation(fields: [implementationId], references: [id], onDelete: Cascade)
-  completedByUser User?          @relation("TaskCompletedBy", fields: [completedBy], references: [id], onDelete: SetNull)
+  implementation   Implementation @relation(fields: [implementationId], references: [id], onDelete: Cascade)
+  module           ProductModule? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  assignedEmployee Employee?      @relation("ImplementationTaskAssignee", fields: [assignedEmployeeId], references: [id], onDelete: SetNull)
+  completedByUser  User?          @relation("TaskCompletedBy", fields: [completedBy], references: [id], onDelete: SetNull)
 
   @@index([implementationId], name: "idx_impl_tasks_impl")
+  @@index([moduleId], name: "idx_impl_tasks_module")
+  @@index([assignedEmployeeId], name: "idx_impl_tasks_assignee")
   @@index([status], name: "idx_impl_tasks_status")
   @@map("implementation_tasks")
 }

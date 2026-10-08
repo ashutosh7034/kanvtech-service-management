@@ -259,3 +259,6 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
     </Layout>
   );
 };
+
+export default App;
+

@@ -58,6 +58,11 @@ export class CompaniesService {
             where: { isActive: true },
             include: {
               product: { select: { id: true, code: true, name: true, category: true } },
+              modules: {
+                include: {
+                  module: { select: { id: true, name: true } },
+                },
+              },
             },
           },
           branches: {
@@ -103,10 +108,17 @@ export class CompaniesService {
         products: c.products.map((cp) => ({
           id: cp.id,
           product_id: cp.productId,
+          productId: cp.productId,
           code: cp.product.code,
           name: cp.product.name,
           category: cp.product.category,
+          purchase_type: cp.purchaseType,
+          purchaseType: cp.purchaseType,
           purchased_at: cp.purchasedAt,
+          modules: (cp.modules || []).filter((m: any) => m.module).map((m: any) => ({
+            id: m.module.id,
+            name: m.module.name,
+          })),
         })),
         branches: c.branches.map((b) => ({
           id: b.id,
@@ -133,6 +145,7 @@ export class CompaniesService {
           orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
         },
         products: {
+          where: { isActive: true },
           include: {
             product: {
               include: {
@@ -162,8 +175,20 @@ export class CompaniesService {
         branches: {
           include: {
             branchProducts: {
+              where: { isActive: true },
               include: {
                 product: true,
+                modules: {
+                  include: {
+                    module: {
+                      include: {
+                        submodules: {
+                          where: { isActive: true },
+                        },
+                      },
+                    },
+                  },
+                },
               },
             },
           },
@@ -231,25 +256,59 @@ export class CompaniesService {
         created_at: ct.createdAt,
       })),
       products: c.products.map((cp) => {
-        let rawModules: any[] = [];
+        let mappedModules: any[] = [];
         if (cp.purchaseType === 'COMPLETE') {
-          rawModules = (cp.product?.modules || []).filter((m: any) => m.isActive !== false);
+          mappedModules = (cp.product?.modules || [])
+            .filter((m: any) => m.isActive !== false)
+            .map((m: any) => ({
+              id: m.id,
+              name: m.name,
+              description: m.description,
+              isActive: m.isActive,
+              submodules: (m.submodules || [])
+                .filter((s: any) => s.isActive !== false)
+                .map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  description: s.description,
+                  isActive: s.isActive,
+                })),
+              selectedSubmoduleIds: (m.submodules || []).filter((s: any) => s.isActive !== false).map((s: any) => s.id),
+            }));
         } else {
-          rawModules = (cp.modules || []).map((m: any) => m.module).filter(Boolean);
-        }
+          mappedModules = (cp.modules || [])
+            .filter((cpm: any) => cpm.module && cpm.module.isActive !== false)
+            .map((cpm: any) => {
+              const m = cpm.module;
+              let selectedSubIds: string[] = [];
+              if (cpm.submoduleIds) {
+                try {
+                  const parsed = JSON.parse(cpm.submoduleIds);
+                  if (Array.isArray(parsed)) selectedSubIds = parsed;
+                } catch {
+                  selectedSubIds = String(cpm.submoduleIds).split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+              }
 
-        const mappedModules = rawModules.map((m: any) => ({
-          id: m.id,
-          name: m.name,
-          description: m.description,
-          isActive: m.isActive,
-          submodules: (m.submodules || []).filter((s: any) => s.isActive !== false).map((s: any) => ({
-            id: s.id,
-            name: s.name,
-            description: s.description,
-            isActive: s.isActive,
-          })),
-        }));
+              const filteredSubmodules = (m.submodules || [])
+                .filter((s: any) => s.isActive !== false && selectedSubIds.includes(s.id))
+                .map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  description: s.description,
+                  isActive: s.isActive,
+                }));
+
+              return {
+                id: m.id,
+                name: m.name,
+                description: m.description,
+                isActive: m.isActive,
+                submodules: filteredSubmodules,
+                selectedSubmoduleIds: selectedSubIds,
+              };
+            });
+        }
 
         return {
           id: cp.id,
@@ -266,6 +325,8 @@ export class CompaniesService {
           purchased_at: cp.purchasedAt,
           notes: cp.notes,
           modules: mappedModules,
+          module_ids: mappedModules.map((m: any) => m.id),
+          moduleIds: mappedModules.map((m: any) => m.id),
         };
       }),
       branches: c.branches.map((b) => ({
@@ -283,15 +344,51 @@ export class CompaniesService {
         status: b.status,
         created_at: b.createdAt,
         updated_at: b.updatedAt,
-        products: b.branchProducts.map((bp) => ({
-          id: bp.id,
-          product_id: bp.productId,
-          code: bp.product.code,
-          name: bp.product.name,
-          category: bp.product.category,
-          assigned_at: bp.assignedAt,
-          is_active: bp.isActive ? 1 : 0,
-        })),
+        products: b.branchProducts.map((bp) => {
+          const mappedModules = (bp.modules || [])
+            .filter((bpm: any) => bpm.module && bpm.module.isActive !== false)
+            .map((bpm: any) => {
+              const m = bpm.module;
+              let selectedSubIds: string[] = [];
+              if (bpm.submoduleIds) {
+                try {
+                  const parsed = JSON.parse(bpm.submoduleIds);
+                  if (Array.isArray(parsed)) selectedSubIds = parsed;
+                } catch {
+                  selectedSubIds = String(bpm.submoduleIds).split(',').map((s: string) => s.trim()).filter(Boolean);
+                }
+              }
+              const filteredSubmodules = (m.submodules || [])
+                .filter((s: any) => s.isActive !== false && selectedSubIds.includes(s.id))
+                .map((s: any) => ({
+                  id: s.id,
+                  name: s.name,
+                  description: s.description,
+                  isActive: s.isActive,
+                }));
+              return {
+                id: m.id,
+                name: m.name,
+                description: m.description,
+                isActive: m.isActive,
+                submodules: filteredSubmodules,
+                selectedSubmoduleIds: selectedSubIds,
+              };
+            });
+
+          return {
+            id: bp.id,
+            product_id: bp.productId,
+            code: bp.product.code,
+            name: bp.product.name,
+            category: bp.product.category,
+            assigned_at: bp.assignedAt,
+            is_active: bp.isActive ? 1 : 0,
+            modules: mappedModules,
+            module_ids: mappedModules.map((m: any) => m.id),
+            moduleIds: mappedModules.map((m: any) => m.id),
+          };
+        }),
       })),
       ticketSummary: {
         total,
@@ -340,35 +437,17 @@ export class CompaniesService {
 
 
     // MANDATORY CUSTOMER PRODUCT VALIDATION:
-    // A customer cannot become an active KANVTECH customer without purchasing at least ONE KANVTECH product.
-    // If zero products selected: BLOCK REGISTRATION with exact required message.
-    let productIds: any[] = [];
-    if (Array.isArray(data.product_ids || data.productIds)) {
-      productIds = (data.product_ids || data.productIds).filter(Boolean);
-    } else if (Array.isArray(data.products)) {
-      productIds = data.products
-        .map((p: any) => {
-          if (typeof p === 'string') return { productId: p, purchaseType: 'COMPLETE' };
-          return {
-            productId: p.id || p.product_id || p.productId,
-            purchaseType: p.purchaseType || p.purchase_type || 'COMPLETE',
-            modules: p.modules || p.moduleIds || []
-          };
-        })
-        .filter((p: any) => Boolean(p.productId));
-    }
+    const rawProds = data.products !== undefined ? data.products : (data.product_ids !== undefined ? data.product_ids : data.productIds);
+    let normalizedProds = this.normalizeProductEntitlements(rawProds || []);
 
-    // Check if we have existing default products in DB for backward compatibility if not provided in raw test payload
-    if (productIds.length === 0) {
-      // For automated baseline tests or explicit validation check:
-      // If zero products provided explicitly, reject registration
-      if (data.product_ids !== undefined || data.productIds !== undefined || data.products !== undefined) {
+    if (normalizedProds.length === 0) {
+      if (rawProds !== undefined) {
         throw new BadRequestException('At least one product must be selected before registering a customer.');
       }
-      // If legacy call without product array: check if default product exists to auto-attach, else enforce validation
+      // If legacy call without product array: check if default product exists
       const defaultProd = await this.prisma.product.findFirst({ where: { isActive: true }, orderBy: { createdAt: 'asc' } });
       if (defaultProd) {
-        productIds = [{ productId: defaultProd.id, purchaseType: 'COMPLETE' }];
+        normalizedProds = [{ productId: defaultProd.id, purchaseType: 'SELECTED_MODULES', modules: [] }];
       } else {
         throw new BadRequestException('At least one product must be selected before registering a customer.');
       }
@@ -476,20 +555,18 @@ export class CompaniesService {
           ],
         },
         products: {
-          create: productIds.map((pidObj) => {
-            let pid = typeof pidObj === 'string' ? pidObj : pidObj.productId;
-            let purchaseType = typeof pidObj === 'object' && pidObj.purchaseType ? pidObj.purchaseType : 'COMPLETE';
-            let modules = typeof pidObj === 'object' && pidObj.modules ? pidObj.modules : [];
-            return {
-              productId: pid,
-              purchaseType: purchaseType,
-              isActive: true,
-              notes: 'Purchased on customer registration',
-              modules: {
-                create: modules.map((mId: string) => ({ moduleId: mId }))
-              }
-            };
-          }),
+          create: normalizedProds.map((p) => ({
+            productId: p.productId,
+            purchaseType: p.purchaseType,
+            isActive: true,
+            notes: 'Purchased on customer registration',
+            modules: p.modules.length > 0 ? {
+              create: p.modules.map((m) => ({
+                moduleId: m.moduleId,
+                submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+              })),
+            } : undefined,
+          })),
         },
       },
     });
@@ -506,10 +583,70 @@ export class CompaniesService {
       action: 'COMPANY_CREATED',
       entityType: 'COMPANY',
       entityId: companyId,
-      newValues: { id: companyId, companyName, primaryEmail, contactPerson, productIds: productIds.map(p => typeof p === 'string' ? p : p.productId) },
+      newValues: { id: companyId, companyName, primaryEmail, contactPerson, products: normalizedProds },
     });
 
     return companyId;
+  }
+
+  normalizeProductEntitlements(rawInput: any): Array<{
+    productId: string;
+    purchaseType: string;
+    modules: Array<{ moduleId: string; submoduleIds: string[] }>;
+  }> {
+    let list: any[] = [];
+    if (Array.isArray(rawInput)) {
+      list = rawInput;
+    } else if (rawInput && typeof rawInput === 'object') {
+      list = [rawInput];
+    }
+
+    return list
+      .map((item: any) => {
+        if (typeof item === 'string') {
+          return {
+            productId: item,
+            purchaseType: 'SELECTED_MODULES',
+            modules: [] as Array<{ moduleId: string; submoduleIds: string[] }>,
+          };
+        }
+        const pid = item.productId || item.product_id || item.id;
+        const purchaseType = item.purchaseType || item.purchase_type || 'SELECTED_MODULES';
+        let modulesList: Array<{ moduleId: string; submoduleIds: string[] }> = [];
+
+        if (Array.isArray(item.modules)) {
+          modulesList = item.modules
+            .map((m: any) => {
+              if (typeof m === 'string') {
+                return { moduleId: m, submoduleIds: [] };
+              }
+              const mId = m.moduleId || m.module_id || m.id;
+              let sIds: string[] = [];
+              if (Array.isArray(m.submoduleIds || m.submodule_ids || m.submodules)) {
+                sIds = (m.submoduleIds || m.submodule_ids || m.submodules)
+                  .map((s: any) => (typeof s === 'string' ? s : s.id || s.submoduleId || s.submodule_id))
+                  .filter(Boolean);
+              }
+              return { moduleId: mId, submoduleIds: sIds };
+            })
+            .filter((m: any) => Boolean(m.moduleId));
+        } else if (Array.isArray(item.moduleIds || item.module_ids)) {
+          const sIdsAll: string[] = Array.isArray(item.submoduleIds || item.submodule_ids)
+            ? item.submoduleIds || item.submodule_ids
+            : [];
+          modulesList = (item.moduleIds || item.module_ids).map((mId: string) => ({
+            moduleId: mId,
+            submoduleIds: sIdsAll,
+          }));
+        }
+
+        return {
+          productId: pid,
+          purchaseType,
+          modules: modulesList,
+        };
+      })
+      .filter((p: any) => Boolean(p.productId));
   }
 
   async updateCompany(id: string, data: any, actorUserId?: number): Promise<void> {
@@ -565,6 +702,75 @@ export class CompaniesService {
       },
     });
 
+    // If product entitlements are passed to updateCompany:
+    const rawProductsToUpdate = data.products !== undefined ? data.products : (data.product_ids !== undefined ? data.product_ids : (data.productIds !== undefined ? data.productIds : data.entitlements));
+    if (Array.isArray(rawProductsToUpdate) && rawProductsToUpdate.length > 0) {
+      const normalizedToUpdate = this.normalizeProductEntitlements(rawProductsToUpdate);
+      const incomingPids = new Set(normalizedToUpdate.map(p => p.productId));
+
+      for (const p of normalizedToUpdate) {
+        const existingCp = await this.prisma.companyProduct.findUnique({
+          where: { uq_company_product: { companyId: id, productId: p.productId } },
+        });
+
+        if (existingCp) {
+          await this.prisma.companyProduct.update({
+            where: { id: existingCp.id },
+            data: {
+              isActive: true,
+              purchaseType: p.purchaseType,
+            },
+          });
+          await this.prisma.companyProductModule.deleteMany({
+            where: { companyProductId: existingCp.id },
+          });
+          if (p.modules.length > 0) {
+            await this.prisma.companyProductModule.createMany({
+              data: p.modules.map((m) => ({
+                companyProductId: existingCp.id,
+                moduleId: m.moduleId,
+                submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+              })),
+            });
+          }
+        } else {
+          const createdCp = await this.prisma.companyProduct.create({
+            data: {
+              companyId: id,
+              productId: p.productId,
+              purchaseType: p.purchaseType,
+              isActive: true,
+              notes: 'Added on customer update',
+            },
+          });
+          if (p.modules.length > 0) {
+            await this.prisma.companyProductModule.createMany({
+              data: p.modules.map((m) => ({
+                companyProductId: createdCp.id,
+                moduleId: m.moduleId,
+                submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+              })),
+            });
+          }
+        }
+      }
+
+      // Soft-deactivate products not in the updated list if at least 1 remains
+      if (normalizedToUpdate.length > 0) {
+        const currentActive = await this.prisma.companyProduct.findMany({
+          where: { companyId: id, isActive: true },
+        });
+        for (const cur of currentActive) {
+          if (!incomingPids.has(cur.productId)) {
+            await this.prisma.companyProduct.update({
+              where: { id: cur.id },
+              data: { isActive: false },
+            });
+          }
+        }
+      }
+    }
+
     await this.auditService.log({
       actorUserId,
       action: 'COMPANY_UPDATED',
@@ -591,60 +797,83 @@ export class CompaniesService {
 
   // --- Customer Product Management ---
 
-  async addCompanyProduct(companyId: string, productId: string, notes?: string, purchaseType?: string, modules?: string[], actorUserId?: number) {
+  async addCompanyProduct(
+    companyId: string,
+    productId: string,
+    notes?: string,
+    purchaseType?: string,
+    modules?: any[],
+    actorUserId?: number,
+  ) {
     const company = await this.prisma.company.findUnique({ where: { id: companyId } });
     if (!company) throw new NotFoundException('Company not found');
 
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
     if (!product) throw new NotFoundException('Product not found in Product Master');
 
+    const parsedModules = (modules || []).map((m: any) => {
+      if (typeof m === 'string') return { moduleId: m, submoduleIds: [] };
+      const mId = m.moduleId || m.module_id || m.id;
+      let sIds: string[] = [];
+      if (Array.isArray(m.submoduleIds || m.submodule_ids || m.submodules)) {
+        sIds = (m.submoduleIds || m.submodule_ids || m.submodules)
+          .map((s: any) => (typeof s === 'string' ? s : s.id || s.submoduleId || s.submodule_id))
+          .filter(Boolean);
+      }
+      return { moduleId: mId, submoduleIds: sIds };
+    }).filter((m: any) => Boolean(m.moduleId));
+
+    const finalPurchaseType = purchaseType || 'SELECTED_MODULES';
+
     const existing = await this.prisma.companyProduct.findUnique({
       where: { uq_company_product: { companyId, productId } },
     });
 
     if (existing) {
-      if (!existing.isActive) {
-        // Re-add a previously removed product — re-activate it
-        const updated = await this.prisma.companyProduct.update({
-          where: { id: existing.id },
-          data: { 
-            isActive: true, 
-            notes: notes || existing.notes,
-            purchaseType: purchaseType || existing.purchaseType,
-          },
+      const updated = await this.prisma.companyProduct.update({
+        where: { id: existing.id },
+        data: { 
+          isActive: true, 
+          notes: notes || existing.notes,
+          purchaseType: finalPurchaseType,
+        },
+      });
+      
+      await this.prisma.companyProductModule.deleteMany({ where: { companyProductId: existing.id } });
+      if (parsedModules.length > 0) {
+        await this.prisma.companyProductModule.createMany({
+          data: parsedModules.map((m) => ({
+            companyProductId: existing.id,
+            moduleId: m.moduleId,
+            submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+          })),
         });
-        
-        if (modules && modules.length > 0) {
-           await this.prisma.companyProductModule.deleteMany({ where: { companyProductId: existing.id } });
-           await this.prisma.companyProductModule.createMany({
-             data: modules.map(mId => ({ companyProductId: existing.id, moduleId: mId }))
-           });
-        }
-
-        await this.auditService.log({
-          actorUserId,
-          action: 'CUSTOMER_PRODUCT_READDED',
-          entityType: 'COMPANY',
-          entityId: companyId,
-          newValues: { companyId, productId, productName: product.name },
-        });
-        
-        return updated;
       }
-      // Already active — prevent duplicate
-      throw new BadRequestException(`Customer already has an active entitlement for product '${product.name}'. Each product can only be assigned once.`);
+
+      await this.auditService.log({
+        actorUserId,
+        action: 'CUSTOMER_PRODUCT_UPDATED',
+        entityType: 'COMPANY',
+        entityId: companyId,
+        newValues: { companyId, productId, productName: product.name, purchaseType: finalPurchaseType, modules: parsedModules },
+      });
+      
+      return updated;
     }
 
     const created = await this.prisma.companyProduct.create({
       data: {
         companyId,
         productId,
-        purchaseType: purchaseType || 'COMPLETE',
+        purchaseType: finalPurchaseType,
         isActive: true,
         notes: notes || 'Additional product purchased',
-        modules: modules && modules.length > 0 ? {
-          create: modules.map(mId => ({ moduleId: mId }))
-        } : undefined
+        modules: parsedModules.length > 0 ? {
+          create: parsedModules.map((m) => ({
+            moduleId: m.moduleId,
+            submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+          })),
+        } : undefined,
       },
     });
 
@@ -653,7 +882,7 @@ export class CompaniesService {
       action: 'CUSTOMER_PRODUCT_ADDED',
       entityType: 'COMPANY',
       entityId: companyId,
-      newValues: { companyId, productId, productName: product.name },
+      newValues: { companyId, productId, productName: product.name, purchaseType: finalPurchaseType, modules: parsedModules },
     });
 
     return created;
@@ -661,13 +890,26 @@ export class CompaniesService {
 
   async removeCompanyProduct(companyId: string, productId: string, actorUserId?: number) {
     // productId might be the Master Product ID (e.g. PROD-0001) or the CompanyProduct integer ID
-    let existing = await this.prisma.companyProduct.findUnique({
-      where: { uq_company_product: { companyId, productId } },
+    let existing = await this.prisma.companyProduct.findFirst({
+      where: {
+        companyId,
+        isActive: true,
+        OR: [
+          { productId },
+          ...(!isNaN(Number(productId)) ? [{ id: Number(productId) }] : []),
+        ],
+      },
     });
 
-    if (!existing && !isNaN(Number(productId))) {
-      existing = await this.prisma.companyProduct.findUnique({
-        where: { id: Number(productId), companyId },
+    if (!existing) {
+      existing = await this.prisma.companyProduct.findFirst({
+        where: {
+          companyId,
+          OR: [
+            { productId },
+            ...(!isNaN(Number(productId)) ? [{ id: Number(productId) }] : []),
+          ],
+        },
       });
     }
 
@@ -676,7 +918,7 @@ export class CompaniesService {
     // Use the actual master productId for branch deactivations
     const masterProductId = existing.productId;
 
-    // Check if customer has only 1 product left
+    // Check if customer has only 1 active product left
     const totalActiveProducts = await this.prisma.companyProduct.count({
       where: { companyId, isActive: true },
     });
@@ -719,8 +961,20 @@ export class CompaniesService {
       where: { companyId },
       include: {
         branchProducts: {
+          where: { isActive: true },
           include: {
             product: { select: { id: true, code: true, name: true, category: true } },
+            modules: {
+              include: {
+                module: {
+                  include: {
+                    submodules: {
+                      where: { isActive: true },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -741,15 +995,51 @@ export class CompaniesService {
       status: b.status,
       created_at: b.createdAt,
       updated_at: b.updatedAt,
-      products: b.branchProducts.map((bp) => ({
-        id: bp.id,
-        product_id: bp.productId,
-        code: bp.product.code,
-        name: bp.product.name,
-        category: bp.product.category,
-        assigned_at: bp.assignedAt,
-        is_active: bp.isActive ? 1 : 0,
-      })),
+      products: b.branchProducts.map((bp) => {
+        const mappedModules = (bp.modules || [])
+          .filter((bpm: any) => bpm.module && bpm.module.isActive !== false)
+          .map((bpm: any) => {
+            const m = bpm.module;
+            let selectedSubIds: string[] = [];
+            if (bpm.submoduleIds) {
+              try {
+                const parsed = JSON.parse(bpm.submoduleIds);
+                if (Array.isArray(parsed)) selectedSubIds = parsed;
+              } catch {
+                selectedSubIds = String(bpm.submoduleIds).split(',').map((s: string) => s.trim()).filter(Boolean);
+              }
+            }
+            const filteredSubmodules = (m.submodules || [])
+              .filter((s: any) => s.isActive !== false && selectedSubIds.includes(s.id))
+              .map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                description: s.description,
+                isActive: s.isActive,
+              }));
+            return {
+              id: m.id,
+              name: m.name,
+              description: m.description,
+              isActive: m.isActive,
+              submodules: filteredSubmodules,
+              selectedSubmoduleIds: selectedSubIds,
+            };
+          });
+
+        return {
+          id: bp.id,
+          product_id: bp.productId,
+          code: bp.product.code,
+          name: bp.product.name,
+          category: bp.product.category,
+          assigned_at: bp.assignedAt,
+          is_active: bp.isActive ? 1 : 0,
+          modules: mappedModules,
+          module_ids: mappedModules.map((m: any) => m.id),
+          moduleIds: mappedModules.map((m: any) => m.id),
+        };
+      }),
     }));
   }
 
@@ -759,8 +1049,20 @@ export class CompaniesService {
       include: {
         company: { select: { id: true, companyName: true } },
         branchProducts: {
+          where: { isActive: true },
           include: {
             product: true,
+            modules: {
+              include: {
+                module: {
+                  include: {
+                    submodules: {
+                      where: { isActive: true },
+                    },
+                  },
+                },
+              },
+            },
           },
         },
       },
@@ -784,22 +1086,58 @@ export class CompaniesService {
       status: b.status,
       created_at: b.createdAt,
       updated_at: b.updatedAt,
-      products: b.branchProducts.map((bp) => ({
-        id: bp.id,
-        product_id: bp.productId,
-        code: bp.product.code,
-        name: bp.product.name,
-        category: bp.product.category,
-        assigned_at: bp.assignedAt,
-        is_active: bp.isActive ? 1 : 0,
-      })),
+      products: b.branchProducts.map((bp) => {
+        const mappedModules = (bp.modules || [])
+          .filter((bpm: any) => bpm.module && bpm.module.isActive !== false)
+          .map((bpm: any) => {
+            const m = bpm.module;
+            let selectedSubIds: string[] = [];
+            if (bpm.submoduleIds) {
+              try {
+                const parsed = JSON.parse(bpm.submoduleIds);
+                if (Array.isArray(parsed)) selectedSubIds = parsed;
+              } catch {
+                selectedSubIds = String(bpm.submoduleIds).split(',').map((s: string) => s.trim()).filter(Boolean);
+              }
+            }
+            const filteredSubmodules = (m.submodules || [])
+              .filter((s: any) => s.isActive !== false && selectedSubIds.includes(s.id))
+              .map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                description: s.description,
+                isActive: s.isActive,
+              }));
+            return {
+              id: m.id,
+              name: m.name,
+              description: m.description,
+              isActive: m.isActive,
+              submodules: filteredSubmodules,
+              selectedSubmoduleIds: selectedSubIds,
+            };
+          });
+
+        return {
+          id: bp.id,
+          product_id: bp.productId,
+          code: bp.product.code,
+          name: bp.product.name,
+          category: bp.product.category,
+          assigned_at: bp.assignedAt,
+          is_active: bp.isActive ? 1 : 0,
+          modules: mappedModules,
+          module_ids: mappedModules.map((m: any) => m.id),
+          moduleIds: mappedModules.map((m: any) => m.id),
+        };
+      }),
     };
   }
 
   async createCompanyBranch(companyId: string, data: any, actorUserId?: number): Promise<string> {
     const company = await this.prisma.company.findUnique({
       where: { id: companyId },
-      include: { products: { where: { isActive: true } } },
+      include: { products: { where: { isActive: true }, include: { modules: true } } },
     });
     if (!company) throw new NotFoundException('Company not found');
 
@@ -819,26 +1157,59 @@ export class CompaniesService {
     if (!state) throw new BadRequestException('Branch state is required.');
     if (!contactPerson) throw new BadRequestException('Branch contact person is required.');
 
-    // BRANCH PRODUCT VALIDATION:
-    // Branch Products MUST be a subset of Customer-Owned Products.
-    // If a branch tries to use a product not owned by the customer -> REJECT.
-    let productIds: string[] = [];
-    if (Array.isArray(data.product_ids || data.productIds)) {
-      productIds = (data.product_ids || data.productIds).filter(Boolean);
-    } else if (Array.isArray(data.products)) {
-      productIds = data.products
-        .map((p: any) => (typeof p === 'string' ? p : p.id || p.product_id || p.productId))
-        .filter(Boolean);
+    // BRANCH PRODUCT & ENTITLEMENT RESTRICTION:
+    // Branch Products/Modules/Submodules MUST be a subset of Customer-Owned Entitlements.
+    const rawBranchProds = data.products !== undefined ? data.products : (data.product_ids !== undefined ? data.product_ids : data.productIds);
+    const normalizedBranchProds = this.normalizeProductEntitlements(rawBranchProds || []);
+
+    const ownedProductMap = new Map<string, { purchaseType: string; moduleMap: Map<string, Set<string>> }>();
+    for (const cp of company.products) {
+      const moduleMap = new Map<string, Set<string>>();
+      for (const m of cp.modules) {
+        let sIds = new Set<string>();
+        if (m.submoduleIds) {
+          try {
+            const arr = JSON.parse(m.submoduleIds);
+            if (Array.isArray(arr)) sIds = new Set(arr);
+          } catch {
+            sIds = new Set(String(m.submoduleIds).split(',').map((s) => s.trim()).filter(Boolean));
+          }
+        }
+        moduleMap.set(m.moduleId, sIds);
+      }
+      ownedProductMap.set(cp.productId, { purchaseType: cp.purchaseType, moduleMap });
     }
 
-    const ownedProductIds = new Set(company.products.map((p) => p.productId));
-    for (const pid of productIds) {
-      if (!ownedProductIds.has(pid)) {
-        const prod = await this.prisma.product.findUnique({ where: { id: pid } });
-        const prodName = prod ? prod.name : pid;
+    for (const bp of normalizedBranchProds) {
+      if (!ownedProductMap.has(bp.productId)) {
+        const prod = await this.prisma.product.findUnique({ where: { id: bp.productId } });
+        const prodName = prod ? prod.name : bp.productId;
         throw new BadRequestException(
           `Cannot assign product '${prodName}' to branch because customer '${company.companyName}' does not own this product.`,
         );
+      }
+
+      const owned = ownedProductMap.get(bp.productId)!;
+      if (owned.purchaseType === 'SELECTED_MODULES') {
+        for (const m of bp.modules) {
+          if (!owned.moduleMap.has(m.moduleId)) {
+            const mod = await this.prisma.productModule.findUnique({ where: { id: m.moduleId } });
+            const modName = mod ? mod.name : m.moduleId;
+            throw new BadRequestException(
+              `Cannot assign module '${modName}' to branch because customer '${company.companyName}' does not own this module.`,
+            );
+          }
+          const ownedSubIds = owned.moduleMap.get(m.moduleId)!;
+          if (ownedSubIds.size > 0) {
+            for (const sId of m.submoduleIds) {
+              if (!ownedSubIds.has(sId)) {
+                throw new BadRequestException(
+                  `Cannot assign submodule '${sId}' to branch because customer '${company.companyName}' does not own this submodule.`,
+                );
+              }
+            }
+          }
+        }
       }
     }
 
@@ -871,9 +1242,15 @@ export class CompaniesService {
         contactEmail: contactEmail || null,
         status: data.status || 'ACTIVE',
         branchProducts: {
-          create: productIds.map((pid) => ({
-            productId: pid,
+          create: normalizedBranchProds.map((bp) => ({
+            productId: bp.productId,
             isActive: true,
+            modules: bp.modules.length > 0 ? {
+              create: bp.modules.map((m) => ({
+                moduleId: m.moduleId,
+                submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+              })),
+            } : undefined,
           })),
         },
       },
@@ -884,7 +1261,7 @@ export class CompaniesService {
       action: 'BRANCH_CREATED',
       entityType: 'BRANCH',
       entityId: branchId,
-      newValues: { id: branchId, companyId, branchName, gstn, city, productIds },
+      newValues: { id: branchId, companyId, branchName, gstn, city, products: normalizedBranchProds },
     });
 
     return branchId;
@@ -957,30 +1334,86 @@ export class CompaniesService {
     });
   }
 
-  async assignBranchProducts(branchId: string, productIds: string[], actorUserId?: number) {
+  async assignBranchProducts(branchId: string, rawProducts: any, actorUserId?: number) {
     const branch = await this.prisma.companyBranch.findUnique({
       where: { id: branchId },
-      include: { company: { include: { products: { where: { isActive: true } } } } },
+      include: { company: { include: { products: { where: { isActive: true }, include: { modules: true } } } } },
     });
     if (!branch) throw new NotFoundException('Branch not found');
 
-    const ownedProductIds = new Set(branch.company.products.map((p) => p.productId));
-    for (const pid of productIds) {
-      if (!ownedProductIds.has(pid)) {
-        const prod = await this.prisma.product.findUnique({ where: { id: pid } });
-        const prodName = prod ? prod.name : pid;
+    const normalizedBranchProds = this.normalizeProductEntitlements(rawProducts);
+
+    const ownedProductMap = new Map<string, { purchaseType: string; moduleMap: Map<string, Set<string>> }>();
+    for (const cp of branch.company.products) {
+      const moduleMap = new Map<string, Set<string>>();
+      for (const m of cp.modules) {
+        let sIds = new Set<string>();
+        if (m.submoduleIds) {
+          try {
+            const arr = JSON.parse(m.submoduleIds);
+            if (Array.isArray(arr)) sIds = new Set(arr);
+          } catch {
+            sIds = new Set(String(m.submoduleIds).split(',').map((s) => s.trim()).filter(Boolean));
+          }
+        }
+        moduleMap.set(m.moduleId, sIds);
+      }
+      ownedProductMap.set(cp.productId, { purchaseType: cp.purchaseType, moduleMap });
+    }
+
+    for (const bp of normalizedBranchProds) {
+      if (!ownedProductMap.has(bp.productId)) {
+        const prod = await this.prisma.product.findUnique({ where: { id: bp.productId } });
+        const prodName = prod ? prod.name : bp.productId;
         throw new BadRequestException(
           `Cannot assign product '${prodName}' to branch because customer '${branch.company.companyName}' does not own this product.`,
         );
       }
+
+      const owned = ownedProductMap.get(bp.productId)!;
+      if (owned.purchaseType === 'SELECTED_MODULES') {
+        for (const m of bp.modules) {
+          if (!owned.moduleMap.has(m.moduleId)) {
+            const mod = await this.prisma.productModule.findUnique({ where: { id: m.moduleId } });
+            const modName = mod ? mod.name : m.moduleId;
+            throw new BadRequestException(
+              `Cannot assign module '${modName}' to branch because customer '${branch.company.companyName}' does not own this module.`,
+            );
+          }
+          const ownedSubIds = owned.moduleMap.get(m.moduleId)!;
+          if (ownedSubIds.size > 0) {
+            for (const sId of m.submoduleIds) {
+              if (!ownedSubIds.has(sId)) {
+                throw new BadRequestException(
+                  `Cannot assign submodule '${sId}' to branch because customer '${branch.company.companyName}' does not own this submodule.`,
+                );
+              }
+            }
+          }
+        }
+      }
     }
 
-    for (const pid of productIds) {
-      await this.prisma.branchProduct.upsert({
-        where: { uq_branch_product: { branchId, productId: pid } },
+    for (const bp of normalizedBranchProds) {
+      const branchProd = await this.prisma.branchProduct.upsert({
+        where: { uq_branch_product: { branchId, productId: bp.productId } },
         update: { isActive: true },
-        create: { branchId, productId: pid, isActive: true },
+        create: { branchId, productId: bp.productId, isActive: true },
       });
+
+      await this.prisma.branchProductModule.deleteMany({
+        where: { branchProductId: branchProd.id },
+      });
+
+      if (bp.modules.length > 0) {
+        await this.prisma.branchProductModule.createMany({
+          data: bp.modules.map((m) => ({
+            branchProductId: branchProd.id,
+            moduleId: m.moduleId,
+            submoduleIds: m.submoduleIds && m.submoduleIds.length > 0 ? JSON.stringify(m.submoduleIds) : null,
+          })),
+        });
+      }
     }
 
     await this.auditService.log({
@@ -988,7 +1421,7 @@ export class CompaniesService {
       action: 'BRANCH_PRODUCTS_ASSIGNED',
       entityType: 'BRANCH',
       entityId: branchId,
-      newValues: { branchId, productIds },
+      newValues: { branchId, products: normalizedBranchProds },
     });
   }
 

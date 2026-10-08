@@ -50,6 +50,16 @@ export class ImplementationsController {
     return { success: true, ...result };
   }
 
+  @Get('entitled-modules')
+  @ApiOperation({ summary: 'Get entitled modules for customer and product' })
+  async getEntitledModules(
+    @Query('companyId') companyId: string,
+    @Query('productId') productId: string,
+  ) {
+    const modules = await this.implementationsService.getEntitledModules(companyId, productId);
+    return { success: true, modules, data: modules };
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get single implementation details by ID' })
   async getImplementation(@Param('id') id: string, @Request() req: any) {

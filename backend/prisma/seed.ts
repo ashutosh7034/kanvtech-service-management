@@ -57,16 +57,16 @@ export async function seedDatabase() {
     });
   }
 
-  // 4. Default System Administrator User (Ensures platform remains login-capable)
+  // 4. Default System Administrator User (Ensures platform remains login-capable with linked Employee identity)
   const adminEmail = 'admin@kanvtech.com';
-  const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
-  if (existingAdmin) {
-    await prisma.user.update({
+  let adminUser = await prisma.user.findUnique({ where: { email: adminEmail } });
+  if (adminUser) {
+    adminUser = await prisma.user.update({
       where: { email: adminEmail },
       data: { role: UserRole.ADMIN, isActive: true, passwordHash },
     });
   } else {
-    await prisma.user.create({
+    adminUser = await prisma.user.create({
       data: {
         email: adminEmail,
         passwordHash,
@@ -75,6 +75,28 @@ export async function seedDatabase() {
       },
     });
   }
+
+  // Ensure linked Administrator Employee Profile
+  await prisma.employee.upsert({
+    where: { id: 'EMP-000' },
+    update: {
+      userId: adminUser.id,
+      email: adminEmail,
+    },
+    create: {
+      id: 'EMP-000',
+      userId: adminUser.id,
+      name: 'System Administrator',
+      email: adminEmail,
+      phone: '+91 98000 00000',
+      level: 'MANAGER',
+      department: 'Executive Management',
+      designation: 'Chief Administrator',
+      availability: 'AVAILABLE',
+      status: 'ACTIVE',
+    },
+  });
+
 
   // 5. Initialize Monotonic Sequence Trackers
   const trackers = [

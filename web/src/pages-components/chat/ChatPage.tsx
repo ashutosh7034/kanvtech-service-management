@@ -13,6 +13,8 @@ import {
   ReplyAll,
   AlertCircle,
   FileText,
+  Paperclip,
+  Download,
 } from 'lucide-react';
 import { formatDateTime, formatTime } from '../../utils/date';
 
@@ -24,6 +26,20 @@ interface EmployeeRecipient {
   department?: string;
   role: string;
 }
+
+interface MessageAttachment {
+  fileName: string;
+  filePath: string;
+  fileSize?: number;
+  mimeType?: string;
+}
+
+const formatFileSize = (bytes?: number): string => {
+  if (!bytes || bytes === 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 interface ChatPageProps {
   initialConversationId?: number;
@@ -51,17 +67,25 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
   const [showCcDropdown, setShowCcDropdown] = useState(false);
   const [subject, setSubject] = useState('');
   const [bodyMessage, setBodyMessage] = useState('');
+  const [composeAttachments, setComposeAttachments] = useState<MessageAttachment[]>([]);
+  const [uploadingComposeAttachment, setUploadingComposeAttachment] = useState(false);
+  const [composeAttachmentError, setComposeAttachmentError] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
   // Reply state
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [isReplyAll, setIsReplyAll] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [replyAttachments, setReplyAttachments] = useState<MessageAttachment[]>([]);
+  const [uploadingReplyAttachment, setUploadingReplyAttachment] = useState(false);
+  const [replyAttachmentError, setReplyAttachmentError] = useState<string | null>(null);
   const [isReplying, setIsReplying] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const toDropdownRef = useRef<HTMLDivElement>(null);
   const ccDropdownRef = useRef<HTMLDivElement>(null);
+  const composeFileInputRef = useRef<HTMLInputElement>(null);
+  const replyFileInputRef = useRef<HTMLInputElement>(null);
 
   // Load available employees on mount
   useEffect(() => {
@@ -143,7 +167,64 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
     setCcSearch('');
     setSubject('');
     setBodyMessage('');
+    setComposeAttachments([]);
+    setComposeAttachmentError(null);
     setShowCompose(true);
+  };
+
+  const handleComposeFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setComposeAttachmentError(null);
+    setUploadingComposeAttachment(true);
+
+    const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.xlsx', '.xls', '.docx', '.csv', '.txt'];
+    const maxSizeBytes = 10 * 1024 * 1024; // 10MB
+
+    try {
+      const uploadedList: MessageAttachment[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+
+        if (!allowedExtensions.includes(ext)) {
+          throw new Error(`File "${file.name}" has an unsupported format. Allowed: PDF, PNG, JPG, DOCX, XLSX, TXT, CSV.`);
+        }
+
+        if (file.size > maxSizeBytes) {
+          throw new Error(`File "${file.name}" exceeds the maximum permitted limit of 10MB.`);
+        }
+
+        const fd = new FormData();
+        fd.append('file', file);
+
+        const res = await api.uploadChatAttachment(fd);
+        const att = res.file || res.attachment || res.data;
+        if (att) {
+          uploadedList.push({
+            fileName: att.fileName || file.name,
+            filePath: att.filePath,
+            fileSize: att.fileSize || file.size,
+            mimeType: att.mimeType || file.type,
+          });
+        }
+      }
+
+      setComposeAttachments((prev) => [...prev, ...uploadedList]);
+    } catch (err: any) {
+      setComposeAttachmentError(err.message || 'File upload failed');
+    } finally {
+      setUploadingComposeAttachment(false);
+      if (composeFileInputRef.current) {
+        composeFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const removeComposeAttachment = (index: number) => {
+    setComposeAttachments((prev) => prev.filter((_, idx) => idx !== index));
   };
 
   const handleSendCompose = async (e: React.FormEvent) => {
@@ -156,8 +237,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
       showToast('Please enter a message subject.', 'danger');
       return;
     }
-    if (!bodyMessage.trim()) {
-      showToast('Message body cannot be empty.', 'danger');
+    if (!bodyMessage.trim() && composeAttachments.length === 0) {
+      showToast('Message body or at least one attachment is required.', 'danger');
       return;
     }
 
@@ -168,6 +249,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
         ccUserIds: ccRecipients.map((r) => r.userId),
         subject: subject.trim(),
         message: bodyMessage.trim(),
+        attachments: composeAttachments,
       });
 
       showToast('Internal message sent successfully.', 'success');
@@ -176,6 +258,8 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
       setCcRecipients([]);
       setSubject('');
       setBodyMessage('');
+      setComposeAttachments([]);
+      setComposeAttachmentError(null);
 
       await loadConversations();
       if (res?.conversationId) {
@@ -189,9 +273,66 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
     }
   };
 
+  const handleReplyFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setReplyAttachmentError(null);
+    setUploadingReplyAttachment(true);
+
+    const allowedExtensions = ['.pdf', '.png', '.jpg', '.jpeg', '.xlsx', '.xls', '.docx', '.csv', '.txt'];
+    const maxSizeBytes = 10 * 1024 * 1024; // 10MB
+
+    try {
+      const uploadedList: MessageAttachment[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = '.' + file.name.split('.').pop()?.toLowerCase();
+
+        if (!allowedExtensions.includes(ext)) {
+          throw new Error(`File "${file.name}" has an unsupported format. Allowed: PDF, PNG, JPG, DOCX, XLSX, TXT, CSV.`);
+        }
+
+        if (file.size > maxSizeBytes) {
+          throw new Error(`File "${file.name}" exceeds the maximum permitted limit of 10MB.`);
+        }
+
+        const fd = new FormData();
+        fd.append('file', file);
+
+        const res = await api.uploadChatAttachment(fd);
+        const att = res.file || res.attachment || res.data;
+        if (att) {
+          uploadedList.push({
+            fileName: att.fileName || file.name,
+            filePath: att.filePath,
+            fileSize: att.fileSize || file.size,
+            mimeType: att.mimeType || file.type,
+          });
+        }
+      }
+
+      setReplyAttachments((prev) => [...prev, ...uploadedList]);
+    } catch (err: any) {
+      setReplyAttachmentError(err.message || 'File upload failed');
+    } finally {
+      setUploadingReplyAttachment(false);
+      if (replyFileInputRef.current) {
+        replyFileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const removeReplyAttachment = (index: number) => {
+    setReplyAttachments((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
   const handleInitiateReply = (replyAllMode: boolean) => {
     setIsReplyAll(replyAllMode);
     setReplyText('');
+    setReplyAttachments([]);
+    setReplyAttachmentError(null);
     setShowReplyBox(true);
     setTimeout(() => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -200,16 +341,19 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
 
   const handleSendReply = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!replyText.trim() || !selectedConversation) return;
+    if ((!replyText.trim() && replyAttachments.length === 0) || !selectedConversation) return;
 
     setIsReplying(true);
     try {
       await api.replyMessage(selectedConversation.id, {
         message: replyText.trim(),
         isReplyAll,
+        attachments: replyAttachments,
       });
 
       setReplyText('');
+      setReplyAttachments([]);
+      setReplyAttachmentError(null);
       setShowReplyBox(false);
       showToast(isReplyAll ? 'Reply All sent successfully.' : 'Reply sent successfully.', 'success');
       await loadConversationDetails(selectedConversation.id);
@@ -592,9 +736,56 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
                       </div>
 
                       {/* Message Content */}
-                      <div style={{ fontSize: 13, color: '#1e293b', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-                        {msg.message}
-                      </div>
+                      {msg.message && (
+                        <div style={{ fontSize: 13, color: '#1e293b', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                          {msg.message}
+                        </div>
+                      )}
+
+                      {/* Attachments Display in Message Card */}
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div style={{ marginTop: msg.message ? 12 : 4, paddingTop: msg.message ? 10 : 0, borderTop: msg.message ? '1px solid #f1f5f9' : 'none' }}>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 6 }}>
+                            Attachments ({msg.attachments.length})
+                          </div>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                            {msg.attachments.map((att: any, attIdx: number) => (
+                              <a
+                                key={attIdx}
+                                href={att.filePath}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                download={att.fileName}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: 6,
+                                  padding: '6px 12px',
+                                  background: '#f8fafc',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: 6,
+                                  fontSize: 12,
+                                  color: '#0369a1',
+                                  fontWeight: 600,
+                                  textDecoration: 'none',
+                                  transition: 'background 0.15s',
+                                }}
+                                onMouseEnter={(e) => (e.currentTarget.style.background = '#e0f2fe')}
+                                onMouseLeave={(e) => (e.currentTarget.style.background = '#f8fafc')}
+                              >
+                                <Paperclip size={13} />
+                                <span>{att.fileName}</span>
+                                {att.fileSize && (
+                                  <span style={{ color: '#64748b', fontWeight: 400, fontSize: 11 }}>
+                                    ({formatFileSize(att.fileSize)})
+                                  </span>
+                                )}
+                                <Download size={13} style={{ marginLeft: 2, color: '#0284c7' }} />
+                              </a>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -629,6 +820,82 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
                       onChange={(e) => setReplyText(e.target.value)}
                       autoFocus
                     />
+
+                    {/* Reply Attachment Button and Preview */}
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                        <button
+                          type="button"
+                          onClick={() => replyFileInputRef.current?.click()}
+                          disabled={uploadingReplyAttachment}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            background: '#ffffff',
+                            border: '1px solid #cbd5e1',
+                            borderRadius: 6,
+                            padding: '5px 10px',
+                            fontSize: 12,
+                            fontWeight: 600,
+                            color: '#0f172a',
+                            cursor: uploadingReplyAttachment ? 'not-allowed' : 'pointer',
+                          }}
+                        >
+                          <Paperclip size={13} color="#0284c7" />
+                          <span>{uploadingReplyAttachment ? 'Uploading...' : 'Attach File'}</span>
+                        </button>
+                        <input
+                          type="file"
+                          ref={replyFileInputRef}
+                          onChange={handleReplyFileUpload}
+                          multiple
+                          style={{ display: 'none' }}
+                          accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.docx,.csv,.txt"
+                        />
+                      </div>
+
+                      {replyAttachmentError && (
+                        <div style={{ marginTop: 6, fontSize: 12, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <AlertCircle size={13} />
+                          <span>{replyAttachmentError}</span>
+                        </div>
+                      )}
+
+                      {replyAttachments.length > 0 && (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                          {replyAttachments.map((att, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                padding: '3px 8px',
+                                background: '#e0f2fe',
+                                border: '1px solid #bae6fd',
+                                borderRadius: 4,
+                                fontSize: 11,
+                                color: '#0369a1',
+                                fontWeight: 500,
+                              }}
+                            >
+                              <Paperclip size={12} />
+                              <span>{att.fileName}</span>
+                              {att.fileSize && <span style={{ color: '#64748b' }}>({formatFileSize(att.fileSize)})</span>}
+                              <button
+                                type="button"
+                                onClick={() => removeReplyAttachment(idx)}
+                                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#ef4444' }}
+                              >
+                                <X size={12} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
                       <button
                         type="button"
@@ -640,7 +907,7 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
                       <button
                         type="submit"
                         className="btn btn-primary btn-sm"
-                        disabled={isReplying || !replyText.trim()}
+                        disabled={isReplying || (!replyText.trim() && replyAttachments.length === 0)}
                         style={{ minWidth: 100 }}
                       >
                         {isReplying ? 'Sending...' : 'Send Reply'}
@@ -962,19 +1229,124 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
               </div>
 
               {/* Message Body Field */}
-              <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 14 }}>
                 <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 4 }}>
-                  Message *
+                  Message {composeAttachments.length === 0 ? '*' : ''}
                 </label>
                 <textarea
                   className="form-control"
-                  rows={6}
+                  rows={5}
                   placeholder="Write your internal message here..."
                   value={bodyMessage}
                   onChange={(e) => setBodyMessage(e.target.value)}
                   style={{ fontSize: 13, resize: 'vertical' }}
-                  required
+                  required={composeAttachments.length === 0}
                 />
+              </div>
+
+              {/* Insert / Attachment Button & Selected Files Preview (Below Message Field) */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => composeFileInputRef.current?.click()}
+                    disabled={uploadingComposeAttachment}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      padding: '7px 14px',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: '#0f172a',
+                      cursor: uploadingComposeAttachment ? 'not-allowed' : 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!uploadingComposeAttachment) (e.currentTarget.style.background = '#f1f5f9');
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!uploadingComposeAttachment) (e.currentTarget.style.background = '#f8fafc');
+                    }}
+                  >
+                    <Paperclip size={14} color="#0284c7" />
+                    <span>{uploadingComposeAttachment ? 'Uploading file(s)...' : 'Insert / 📎 Attachment'}</span>
+                  </button>
+
+                  <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                    Max 10MB per file (PDF, PNG, JPG, DOCX, XLSX, TXT, CSV)
+                  </span>
+
+                  <input
+                    type="file"
+                    ref={composeFileInputRef}
+                    onChange={handleComposeFileUpload}
+                    multiple
+                    style={{ display: 'none' }}
+                    accept=".pdf,.png,.jpg,.jpeg,.xlsx,.xls,.docx,.csv,.txt"
+                  />
+                </div>
+
+                {/* Upload error display */}
+                {composeAttachmentError && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: '#dc2626', display: 'flex', alignItems: 'center', gap: 6, background: '#fef2f2', padding: '6px 10px', borderRadius: 4, border: '1px solid #fecaca' }}>
+                    <AlertCircle size={14} />
+                    <span>{composeAttachmentError}</span>
+                  </div>
+                )}
+
+                {/* Selected Files List Before Sending */}
+                {composeAttachments.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                    {composeAttachments.map((att, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          padding: '5px 12px',
+                          background: '#f8fafc',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 6,
+                          fontSize: 12,
+                          color: '#0f172a',
+                          fontWeight: 500,
+                          boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                        }}
+                      >
+                        <Paperclip size={13} color="#0284c7" />
+                        <span style={{ fontWeight: 600 }}>{att.fileName}</span>
+                        {att.fileSize && (
+                          <span style={{ color: '#64748b', fontSize: 11 }}>
+                            ({formatFileSize(att.fileSize)})
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeComposeAttachment(idx)}
+                          title="Remove attachment"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            padding: '0 2px',
+                            marginLeft: 4,
+                            cursor: 'pointer',
+                            color: '#ef4444',
+                            display: 'flex',
+                            alignItems: 'center',
+                            fontWeight: 700,
+                          }}
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Modal Actions */}
@@ -989,7 +1361,13 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={isSending || toRecipients.length === 0 || !subject.trim() || !bodyMessage.trim()}
+                  disabled={
+                    isSending ||
+                    uploadingComposeAttachment ||
+                    toRecipients.length === 0 ||
+                    !subject.trim() ||
+                    (!bodyMessage.trim() && composeAttachments.length === 0)
+                  }
                   style={{ minWidth: 140 }}
                 >
                   {isSending ? 'Sending...' : 'Send Message'}

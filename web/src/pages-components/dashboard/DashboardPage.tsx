@@ -16,10 +16,6 @@ import {
   ArrowRight,
   Bell,
   Plus,
-  Calendar,
-  Clock,
-  Circle,
-  Flag,
 } from 'lucide-react';
 
 interface Props {
@@ -113,17 +109,6 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleQuickCompleteTask = async (taskId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    try {
-      await api.completeTask(taskId);
-      const res = await api.getMyTaskSummary();
-      if (res.metrics) setTaskSummary(res);
-    } catch (err) {
-      console.error('Failed to complete task', err);
     }
   };
 
@@ -294,7 +279,7 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
           </div>
 
           {/* Metric Badges */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
             <div
               style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: 6, cursor: 'pointer' }}
               onClick={() => onNavigate('task_reminders')}
@@ -335,102 +320,6 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
               </div>
             </div>
           </div>
-
-          {/* Quick Tasks Display */}
-          {(taskSummary.overdueTasks?.length === 0 && taskSummary.todayTasks?.length === 0 && taskSummary.upcomingTasks?.length === 0) ? (
-            <div style={{ padding: '16px', background: '#f8fafc', borderRadius: 6, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
-              No pending personal tasks. You are all caught up!
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* Overdue Tasks Alert */}
-              {taskSummary.overdueTasks && taskSummary.overdueTasks.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase', marginBottom: 6 }}>
-                    ● Overdue Tasks
-                  </div>
-                  {taskSummary.overdueTasks.map((task: any) => (
-                    <div
-                      key={task.id}
-                      onClick={() => onNavigate('task_reminders', task.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: '#fef2f2',
-                        border: '1px solid #fecaca',
-                        borderRadius: 6,
-                        marginBottom: 6,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                          onClick={(e) => handleQuickCompleteTask(task.id, e)}
-                          title="Mark complete"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                        >
-                          <Circle size={16} color="#dc2626" />
-                        </button>
-                        <span style={{ fontWeight: 600, fontSize: 13, color: '#991b1b' }}>{task.title}</span>
-                      </div>
-                      <span style={{ fontSize: 11, fontWeight: 700, color: '#b91c1c' }}>
-                        Due {task.due_date ? new Date(task.due_date).toLocaleDateString() : 'Past'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Today Tasks */}
-              {taskSummary.todayTasks && taskSummary.todayTasks.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: '#d97706', textTransform: 'uppercase', marginBottom: 6, marginTop: 4 }}>
-                    ● Due Today
-                  </div>
-                  {taskSummary.todayTasks.map((task: any) => (
-                    <div
-                      key={task.id}
-                      onClick={() => onNavigate('task_reminders', task.id)}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: '#fffbeb',
-                        border: '1px solid #fde68a',
-                        borderRadius: 6,
-                        marginBottom: 6,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button
-                          onClick={(e) => handleQuickCompleteTask(task.id, e)}
-                          title="Mark complete"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                        >
-                          <Circle size={16} color="#d97706" />
-                        </button>
-                        <span style={{ fontWeight: 600, fontSize: 13, color: '#92400e' }}>{task.title}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {task.reminder_time && (
-                          <span style={{ fontSize: 11, color: '#0284c7', display: 'flex', alignItems: 'center', gap: 3 }}>
-                            <Bell size={11} /> {new Date(task.reminder_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        )}
-                        <span style={{ fontSize: 11, fontWeight: 600, color: '#b45309' }}>
-                          {task.due_time ? task.due_time : 'Today'}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
 

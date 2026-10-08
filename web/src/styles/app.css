@@ -463,6 +463,15 @@ button, input, select, textarea {
   outline: none;
   transition: border-color 0.15s ease;
   background: var(--bg-surface);
+  color: #0f172a;
+}
+
+.form-control::placeholder,
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8;
+  opacity: 1;
+  font-weight: 400;
 }
 
 .form-control:focus {

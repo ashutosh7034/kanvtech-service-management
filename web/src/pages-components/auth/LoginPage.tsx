@@ -13,8 +13,9 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     try {
+      const isRemembered = localStorage.getItem('kanvtech_remember_me') === 'true';
       const savedEmail = localStorage.getItem('kanvtech_remembered_email');
-      if (savedEmail) {
+      if (isRemembered && savedEmail) {
         setEmail(savedEmail);
         setRememberMe(true);
       }
@@ -49,11 +50,13 @@ export const LoginPage: React.FC = () => {
     setLoading(true);
     try {
       if (rememberMe) {
+        localStorage.setItem('kanvtech_remember_me', 'true');
         localStorage.setItem('kanvtech_remembered_email', emailTrimmed);
       } else {
+        localStorage.removeItem('kanvtech_remember_me');
         localStorage.removeItem('kanvtech_remembered_email');
       }
-      await login(emailTrimmed, password);
+      await login(emailTrimmed, password, rememberMe);
     } catch (err: any) {
       const msg = err.message || '';
       if (msg === 'Failed to fetch' || msg.includes('Network Error') || !window.navigator.onLine || msg === 'Server request failed') {
@@ -146,7 +149,7 @@ export const LoginPage: React.FC = () => {
                   className="form-control"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@company.com"
+                  placeholder="Enter corporate email"
                   required
                   autoFocus
                 />
@@ -161,7 +164,7 @@ export const LoginPage: React.FC = () => {
                   className="form-control"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
+                  placeholder="Enter password"
                   style={{ paddingRight: 38 }}
                   required
                 />

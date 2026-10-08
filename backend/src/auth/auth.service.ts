@@ -72,8 +72,28 @@ export class AuthService {
     let companyId: string | null = null;
     let contactId: number | null = null;
 
-    if (user.employee) {
-      employeeId = user.employee.id;
+    let employee = user.employee;
+    if (!employee) {
+      employee = await this.prisma.employee.findFirst({
+        where: {
+          OR: [
+            { userId: user.id },
+            { email: { equals: normalizedEmail, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (employee && employee.userId !== user.id) {
+        try {
+          await this.prisma.employee.update({
+            where: { id: employee.id },
+            data: { userId: user.id },
+          });
+        } catch {}
+      }
+    }
+
+    if (employee) {
+      employeeId = employee.id;
     }
 
     if (user.companyContacts && user.companyContacts.length > 0) {
@@ -117,7 +137,7 @@ export class AuthService {
         employeeId,
         companyId,
         contactId,
-        name: user.employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
+        name: employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
       },
     };
   }
@@ -128,6 +148,26 @@ export class AuthService {
       include: { employee: true, companyContacts: true },
     });
     if (!user || !user.isActive) return null;
+
+    let employee = user.employee;
+    if (!employee) {
+      employee = await this.prisma.employee.findFirst({
+        where: {
+          OR: [
+            { userId: user.id },
+            { email: { equals: user.email, mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (employee && employee.userId !== user.id) {
+        try {
+          await this.prisma.employee.update({
+            where: { id: employee.id },
+            data: { userId: user.id },
+          });
+        } catch {}
+      }
+    }
 
     let companyId = user.companyContacts?.[0]?.companyId || null;
     let contactId = user.companyContacts?.[0]?.id || null;
@@ -154,10 +194,10 @@ export class AuthService {
       userId: user.id,
       email: user.email,
       role: user.role,
-      employeeId: user.employee?.id || null,
+      employeeId: employee?.id || null,
       companyId,
       contactId,
-      name: user.employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
+      name: employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
     };
   }
 

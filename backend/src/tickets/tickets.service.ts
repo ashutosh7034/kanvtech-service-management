@@ -186,20 +186,75 @@ export class TicketsService {
       }
     }
 
+    const moduleId = params.moduleId || params.module_id || null;
+    const submoduleId = params.submoduleId || params.submodule_id || null;
+
+    if (companyProduct && companyProduct.purchaseType === 'SELECTED_MODULES') {
+      if (moduleId) {
+        const cpm = await this.prisma.companyProductModule.findUnique({
+          where: { uq_company_product_module: { companyProductId: companyProduct.id, moduleId } },
+        });
+        if (!cpm) {
+          const mod = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
+          const modName = mod ? mod.name : moduleId;
+          throw new BadRequestException(`Module '${modName}' is not in the customer's purchased entitlement for '${product.name}'.`);
+        }
+        if (submoduleId) {
+          let allowedSubIds: string[] = [];
+          if (cpm.submoduleIds) {
+            try {
+              const parsed = JSON.parse(cpm.submoduleIds);
+              if (Array.isArray(parsed)) allowedSubIds = parsed;
+            } catch {
+              allowedSubIds = String(cpm.submoduleIds).split(',').map((s) => s.trim()).filter(Boolean);
+            }
+          }
+          if (allowedSubIds.length > 0 && !allowedSubIds.includes(submoduleId)) {
+            const sub = await this.prisma.productSubmodule.findUnique({ where: { id: submoduleId } });
+            const subName = sub ? sub.name : submoduleId;
+            throw new BadRequestException(`Submodule '${subName}' is not in the customer's purchased entitlement.`);
+          }
+        }
+      }
+    }
+
     // If Branch is selected: verify branch belongs to company and branch has this product
     if (branchId) {
       const branch = await this.prisma.companyBranch.findUnique({
         where: { id: branchId },
-        include: { branchProducts: { where: { isActive: true } } },
+        include: {
+          branchProducts: {
+            where: { isActive: true },
+            include: { modules: true },
+          },
+        },
       });
       if (!branch || branch.companyId !== params.companyId) {
         throw new BadRequestException('Selected branch does not belong to the customer organization.');
       }
-      const branchHasProduct = branch.branchProducts.some((bp) => bp.productId === productId);
-      if (!branchHasProduct) {
+      const branchProd = branch.branchProducts.find((bp) => bp.productId === productId);
+      if (!branchProd) {
         throw new BadRequestException(
           `Product '${product.name}' is not assigned to branch '${branch.branchName}'.`,
         );
+      }
+      if (moduleId && branchProd.modules && branchProd.modules.length > 0) {
+        const bpm = branchProd.modules.find((m) => m.moduleId === moduleId);
+        if (!bpm) {
+          throw new BadRequestException(`Module is not assigned to branch '${branch.branchName}'.`);
+        }
+        if (submoduleId && bpm.submoduleIds) {
+          let branchSubIds: string[] = [];
+          try {
+            const parsed = JSON.parse(bpm.submoduleIds);
+            if (Array.isArray(parsed)) branchSubIds = parsed;
+          } catch {
+            branchSubIds = String(bpm.submoduleIds).split(',').map((s) => s.trim()).filter(Boolean);
+          }
+          if (branchSubIds.length > 0 && !branchSubIds.includes(submoduleId)) {
+            throw new BadRequestException(`Submodule is not assigned to branch '${branch.branchName}'.`);
+          }
+        }
       }
     }
 
@@ -597,16 +652,52 @@ export class TicketsService {
 
     const where: any = {};
 
-    if (params.status) where.status = params.status as TicketStatus;
-    if (params.priority) where.priority = params.priority as TicketPriority;
-    if (params.level) where.assignedLevel = params.level as TicketLevel;
-    if (params.employeeId) where.assignedEmployeeId = params.employeeId;
-    if (params.companyId) where.companyId = params.companyId;
-    if (params.contactId) where.customerContactId = Number(params.contactId);
-    if (params.productId) where.productId = params.productId;
-    if (params.branchId) where.branchId = params.branchId;
-    if (params.departmentId) where.departmentId = params.departmentId;
-    if (params.slaStatus) where.slaStatus = params.slaStatus;
+    const rawStatus = params.status;
+    if (rawStatus && rawStatus !== 'undefined' && rawStatus !== 'null' && rawStatus !== 'ALL' && rawStatus.trim() !== '') {
+      const validStatuses = Object.values(TicketStatus);
+      if (validStatuses.includes(rawStatus as TicketStatus)) {
+        where.status = rawStatus as TicketStatus;
+      }
+    }
+
+    const rawPriority = params.priority;
+    if (rawPriority && rawPriority !== 'undefined' && rawPriority !== 'null' && rawPriority !== 'ALL' && rawPriority.trim() !== '') {
+      const validPriorities = Object.values(TicketPriority);
+      if (validPriorities.includes(rawPriority as TicketPriority)) {
+        where.priority = rawPriority as TicketPriority;
+      }
+    }
+
+    const rawLevel = params.level || (params as any).assignedLevel;
+    if (rawLevel && rawLevel !== 'undefined' && rawLevel !== 'null' && rawLevel !== 'ALL' && typeof rawLevel === 'string' && rawLevel.trim() !== '') {
+      const normalizedLevel = rawLevel.trim().toUpperCase();
+      const validLevels = Object.values(TicketLevel);
+      if (validLevels.includes(normalizedLevel as TicketLevel)) {
+        where.assignedLevel = normalizedLevel as TicketLevel;
+      }
+    }
+
+    if (params.employeeId && params.employeeId !== 'undefined' && params.employeeId !== 'null' && params.employeeId.trim() !== '') {
+      where.assignedEmployeeId = params.employeeId;
+    }
+    if (params.companyId && params.companyId !== 'undefined' && params.companyId !== 'null' && params.companyId !== 'ALL' && params.companyId.trim() !== '') {
+      where.companyId = params.companyId;
+    }
+    if (params.contactId && !isNaN(Number(params.contactId)) && Number(params.contactId) > 0) {
+      where.customerContactId = Number(params.contactId);
+    }
+    if (params.productId && params.productId !== 'undefined' && params.productId !== 'null' && params.productId !== 'ALL' && params.productId.trim() !== '') {
+      where.productId = params.productId;
+    }
+    if (params.branchId && params.branchId !== 'undefined' && params.branchId !== 'null' && params.branchId !== 'ALL' && params.branchId.trim() !== '') {
+      where.branchId = params.branchId;
+    }
+    if (params.departmentId && params.departmentId !== 'undefined' && params.departmentId !== 'null' && params.departmentId !== 'ALL' && params.departmentId.trim() !== '') {
+      where.departmentId = params.departmentId;
+    }
+    if (params.slaStatus && params.slaStatus !== 'undefined' && params.slaStatus !== 'null' && params.slaStatus !== 'ALL' && params.slaStatus.trim() !== '') {
+      where.slaStatus = params.slaStatus as any;
+    }
 
     if (params.search && params.search.trim()) {
       const q = params.search.trim();

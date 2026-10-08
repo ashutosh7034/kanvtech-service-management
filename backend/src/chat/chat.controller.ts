@@ -1,6 +1,21 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  Request,
+  ForbiddenException,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ChatService } from './chat.service';
+import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -10,12 +25,29 @@ import { Roles } from '../auth/roles.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('chat')
 export class ChatController {
-  constructor(private readonly chatService: ChatService) {}
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly storageService: StorageService,
+  ) {}
 
   private assertNotCustomer(req: any) {
     if (req.user?.role === 'CUSTOMER') {
       throw new ForbiddenException('Customers cannot access internal employee messaging.');
     }
+  }
+
+  @Post('upload')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload file attachment for internal message' })
+  async uploadAttachment(@UploadedFile() file: Express.Multer.File, @Request() req: any) {
+    this.assertNotCustomer(req);
+    if (!file) {
+      throw new BadRequestException('No file provided');
+    }
+    const uploaded = await this.storageService.upload(file);
+    return { success: true, file: uploaded, attachment: uploaded, data: uploaded };
   }
 
   @Get('conversations')
@@ -54,6 +86,7 @@ export class ChatController {
       ccUserIds: body.ccUserIds || body.cc_user_ids || [],
       subject: body.subject,
       message: body.message,
+      attachments: body.attachments || [],
     });
     return result;
   }
@@ -69,6 +102,7 @@ export class ChatController {
       senderUserId: userId,
       message: body.message,
       isReplyAll: Boolean(body.isReplyAll ?? body.is_reply_all),
+      attachments: body.attachments || [],
     });
     return { success: true, message };
   }

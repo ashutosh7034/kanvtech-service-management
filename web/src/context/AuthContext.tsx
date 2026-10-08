@@ -8,7 +8,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, passwordPlain: string) => Promise<void>;
+  login: (email: string, passwordPlain: string, rememberMe?: boolean) => Promise<void>;
   logout: () => void;
 }
 
@@ -22,7 +22,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const savedToken = typeof window !== 'undefined' ? localStorage.getItem('kanvtech_token') : null;
+    const savedToken =
+      typeof window !== 'undefined'
+        ? localStorage.getItem('kanvtech_token') || sessionStorage.getItem('kanvtech_token')
+        : null;
     if (savedToken) {
       setToken(savedToken);
       api
@@ -51,10 +54,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const login = async (email: string, passwordPlain: string) => {
+  const login = async (email: string, passwordPlain: string, rememberMe = false) => {
     const res = await api.login({ email, password: passwordPlain });
     if (res.token && res.user) {
-      localStorage.setItem('kanvtech_token', res.token);
+      if (typeof window !== 'undefined') {
+        if (rememberMe) {
+          localStorage.setItem('kanvtech_token', res.token);
+          sessionStorage.removeItem('kanvtech_token');
+        } else {
+          sessionStorage.setItem('kanvtech_token', res.token);
+          localStorage.removeItem('kanvtech_token');
+        }
+      }
       setToken(res.token);
       setUser({
         id: res.user.id || res.user.userId,
@@ -69,7 +80,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
-    if (typeof window !== 'undefined') localStorage.removeItem('kanvtech_token');
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('kanvtech_token');
+      sessionStorage.removeItem('kanvtech_token');
+      localStorage.removeItem('kanvtech_user');
+      sessionStorage.removeItem('kanvtech_user');
+    }
     setToken(null);
     setUser(null);
   };

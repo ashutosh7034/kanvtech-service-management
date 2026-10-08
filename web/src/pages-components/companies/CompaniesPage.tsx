@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
-import { Company, Product, Branch } from '../../types';
+import { Company, Product, Branch, CustomerProductEntitlement } from '../../types';
+import { CustomerProductEntitlementSelector } from '../../components/companies/CustomerProductEntitlementSelector';
 import {
   Building2,
   Search,
@@ -20,6 +21,7 @@ import {
   Square,
   AlertCircle,
   Save,
+  Sliders,
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { isValidEmail, isValidPhone, isValidGSTN, validatePhoneDetailed } from '../../utils/validation';
@@ -53,6 +55,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     alternate_contact_phone: '',
     alternate_contact_email: '',
     product_ids: [] as string[],
+    productEntitlements: [] as CustomerProductEntitlement[],
     branches: [] as Array<{
       branch_name: string;
       address: string;
@@ -76,6 +79,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
   // Edit Customer Modal State
   const [showEditModal, setShowEditModal] = useState(false);
+  const [editActiveTab, setEditActiveTab] = useState<'details' | 'entitlements'>('details');
   const [editingCompany, setEditingCompany] = useState<any | null>(null);
   const [editFormData, setEditFormData] = useState({
     company_name: '',
@@ -87,6 +91,8 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     alternate_contact: '',
     alternate_contact_phone: '',
     alternate_contact_email: '',
+    product_ids: [] as string[],
+    productEntitlements: [] as CustomerProductEntitlement[],
   });
   const [editFormError, setEditFormError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
@@ -94,6 +100,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   // Add Product to existing Customer Modal State
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [selectedNewProductId, setSelectedNewProductId] = useState('');
+  const [newProductEntitlements, setNewProductEntitlements] = useState<CustomerProductEntitlement[]>([]);
   const [addingProduct, setAddingProduct] = useState(false);
   const [productError, setProductError] = useState<string | null>(null);
 
@@ -177,20 +184,45 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   };
 
   // Open Edit Customer Modal
-  const handleOpenEdit = (company: any) => {
+  const handleOpenEdit = async (company: any) => {
     setEditingCompany(company);
-    setEditFormData({
-      company_name: company.company_name || '',
-      address: company.address || '',
-      gstn: company.gstn || '',
-      primary_email: company.primary_email || '',
-      contact_person: company.contact_person || '',
-      contact_phone: company.contact_phone || '',
-      alternate_contact: company.alternate_contact || '',
-      alternate_contact_phone: company.alternate_contact_phone || '',
-      alternate_contact_email: company.alternate_contact_email || '',
-    });
     setEditFormError(null);
+    setEditActiveTab('details');
+
+    let rawCompany = company;
+    try {
+      const res = await api.getCompany(company.id);
+      if (res.company) rawCompany = res.company;
+    } catch (e) {
+      console.error('Failed to load full company for edit', e);
+    }
+
+    const initialEntitlements: CustomerProductEntitlement[] = (rawCompany.products || [])
+      .filter((p: any) => p.is_active !== 0 && p.is_active !== false)
+      .map((p: any) => ({
+        productId: p.productId || p.product_id || p.id,
+        purchaseType: p.purchase_type || p.purchaseType || 'SELECTED_MODULES',
+        modules: (p.modules || []).map((m: any) => ({
+          moduleId: m.id || m.moduleId,
+          submoduleIds: (m.submodules || []).map((s: any) => s.id || s.submoduleId || s) || [],
+        })),
+      }));
+
+    const initialProductIds = initialEntitlements.map((e) => e.productId);
+
+    setEditFormData({
+      company_name: rawCompany.company_name || '',
+      address: rawCompany.address || '',
+      gstn: rawCompany.gstn || '',
+      primary_email: rawCompany.primary_email || '',
+      contact_person: rawCompany.contact_person || '',
+      contact_phone: rawCompany.contact_phone || '',
+      alternate_contact: rawCompany.alternate_contact || '',
+      alternate_contact_phone: rawCompany.alternate_contact_phone || '',
+      alternate_contact_email: rawCompany.alternate_contact_email || '',
+      product_ids: initialProductIds,
+      productEntitlements: initialEntitlements,
+    });
     setShowEditModal(true);
   };
 
@@ -291,9 +323,27 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       return;
     }
 
+    // Must have at least 1 product
+    if (editFormData.product_ids.length === 0) {
+      setEditFormError('A customer must have at least one product entitlement.');
+      return;
+    }
+
     setSavingEdit(true);
     try {
-      await api.updateCompany(editingCompany.id, editFormData);
+      await api.updateCompany(editingCompany.id, {
+        company_name: editFormData.company_name,
+        address: editFormData.address,
+        gstn: editFormData.gstn,
+        primary_email: editFormData.primary_email,
+        contact_person: editFormData.contact_person,
+        contact_phone: editFormData.contact_phone,
+        alternate_contact: editFormData.alternate_contact,
+        alternate_contact_phone: editFormData.alternate_contact_phone,
+        alternate_contact_email: editFormData.alternate_contact_email,
+        products: editFormData.productEntitlements,
+        product_ids: editFormData.product_ids,
+      });
       setShowEditModal(false);
       setEditingCompany(null);
       loadCompanies();
@@ -305,16 +355,6 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       setEditFormError(err.message || 'Failed to update customer');
     } finally {
       setSavingEdit(false);
-    }
-  };
-
-  // Toggle product selection in customer registration form
-  const toggleProductSelection = (prodId: string) => {
-    const exists = formData.product_ids.includes(prodId);
-    if (exists) {
-      setFormData({ ...formData, product_ids: formData.product_ids.filter((id) => id !== prodId) });
-    } else {
-      setFormData({ ...formData, product_ids: [...formData.product_ids, prodId] });
     }
   };
 
@@ -338,7 +378,10 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
     setSaving(true);
     try {
-      await api.createCompany(formData);
+      await api.createCompany({
+        ...formData,
+        products: formData.productEntitlements,
+      });
       setShowCreateModal(false);
       setFormData({
         company_name: '',
@@ -351,6 +394,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
         alternate_contact_phone: '',
         alternate_contact_email: '',
         product_ids: [],
+        productEntitlements: [],
         branches: [],
       });
       setCreateStep(1);
@@ -368,9 +412,15 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     setAddingProduct(true);
     setProductError(null);
     try {
-      await api.addCustomerProduct(selectedCompany.id, selectedNewProductId);
+      const ent = newProductEntitlements.find((e) => e.productId === selectedNewProductId) || {
+        productId: selectedNewProductId,
+        purchaseType: 'SELECTED_MODULES',
+        modules: [],
+      };
+      await api.addCustomerProduct(selectedCompany.id, ent);
       setShowAddProductModal(false);
       setSelectedNewProductId('');
+      setNewProductEntitlements([]);
       // Refresh company detail
       handleOpenDetail(selectedCompany.id);
       loadCompanies();
@@ -383,18 +433,34 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
   // Remove Product from existing Customer (soft-deactivate - preserves history)
   const handleRemoveProduct = async (productId: string, productName: string) => {
-    if (!selectedCompany) return;
-    const activeProducts = (selectedCompany.products || []).filter((p: any) => p.is_active !== 0 && p.is_active !== false);
+    if (!selectedCompany || !productId) return;
+    const activeProducts = (selectedCompany.products || []).filter(
+      (p: any) => p.is_active !== 0 && p.is_active !== false && p.isActive !== false
+    );
     if (activeProducts.length <= 1) {
       alert('A customer must have at least one active product. Cannot remove the only remaining product.');
       return;
     }
-    if (!confirm(`Are you sure you want to remove product "${productName}" from this customer?\n\nThis will NOT delete historical tickets, AMC records, or implementation data associated with this product.`)) return;
+    const confirmed = window.confirm(
+      `Are you sure you want to remove product "${productName}" from this customer?\n\nThis will NOT delete historical tickets, AMC records, or implementation data associated with this product.`
+    );
+    if (!confirmed) return;
 
     try {
       await api.removeCustomerProduct(selectedCompany.id, productId);
-      handleOpenDetail(selectedCompany.id);
-      loadCompanies();
+      // Immediately remove from current selectedCompany state so UI reflects deletion instantly
+      setSelectedCompany((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          products: (prev.products || []).filter((prod: any) => {
+            const pId = prod.productId || prod.product_id || prod.id;
+            return pId !== productId && String(prod.id) !== String(productId) && prod.productId !== productId && prod.product_id !== productId;
+          }),
+        };
+      });
+      await handleOpenDetail(selectedCompany.id);
+      await loadCompanies();
     } catch (err: any) {
       alert(err.message || 'Failed to remove product');
     }
@@ -756,80 +822,162 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#0b3b60', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Package size={15} color="#2563eb" />
-                    <span>PURCHASED PRODUCTS ({selectedCompany.products?.length || 0})</span>
+                    <span>PURCHASED PRODUCTS ({selectedCompany.products?.filter((p: any) => p.is_active !== 0 && p.is_active !== false).length || 0})</span>
                   </div>
-                  <button className="btn btn-secondary btn-sm" onClick={() => { setProductError(null); setShowAddProductModal(true); }}>
-                    <Plus size={13} /> Add Product
-                  </button>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      onClick={() => {
+                        handleOpenEdit(selectedCompany);
+                        setEditActiveTab('entitlements');
+                      }}
+                      style={{ color: '#2563eb', display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <Sliders size={13} /> Manage Entitlements
+                    </button>
+                    <button
+                      className="btn btn-primary btn-sm"
+                      onClick={() => {
+                        setProductError(null);
+                        setSelectedNewProductId('');
+                        setNewProductEntitlements([]);
+                        setShowAddProductModal(true);
+                      }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    >
+                      <Plus size={13} /> Add Product
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                   {selectedCompany.products && selectedCompany.products.filter((p: any) => p.is_active !== 0 && p.is_active !== false).length > 0 ? (
                     selectedCompany.products
                       .filter((p: any) => p.is_active !== 0 && p.is_active !== false)
-                      .map((p: any) => (
-                      <div
-                        key={p.id || p.product_id}
-                        style={{
-                          background: 'white',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: 6,
-                          padding: 10,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'flex-start',
-                        }}
-                      >
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {/* Product Name — clearly labeled */}
-                          <div style={{ fontWeight: 700, fontSize: 13, color: '#0b3b60', marginBottom: 2 }}>
-                            {p.name || p.product_name || p.product?.name || '—'}
-                          </div>
-                          {/* Product Code — clearly labeled */}
-                          <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>
-                            Product Code: <span style={{ fontWeight: 600, color: '#475569' }}>{p.code || p.product_code || p.product?.code || '—'}</span>
-                          </div>
-                          {/* Category */}
-                          {(p.category || p.product?.category) && (
-                            <div style={{ fontSize: 11, color: '#2563eb', marginBottom: 4 }}>
-                              {p.category || p.product?.category}
-                            </div>
-                          )}
-                          {/* Purchase type */}
-                          {p.purchase_type && (
-                            <div style={{ fontSize: 10, color: '#94a3b8', marginBottom: 4 }}>
-                              Entitlement: {p.purchase_type}
-                            </div>
-                          )}
-                          {/* Modules / Submodules entitlement */}
-                          {p.modules && p.modules.length > 0 && (
-                            <div style={{ marginTop: 8, paddingLeft: 8, borderLeft: '2px solid #e2e8f0' }}>
-                              <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', marginBottom: 4 }}>PURCHASED MODULES</div>
-                              {p.modules.map((m: any) => (
-                                <div key={m.id} style={{ fontSize: 11, color: '#334155', marginBottom: 2 }}>
-                                  • {m.name}
-                                  {m.submodules && m.submodules.length > 0 && (
-                                    <div style={{ paddingLeft: 12, color: '#64748b', fontSize: 10 }}>
-                                      {m.submodules.map((sm: any) => (
-                                        <div key={sm.id}>- {sm.name}</div>
+                      .map((p: any) => {
+                        const isComplete = p.purchase_type === 'COMPLETE';
+                        const modulesList = p.modules || [];
+                        const totalSubmods = modulesList.reduce((acc: number, m: any) => acc + (m.submodules?.length || 0), 0);
+
+                        return (
+                          <div
+                            key={p.id || p.product_id}
+                            style={{
+                              background: 'white',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: 8,
+                              padding: 12,
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                            }}
+                          >
+                            <div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 4 }}>
+                                <div style={{ fontWeight: 700, fontSize: 14, color: '#0b3b60' }}>
+                                  {p.name || p.product_name || p.product?.name || '—'}
+                                </div>
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    fontWeight: 700,
+                                    padding: '2px 6px',
+                                    borderRadius: 4,
+                                    background: isComplete ? '#f0fdf4' : '#eff6ff',
+                                    color: isComplete ? '#15803d' : '#1d4ed8',
+                                    border: `1px solid ${isComplete ? '#bbf7d0' : '#bfdbfe'}`,
+                                  }}
+                                >
+                                  {isComplete ? 'Complete Suite' : 'Selective Modules'}
+                                </span>
+                              </div>
+
+                              <div style={{ fontSize: 11, color: '#64748b', marginBottom: 6 }}>
+                                Product Code: <span style={{ fontWeight: 600, color: '#475569' }}>{p.code || p.product_code || p.product?.code || '—'}</span>
+                                {(p.category || p.product?.category) && ` • ${p.category || p.product?.category}`}
+                              </div>
+
+                              {/* Entitlement details */}
+                              <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #f1f5f9' }}>
+                                {isComplete ? (
+                                  <div style={{ fontSize: 11, color: '#15803d', fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                    <CheckCircle size={13} /> All product modules & submodules included
+                                  </div>
+                                ) : modulesList.length > 0 ? (
+                                  <div>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}>
+                                      <span>Purchased Modules ({modulesList.length})</span>
+                                      {totalSubmods > 0 && <span style={{ color: '#0284c7' }}>{totalSubmods} Submodules</span>}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                                      {modulesList.map((m: any) => (
+                                        <div key={m.id || m.moduleId} style={{ background: '#f8fafc', padding: '6px 8px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                                          <div style={{ fontSize: 11, fontWeight: 600, color: '#1e293b', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                            <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span> {m.name || m.moduleName || m.code}
+                                            {m.code && <span style={{ fontSize: 9, color: '#64748b' }}>({m.code})</span>}
+                                          </div>
+                                          {m.submodules && m.submodules.length > 0 && (
+                                            <div style={{ paddingLeft: 14, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                                              {m.submodules.map((sm: any) => (
+                                                <span
+                                                  key={sm.id || sm.submoduleId}
+                                                  style={{
+                                                    fontSize: 10,
+                                                    background: '#e0f2fe',
+                                                    color: '#0369a1',
+                                                    padding: '1px 5px',
+                                                    borderRadius: 3,
+                                                    border: '1px solid #bae6fd',
+                                                  }}
+                                                >
+                                                  • {sm.name || sm.submoduleName || sm.code}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       ))}
                                     </div>
-                                  )}
-                                </div>
-                              ))}
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', background: '#f8fafc', padding: '6px 8px', borderRadius: 4 }}>
+                                    Product-level entitlement (No specific module restrictions)
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                          )}
-                        </div>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          style={{ padding: '4px 6px', color: '#b91c1c', marginLeft: 8, flexShrink: 0 }}
-                          title="Remove Product Entitlement (preserves historical data)"
-                          onClick={() => handleRemoveProduct(p.product_id || p.productId, p.name || p.product_name || p.product?.name)}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    ))
+
+                            <div style={{ marginTop: 12, paddingTop: 8, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: 6 }}>
+                              <button
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '3px 8px', fontSize: 11, color: '#2563eb' }}
+                                title="Edit Entitlement for this customer"
+                                onClick={() => {
+                                  handleOpenEdit(selectedCompany);
+                                  setEditActiveTab('entitlements');
+                                }}
+                              >
+                                <Edit2 size={11} /> Edit Entitlements
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                style={{ padding: '3px 6px', color: '#b91c1c' }}
+                                title="Remove Product Entitlement (preserves historical data)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const prodId = p.product_id || p.productId || p.id;
+                                  const prodName = p.name || p.product_name || p.product?.name || p.code || 'this product';
+                                  handleRemoveProduct(prodId, prodName);
+                                }}
+                              >
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
                   ) : (
                     <div style={{ color: '#b91c1c', fontSize: 12, padding: 8 }}>
                       No active products found. (Customer must own at least 1 product)
@@ -980,13 +1128,13 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       {/* EDIT CUSTOMER MODAL */}
       {showEditModal && editingCompany && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 650 }}>
-            <div className="modal-header">
+          <div className="modal-content" style={{ maxWidth: 820, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Edit2 size={20} color="#2563eb" />
                 <div>
-                  <div className="modal-title">Edit Customer</div>
-                  <div style={{ fontSize: 12, color: '#64748b' }}>ID: {editingCompany.id} — Product mappings and branches are managed separately</div>
+                  <div className="modal-title">Edit Customer — {editFormData.company_name || editingCompany.id}</div>
+                  <div style={{ fontSize: 12, color: '#64748b' }}>ID: {editingCompany.id} • Configure company details and product/module entitlements</div>
                 </div>
               </div>
               <button
@@ -997,8 +1145,51 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit}>
-              <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+            {/* Modal Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', flexShrink: 0 }}>
+              <button
+                type="button"
+                onClick={() => setEditActiveTab('details')}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: editActiveTab === 'details' ? '2px solid #2563eb' : 'none',
+                  color: editActiveTab === 'details' ? '#2563eb' : '#64748b',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                1. Company Details
+              </button>
+              <button
+                type="button"
+                onClick={() => setEditActiveTab('entitlements')}
+                style={{
+                  flex: 1,
+                  padding: '10px 14px',
+                  background: 'none',
+                  border: 'none',
+                  borderBottom: editActiveTab === 'entitlements' ? '2px solid #2563eb' : 'none',
+                  color: editActiveTab === 'entitlements' ? '#2563eb' : '#64748b',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                }}
+              >
+                <Package size={14} />
+                2. Product & Module Entitlements ({editFormData.product_ids.length})
+              </button>
+            </div>
+
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
                 {editFormError && (
                   <div
                     style={{
@@ -1018,132 +1209,143 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label className="form-label">Company / Organization Name *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    value={editFormData.company_name}
-                    onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Primary Corporate Email *</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      required
-                      value={editFormData.primary_email}
-                      onChange={(e) => setEditFormData({ ...editFormData, primary_email: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">GST Number (Optional)</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editFormData.gstn}
-                      onChange={(e) => setEditFormData({ ...editFormData, gstn: e.target.value.toUpperCase() })}
-                    />
-                  </div>
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Full Corporate Address *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    value={editFormData.address}
-                    onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Primary Contact Person *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      required
-                      value={editFormData.contact_person}
-                      onChange={(e) => setEditFormData({ ...editFormData, contact_person: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Contact Phone *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      required
-                      value={editFormData.contact_phone}
-                      onChange={(e) => setEditFormData({ ...editFormData, contact_phone: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 10 }}>
-                    ALTERNATE CONTACT (Optional)
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                {editActiveTab === 'details' ? (
+                  <div>
                     <div className="form-group">
-                      <label className="form-label">Alternate Contact Name</label>
+                      <label className="form-label">Company / Organization Name *</label>
                       <input
                         type="text"
                         className="form-control"
-                        value={editFormData.alternate_contact}
-                        onChange={(e) => setEditFormData({ ...editFormData, alternate_contact: e.target.value })}
+                        required
+                        value={editFormData.company_name}
+                        onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })}
                       />
                     </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className="form-group">
+                        <label className="form-label">Primary Corporate Email *</label>
+                        <input
+                          type="email"
+                          className="form-control"
+                          required
+                          value={editFormData.primary_email}
+                          onChange={(e) => setEditFormData({ ...editFormData, primary_email: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">GST Number (Optional)</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          value={editFormData.gstn}
+                          onChange={(e) => setEditFormData({ ...editFormData, gstn: e.target.value.toUpperCase() })}
+                        />
+                      </div>
+                    </div>
+
                     <div className="form-group">
-                      <label className="form-label">Alternate Contact Phone</label>
+                      <label className="form-label">Full Corporate Address *</label>
                       <input
                         type="text"
                         className="form-control"
-                        value={editFormData.alternate_contact_phone}
-                        onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_phone: e.target.value })}
+                        required
+                        value={editFormData.address}
+                        onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
                       />
                     </div>
-                    <div className="form-group" style={{ gridColumn: 'span 2' }}>
-                      <label className="form-label">Alternate Contact Email</label>
-                      <input
-                        type="email"
-                        className="form-control"
-                        value={editFormData.alternate_contact_email}
-                        onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_email: e.target.value })}
-                      />
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className="form-group">
+                        <label className="form-label">Primary Contact Person *</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          required
+                          value={editFormData.contact_person}
+                          onChange={(e) => setEditFormData({ ...editFormData, contact_person: e.target.value })}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">Contact Phone *</label>
+                        <PhoneInput
+                          required
+                          value={editFormData.contact_phone}
+                          onChange={(val) => setEditFormData({ ...editFormData, contact_phone: val })}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 10 }}>
+                        ALTERNATE CONTACT (Optional)
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="form-group">
+                          <label className="form-label">Alternate Contact Name</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            value={editFormData.alternate_contact}
+                            onChange={(e) => setEditFormData({ ...editFormData, alternate_contact: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Alternate Contact Phone</label>
+                          <PhoneInput
+                            value={editFormData.alternate_contact_phone}
+                            onChange={(val) => setEditFormData({ ...editFormData, alternate_contact_phone: val })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                          <label className="form-label">Alternate Contact Email</label>
+                          <input
+                            type="email"
+                            className="form-control"
+                            value={editFormData.alternate_contact_email}
+                            onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_email: e.target.value })}
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 14,
-                    padding: '10px 14px',
-                    background: '#eff6ff',
-                    borderRadius: 6,
-                    fontSize: 12,
-                    color: '#1d4ed8',
-                    border: '1px solid #bfdbfe',
-                  }}
-                >
-                  ℹ️ Customer ID (<strong>{editingCompany.id}</strong>), product entitlements, and branch mappings are preserved and managed separately.
-                  Tickets, AMC records, and implementation history remain unaffected.
-                </div>
+                ) : (
+                  <div>
+                    <CustomerProductEntitlementSelector
+                      products={products}
+                      value={editFormData.productEntitlements}
+                      onChange={(ents, pIds) =>
+                        setEditFormData({ ...editFormData, productEntitlements: ents, product_ids: pIds })
+                      }
+                      title="Purchased Products & Modules"
+                      subtitle="Select products and optional modules for this customer. Module selection is completely optional."
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary" disabled={savingEdit}>
-                  <Save size={14} />
-                  {savingEdit ? 'Saving Changes...' : 'Save Customer Changes'}
-                </button>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
+                <div>
+                  {editActiveTab === 'entitlements' && (
+                    <button type="button" className="btn btn-secondary" onClick={() => setEditActiveTab('details')}>
+                      ← Back to Details
+                    </button>
+                  )}
+                  {editActiveTab === 'details' && (
+                    <button type="button" className="btn btn-secondary" onClick={() => setEditActiveTab('entitlements')}>
+                      Configure Entitlements →
+                    </button>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary" disabled={savingEdit}>
+                    <Save size={14} />
+                    {savingEdit ? 'Saving Changes...' : 'Save Customer Changes'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1153,8 +1355,8 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       {/* CREATE NEW CUSTOMER MODAL (Workflow with Mandatory Product Selection) */}
       {showCreateModal && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 700 }}>
-            <div className="modal-header">
+          <div className="modal-content" style={{ maxWidth: 840, maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Building2 size={20} color="#0b3b60" />
                 <div className="modal-title">Register New Customer</div>
@@ -1168,7 +1370,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
             </div>
 
             {/* Step Indicators */}
-            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', flexShrink: 0 }}>
               <div
                 style={{
                   flex: 1,
@@ -1197,7 +1399,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 }}
                 onClick={() => setCreateStep(2)}
               >
-                2. Products Purchased *
+                2. Products &amp; Modules Purchased *
               </div>
               <div
                 style={{
@@ -1212,12 +1414,12 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 }}
                 onClick={() => setCreateStep(3)}
               >
-                3. Review & Register
+                3. Review &amp; Register
               </div>
             </div>
 
-            <form onSubmit={handleCreateSubmit}>
-              <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            <form onSubmit={handleCreateSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
                 {formError && (
                   <div
                     style={{
@@ -1317,105 +1519,273 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 {/* STEP 2: PRODUCTS PURCHASED (Mandatory) */}
                 {createStep === 2 && (
                   <div>
-                    <div style={{ marginBottom: 12 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: '#0f172a' }}>
-                        Select Products Purchased by Customer *
-                      </div>
-                      <div style={{ fontSize: 12, color: '#64748b' }}>
-                        A customer organization must own at least ONE KANVTECH product to register.
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                      {products.map((p) => {
-                        const selected = formData.product_ids.includes(p.id);
-                        return (
-                          <div
-                            key={p.id}
-                            onClick={() => toggleProductSelection(p.id)}
-                            style={{
-                              padding: '12px 14px',
-                              borderRadius: 6,
-                              border: selected ? '2px solid #2563eb' : '1px solid #cbd5e1',
-                              background: selected ? '#eff6ff' : 'white',
-                              cursor: 'pointer',
-                              display: 'flex',
-                              alignItems: 'flex-start',
-                              gap: 10,
-                            }}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selected}
-                              onChange={() => {}}
-                              style={{ marginTop: 2, cursor: 'pointer' }}
-                            />
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: 13, color: '#0b3b60' }}>{p.name}</div>
-                              <div style={{ fontSize: 11, color: '#64748b' }}>
-                                Product Code: {p.code} • {p.category}
-                              </div>
-                              <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>{p.description}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {formData.product_ids.length === 0 && (
-                      <div style={{ marginTop: 12, fontSize: 12, color: '#b91c1c', fontWeight: 500 }}>
-                        ⚠️ You must select at least 1 product.
-                      </div>
-                    )}
+                    <CustomerProductEntitlementSelector
+                      products={products}
+                      value={formData.productEntitlements}
+                      onChange={(ents, pIds) =>
+                        setFormData({
+                          ...formData,
+                          productEntitlements: ents,
+                          product_ids: pIds,
+                        })
+                      }
+                      title="Select Purchased Products & Modules"
+                      subtitle="Choose products purchased by the customer. Selecting a product does NOT automatically include all modules or submodules."
+                      error={formData.product_ids.length === 0 ? 'At least one product must be selected.' : null}
+                    />
                   </div>
                 )}
 
-                {/* STEP 3: REVIEW & CONFIRM */}
+                {/* STEP 3: REVIEW & REGISTER */}
                 {createStep === 3 && (
-                  <div style={{ fontSize: 13 }}>
-                    <div style={{ background: '#f8fafc', padding: 14, borderRadius: 6, border: '1px solid #e2e8f0', marginBottom: 14 }}>
-                      <div style={{ fontWeight: 700, color: '#0b3b60', fontSize: 14, marginBottom: 8 }}>
-                        {formData.company_name}
-                      </div>
-                      <div style={{ color: '#475569', marginBottom: 4 }}>📍 {formData.address}</div>
-                      <div style={{ color: '#475569', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span>✉️ {formData.primary_email}</span>
-                        <span style={{ background: '#dcfce7', color: '#15803d', fontSize: 11, fontWeight: 700, padding: '1px 6px', borderRadius: 4 }}>
-                          ✓ Verified
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* Top Section: REVIEW CUSTOMER DETAILS */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          Review Customer Details
                         </span>
+                        <button
+                          type="button"
+                          onClick={() => setCreateStep(1)}
+                          style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                        >
+                          Edit Details
+                        </button>
                       </div>
-                      <div style={{ color: '#475569' }}>👤 {formData.contact_person} ({formData.contact_phone})</div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 10 }}>
+                        {/* Company Card */}
+                        <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Company</div>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
+                            {formData.company_name || '—'}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', marginTop: 6, textTransform: 'uppercase' }}>Customer ID</div>
+                          <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic' }}>Generated after registration</div>
+                        </div>
+
+                        {/* Contact Card */}
+                        <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Contact</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', marginTop: 2 }}>
+                            {formData.contact_person || '—'}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
+                            📞 {formData.contact_phone || '—'}
+                          </div>
+                        </div>
+
+                        {/* Email & GST Card */}
+                        <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Email</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#0f172a', marginTop: 2, wordBreak: 'break-all' }}>
+                            {formData.primary_email || '—'}
+                          </div>
+                          <div style={{ fontSize: 10, fontWeight: 600, color: '#94a3b8', marginTop: 6, textTransform: 'uppercase' }}>GST Number</div>
+                          <div style={{ fontSize: 11, color: formData.gstn ? '#0284c7' : '#64748b', fontWeight: formData.gstn ? 600 : 400 }}>
+                            {formData.gstn || 'Not Provided'}
+                          </div>
+                        </div>
+
+                        {/* Address Card */}
+                        <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: 6, border: '1px solid #e2e8f0', gridColumn: '1 / -1' }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Corporate Address</div>
+                          <div style={{ fontSize: 12, color: '#334155', marginTop: 2 }}>
+                            📍 {formData.address || '—'}
+                          </div>
+                          {(formData.alternate_contact || formData.alternate_contact_phone || formData.alternate_contact_email) && (
+                            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4, paddingTop: 4, borderTop: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontWeight: 600 }}>Alternate Contact: </span>
+                              {formData.alternate_contact && <span>{formData.alternate_contact} </span>}
+                              {formData.alternate_contact_phone && <span>• {formData.alternate_contact_phone} </span>}
+                              {formData.alternate_contact_email && <span>• {formData.alternate_contact_email}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
-                    <div style={{ marginBottom: 14 }}>
-                      <div style={{ fontWeight: 600, color: '#0f172a', marginBottom: 6 }}>Purchased Products:</div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                        {formData.product_ids.map((pid) => {
-                          const prod = products.find((p) => p.id === pid);
-                          return (
-                            <span
-                              key={pid}
-                              style={{
-                                padding: '4px 10px',
-                                background: '#eff6ff',
-                                color: '#1d4ed8',
-                                borderRadius: 6,
-                                fontWeight: 600,
-                                fontSize: 12,
-                                border: '1px solid #bfdbfe',
-                              }}
-                            >
-                              {prod ? `${prod.name} (${prod.code})` : pid}
-                            </span>
-                          );
-                        })}
+                    {/* Middle Section: PRODUCT ENTITLEMENTS */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            Selected Product Entitlements
+                          </span>
+                          <span style={{ fontSize: 11, fontWeight: 600, background: '#eff6ff', color: '#1d4ed8', padding: '1px 7px', borderRadius: 10 }}>
+                            {formData.product_ids.length} Product{formData.product_ids.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setCreateStep(2)}
+                          style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: 11, fontWeight: 600, cursor: 'pointer', padding: 0 }}
+                        >
+                          Modify Products
+                        </button>
+                      </div>
+
+                      {/* Empty State */}
+                      {formData.product_ids.length === 0 ? (
+                        <div
+                          style={{
+                            background: '#fffbeb',
+                            border: '1px dashed #f59e0b',
+                            borderRadius: 8,
+                            padding: '20px 16px',
+                            textAlign: 'center',
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', marginBottom: 4 }}>
+                            No Products Selected
+                          </div>
+                          <div style={{ fontSize: 12, color: '#b45309', marginBottom: 12 }}>
+                            Please go back to Products &amp; Modules and select at least one product before registering this customer.
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => setCreateStep(2)}
+                            style={{ color: '#92400e', borderColor: '#fcd34d' }}
+                          >
+                            ← Back to Products &amp; Modules
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {formData.productEntitlements.map((ent) => {
+                            const prod = products.find((p) => p.id === ent.productId);
+                            const isComplete = ent.purchaseType === 'COMPLETE';
+                            const modulesList = ent.modules || [];
+                            const totalModulesInMaster = prod?.modules?.length || 0;
+
+                            return (
+                              <div
+                                key={ent.productId}
+                                style={{
+                                  background: 'white',
+                                  border: '1px solid #cbd5e1',
+                                  borderRadius: 8,
+                                  padding: '10px 14px',
+                                  boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                                }}
+                              >
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                                    <span style={{ color: '#16a34a', fontWeight: 700 }}>✓</span>
+                                    <span style={{ fontWeight: 700, color: '#0b3b60', fontSize: 13 }}>
+                                      {prod ? prod.name : ent.productId}
+                                    </span>
+                                    {prod?.code && (
+                                      <span style={{ fontSize: 10, fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '1px 5px', borderRadius: 4 }}>
+                                        {prod.code}
+                                      </span>
+                                    )}
+                                    {prod?.category && (
+                                      <span style={{ fontSize: 11, color: '#64748b' }}>• {prod.category}</span>
+                                    )}
+                                  </div>
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      fontWeight: 700,
+                                      padding: '2px 8px',
+                                      borderRadius: 10,
+                                      background: isComplete ? '#f0fdf4' : '#eff6ff',
+                                      color: isComplete ? '#15803d' : '#1d4ed8',
+                                      border: `1px solid ${isComplete ? '#bbf7d0' : '#bfdbfe'}`,
+                                    }}
+                                  >
+                                    {isComplete ? 'Complete Suite' : `${modulesList.length}/${totalModulesInMaster} modules`}
+                                  </span>
+                                </div>
+
+                                {isComplete ? (
+                                  <div style={{ fontSize: 11, color: '#15803d', marginTop: 6, fontWeight: 500 }}>
+                                    ✓ All product modules and submodules included
+                                  </div>
+                                ) : modulesList.length > 0 ? (
+                                  <div style={{ marginTop: 8, paddingTop: 6, borderTop: '1px dashed #e2e8f0' }}>
+                                    <div style={{ fontSize: 10, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+                                      Selected Modules ({modulesList.length})
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                                      {modulesList.map((m) => {
+                                        const modObj = prod?.modules?.find((mod) => mod.id === m.moduleId);
+                                        const subList = m.submoduleIds || [];
+                                        return (
+                                          <div key={m.moduleId} style={{ fontSize: 11, color: '#334155' }}>
+                                            <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                                              <span style={{ color: '#16a34a' }}>•</span>
+                                              <span>{modObj?.name || m.moduleId}</span>
+                                              {subList.length > 0 && (
+                                                <span style={{ fontSize: 10, color: '#0284c7', fontWeight: 500 }}>
+                                                  ({subList.length} submodules)
+                                                </span>
+                                              )}
+                                            </div>
+                                            {subList.length > 0 && (
+                                              <div style={{ paddingLeft: 14, display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 2 }}>
+                                                {subList.map((sId) => {
+                                                  const subObj = modObj?.submodules?.find((s) => s.id === sId);
+                                                  return (
+                                                    <span
+                                                      key={sId}
+                                                      style={{
+                                                        fontSize: 10,
+                                                        background: '#f1f5f9',
+                                                        color: '#475569',
+                                                        padding: '1px 5px',
+                                                        borderRadius: 3,
+                                                        border: '1px solid #e2e8f0',
+                                                      }}
+                                                    >
+                                                      {subObj?.name || sId}
+                                                    </span>
+                                                  );
+                                                })}
+                                              </div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: 11, color: '#64748b', fontStyle: 'italic', marginTop: 6 }}>
+                                    Product-level entitlement (No specific module restrictions)
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Bottom Section: FINAL CONFIRMATION */}
+                    <div
+                      style={{
+                        background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: 6,
+                        padding: '10px 14px',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 16, fontSize: 12, color: '#15803d', fontWeight: 600, flexWrap: 'wrap' }}>
+                        <span>✓ Customer details are ready</span>
+                        <span>✓ Product entitlements are configured</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                        Please review the information above before creating the customer.
                       </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div className="modal-footer" style={{ display: 'flex', justifyContent: 'space-between', flexShrink: 0 }}>
                 <div>
                   {createStep > 1 && (
                     <button
@@ -1423,7 +1793,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       className="btn btn-secondary"
                       onClick={() => setCreateStep((prev) => (prev - 1) as any)}
                     >
-                      Back
+                      ← Back
                     </button>
                   )}
                 </div>
@@ -1453,10 +1823,14 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                         setCreateStep((prev) => (prev + 1) as any);
                       }}
                     >
-                      Next Step
+                      Next Step →
                     </button>
                   ) : (
-                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={saving || formData.product_ids.length === 0}
+                    >
                       {saving ? 'Registering Customer...' : 'Register Customer'}
                     </button>
                   )}
@@ -1470,7 +1844,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       {/* ADD PRODUCT MODAL */}
       {showAddProductModal && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 480 }}>
+          <div className="modal-content" style={{ maxWidth: 700 }}>
             <div className="modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Package size={20} color="#2563eb" />
@@ -1483,23 +1857,36 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 ✕
               </button>
             </div>
-            <div className="modal-body">
+            <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
               {productError && (
                 <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>
                   {productError}
                 </div>
               )}
-              <div className="form-group">
-                <label className="form-label">Select Product to Add *</label>
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label" style={{ fontWeight: 600 }}>Select Product to Add *</label>
                 <select
                   className="form-control"
                   value={selectedNewProductId}
-                  onChange={(e) => setSelectedNewProductId(e.target.value)}
+                  onChange={(e) => {
+                    const pId = e.target.value;
+                    setSelectedNewProductId(pId);
+                    if (pId) {
+                      setNewProductEntitlements([
+                        {
+                          productId: pId,
+                          purchaseType: 'SELECTED_MODULES',
+                          modules: [],
+                        },
+                      ]);
+                    } else {
+                      setNewProductEntitlements([]);
+                    }
+                  }}
                 >
                   <option value="">Choose a product from Product Master</option>
                   {products
                     .filter((p) => {
-                      // Filter out products already actively owned by this customer
                       const owned = selectedCompany?.products?.some(
                         (cp: any) => (cp.product_id || cp.productId || cp.id) === p.id && cp.is_active !== 0
                       );
@@ -1512,7 +1899,20 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                     ))}
                 </select>
               </div>
-              <div style={{ fontSize: 11, color: '#64748b', marginTop: 8 }}>
+
+              {selectedNewProductId && (
+                <div style={{ marginTop: 14 }}>
+                  <CustomerProductEntitlementSelector
+                    products={products.filter((p) => p.id === selectedNewProductId)}
+                    value={newProductEntitlements}
+                    onChange={(ents) => setNewProductEntitlements(ents)}
+                    title="Configure Purchased Modules & Submodules"
+                    subtitle="Select which modules and submodules under this product are purchased by the customer. All are unselected by default."
+                  />
+                </div>
+              )}
+
+              <div style={{ fontSize: 11, color: '#64748b', marginTop: 12 }}>
                 Previously removed products can be re-added. Historical tickets and AMC records are always preserved.
               </div>
             </div>

@@ -51,6 +51,48 @@ export class ChatService {
   }
 
   /**
+   * Helper to format message with attachment metadata.
+   */
+  private formatMessageWithAttachments(
+    message: string,
+    attachments?: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }>
+  ): string {
+    const cleanMsg = (message || '').trim();
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      const meta = `<!--ATTACHMENTS:${JSON.stringify(attachments)}-->`;
+      return cleanMsg ? `${cleanMsg}\n\n${meta}` : meta;
+    }
+    return cleanMsg;
+  }
+
+  /**
+   * Helper to parse and extract attachments from raw message text.
+   */
+  private formatChatMessage(msg: any) {
+    if (!msg) return msg;
+    let rawText = msg.message || '';
+    let attachments: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }> = [];
+
+    if (rawText.includes('<!--ATTACHMENTS:')) {
+      const match = rawText.match(/<!--ATTACHMENTS:(.*?)-->/);
+      if (match && match[1]) {
+        try {
+          attachments = JSON.parse(match[1]);
+        } catch {
+          attachments = [];
+        }
+      }
+      rawText = rawText.replace(/<!--ATTACHMENTS:.*?-->/g, '').trim();
+    }
+
+    return {
+      ...msg,
+      message: rawText,
+      attachments,
+    };
+  }
+
+  /**
    * Compose and send a new internal message (Email/Mailbox style).
    * 100% internal within Kanvtech DB. Zero external SMTP/Nodemailer/APIs.
    */
@@ -60,8 +102,9 @@ export class ChatService {
     ccUserIds?: number[];
     subject: string;
     message: string;
+    attachments?: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }>;
   }): Promise<any> {
-    const { senderUserId, toUserIds, ccUserIds = [], subject, message } = params;
+    const { senderUserId, toUserIds, ccUserIds = [], subject, message, attachments = [] } = params;
 
     if (!toUserIds || !Array.isArray(toUserIds) || toUserIds.length === 0) {
       throw new BadRequestException('At least one "To" recipient is mandatory.');
@@ -69,8 +112,8 @@ export class ChatService {
     if (!subject || !subject.trim()) {
       throw new BadRequestException('Subject is mandatory for internal messages.');
     }
-    if (!message || !message.trim()) {
-      throw new BadRequestException('Message body cannot be empty.');
+    if ((!message || !message.trim()) && (!attachments || attachments.length === 0)) {
+      throw new BadRequestException('Message body or at least one attachment is required.');
     }
 
     // Validate sender
@@ -118,12 +161,14 @@ export class ChatService {
       },
     });
 
+    const storedMessage = this.formatMessageWithAttachments(message, attachments);
+
     // Create initial message
     const chatMsg = await this.prisma.chatMessage.create({
       data: {
         conversationId: conversation.id,
         senderId: senderUserId,
-        message: message.trim(),
+        message: storedMessage,
       },
       include: {
         sender: { select: { id: true, email: true, role: true, employee: { select: { id: true, name: true } } } },
@@ -137,7 +182,12 @@ export class ChatService {
 
     // Create In-App Notifications for all recipients (To + CC)
     const senderName = sender.employee?.name || sender.email;
-    const snippet = message.trim().length > 80 ? `${message.trim().substring(0, 80)}...` : message.trim();
+    let snippet = (message || '').trim();
+    if (!snippet && attachments && attachments.length > 0) {
+      snippet = `📎 ${attachments.map((a) => a.fileName).join(', ')}`;
+    } else if (snippet.length > 80) {
+      snippet = `${snippet.substring(0, 80)}...`;
+    }
 
     for (const recipientId of allRecipientIds) {
       await this.notificationsService.createInAppNotification(
@@ -159,6 +209,7 @@ export class ChatService {
         subject: subject.trim(),
         toCount: toUsers.length,
         ccCount: ccUsers.length,
+        attachmentCount: attachments.length,
       },
     });
 
@@ -167,6 +218,7 @@ export class ChatService {
       conversationId: conversation.id,
       messageId: chatMsg.id,
       subject: conversation.title,
+      attachments,
     };
   }
 
@@ -178,11 +230,12 @@ export class ChatService {
     senderUserId: number;
     message: string;
     isReplyAll?: boolean;
+    attachments?: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }>;
   }): Promise<any> {
-    const { conversationId, senderUserId, message, isReplyAll = false } = params;
+    const { conversationId, senderUserId, message, isReplyAll = false, attachments = [] } = params;
 
-    if (!message || !message.trim()) {
-      throw new BadRequestException('Reply message cannot be empty.');
+    if ((!message || !message.trim()) && (!attachments || attachments.length === 0)) {
+      throw new BadRequestException('Reply message or at least one attachment is required.');
     }
 
     // Strictly check participant authorization
@@ -202,12 +255,14 @@ export class ChatService {
       throw new ForbiddenException('Only active Kanvtech employees can send replies.');
     }
 
+    const storedMessage = this.formatMessageWithAttachments(message, attachments);
+
     // Create reply message in the existing thread
     const newMsg = await this.prisma.chatMessage.create({
       data: {
         conversationId,
         senderId: senderUserId,
-        message: message.trim(),
+        message: storedMessage,
       },
       include: {
         sender: { select: { id: true, email: true, role: true, employee: { select: { id: true, name: true } } } },
@@ -243,7 +298,12 @@ export class ChatService {
 
     const senderName = sender.employee?.name || sender.email;
     const convTitle = isParticipant.conversation?.title || 'Internal Message';
-    const snippet = message.trim().length > 80 ? `${message.trim().substring(0, 80)}...` : message.trim();
+    let snippet = (message || '').trim();
+    if (!snippet && attachments && attachments.length > 0) {
+      snippet = `📎 ${attachments.map((a) => a.fileName).join(', ')}`;
+    } else if (snippet.length > 80) {
+      snippet = `${snippet.substring(0, 80)}...`;
+    }
 
     for (const uid of targetUserIds) {
       await this.notificationsService.createInAppNotification(
@@ -260,10 +320,10 @@ export class ChatService {
       action: 'INTERNAL_MESSAGE_REPLY',
       entityType: 'CHAT_CONVERSATION',
       entityId: String(conversationId),
-      newValues: { isReplyAll, recipientCount: targetUserIds.length },
+      newValues: { isReplyAll, recipientCount: targetUserIds.length, attachmentCount: attachments.length },
     });
 
-    return newMsg;
+    return this.formatChatMessage(newMsg);
   }
 
   /**
@@ -325,8 +385,11 @@ export class ChatService {
 
     // Enrich and apply folder filtering
     const enriched = conversations.map((conv) => {
-      const firstMessage = conv.messages[conv.messages.length - 1] || null;
-      const latestMessage = conv.messages[0] || null;
+      const rawFirstMessage = conv.messages[conv.messages.length - 1] || null;
+      const rawLatestMessage = conv.messages[0] || null;
+
+      const firstMessage = rawFirstMessage ? this.formatChatMessage(rawFirstMessage) : null;
+      const latestMessage = rawLatestMessage ? this.formatChatMessage(rawLatestMessage) : null;
 
       const unreadCount = conv.messages.filter(
         (m) => m.senderId !== userId && !m.readReceipts.some((r) => r.userId === userId)
@@ -405,7 +468,10 @@ export class ChatService {
     });
 
     if (!conversation) throw new NotFoundException('Conversation not found.');
-    return conversation;
+    return {
+      ...conversation,
+      messages: conversation.messages.map((m) => this.formatChatMessage(m)),
+    };
   }
 
   /**
@@ -438,7 +504,7 @@ export class ChatService {
       take: limit,
     });
 
-    return messages.reverse();
+    return messages.reverse().map((m) => this.formatChatMessage(m));
   }
 
   /**
