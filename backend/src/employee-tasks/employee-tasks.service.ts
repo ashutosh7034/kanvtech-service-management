@@ -315,7 +315,7 @@ export class EmployeeTasksService {
           'New Task Assigned',
           `New task assigned by ${creatorName}: ${task.title}`,
           'TASK_ASSIGNED',
-          '/task_reminders',
+          '/task-reminders',
         );
       }
 
