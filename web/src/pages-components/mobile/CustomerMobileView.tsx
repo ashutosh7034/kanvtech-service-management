@@ -295,7 +295,19 @@ export const CustomerMobileView: React.FC = () => {
                       style={{ padding: '6px 8px', fontSize: 12 }}
                       value={selectedBranchId}
                       disabled={activeCount >= 2}
-                      onChange={(e) => setSelectedBranchId(e.target.value)}
+                      onChange={(e) => {
+                        const newBranchId = e.target.value;
+                        setSelectedBranchId(newBranchId);
+                        setCreateError(null);
+                        const branch = myBranches.find((b) => b.id === newBranchId);
+                        const available = newBranchId
+                          ? ((branch?.branchProducts || (branch as any)?.products || []).filter((bp: any) => bp.isActive !== false && bp.is_active !== 0))
+                          : myProducts;
+                        const isCurrentValid = available.some((p: any) => (p.productId || p.product_id || p.id) === selectedProductId);
+                        if (!isCurrentValid) {
+                          setSelectedProductId(available.length === 1 ? (available[0].productId || available[0].product_id || available[0].id) : '');
+                        }
+                      }}
                     >
                       <option value="">Headquarters / Main Organization</option>
                       {myBranches.map((b) => (
@@ -315,11 +327,14 @@ export const CustomerMobileView: React.FC = () => {
                     required
                     value={selectedProductId}
                     disabled={activeCount >= 2}
-                    onChange={(e) => setSelectedProductId(e.target.value)}
+                    onChange={(e) => {
+                      setSelectedProductId(e.target.value);
+                      setCreateError(null);
+                    }}
                   >
                     <option value="">Select Product</option>
                     {(selectedBranchId
-                      ? (myBranches.find((b) => b.id === selectedBranchId)?.branchProducts || myBranches.find((b) => b.id === selectedBranchId)?.products || myProducts)
+                      ? ((myBranches.find((b) => b.id === selectedBranchId)?.branchProducts || myBranches.find((b) => b.id === selectedBranchId)?.products || []).filter((bp: any) => bp.isActive !== false && bp.is_active !== 0))
                       : myProducts
                     ).map((p: any) => (
                       <option key={p.product_id || p.productId || p.id} value={p.product_id || p.productId || p.id}>

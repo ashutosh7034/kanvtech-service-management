@@ -216,6 +216,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     setSelectedCompany(null);
     setSelectedCompanyId('');
     setCustomerSearchQuery('');
+    setCreateError(null);
     setSelectedContactId('');
     setContactSearchQuery('');
     setSelectedBranchId('');
@@ -231,24 +232,154 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     setShowCustomerDropdown(true);
   };
 
-  const handleBranchChange = (branchId: string) => {
-    setSelectedBranchId(branchId);
-    setSelectedProductId('');
-    setSelectedModuleId('');
-    setSelectedSubmoduleId('');
-    setProductModules([]);
-    setModuleSubmodules([]);
-    setDerivedDepartmentName('Auto-derived from product');
+  // Get selectable products based on branch (Empty branchId = Headquarters / Main Organization)
+  const getSelectableProducts = (branchId: string = selectedBranchId) => {
+    if (!selectedCompany) return [];
 
-    const selectable = getSelectableProducts(branchId);
-    if (selectable.length === 1) {
-      const pId = selectable[0].product_id || selectable[0].productId || selectable[0].id;
-      handleProductChange(pId, selectable);
+    // Falsy or empty string branchId means "Headquarters / Main Organization" -> all customer-owned products
+    if (!branchId || branchId === '') {
+      return (companyProducts || []).map((cp: any) => {
+        const pId = cp.productId || cp.product_id || cp.id;
+        const pName = cp.name || cp.product_name || cp.product?.name || '';
+        const pCode = cp.code || cp.product_code || cp.product?.code || '';
+        const rawModules = cp.modules || [];
+        const mappedModules = rawModules.map((m: any) => {
+          const modId = m.id || m.moduleId || m.module?.id;
+          const modObj = m.module || m;
+          const rawSubs = m.submodules || modObj.submodules || [];
+          return {
+            id: modId,
+            moduleId: modId,
+            name: modObj.name || modObj.moduleName || m.name || '',
+            submodules: rawSubs.map((s: any) => ({
+              id: s.id || s.submoduleId,
+              submoduleId: s.id || s.submoduleId,
+              name: s.name || s.submoduleName || s.name || '',
+            })),
+          };
+        });
+        return {
+          id: pId,
+          productId: pId,
+          product_id: pId,
+          name: pName,
+          product_name: pName,
+          code: pCode,
+          product_code: pCode,
+          modules: mappedModules,
+        };
+      });
+    }
+
+    // Specific branch selected: strictly use branch-assigned products
+    const branch = companyBranches.find((b) => b.id === branchId);
+    if (!branch) return [];
+
+    const branchProds = branch.branchProducts || (branch as any).products || [];
+    if (!branchProds || branchProds.length === 0) return [];
+
+    return branchProds
+      .filter((bp: any) => bp.isActive !== false && bp.is_active !== 0)
+      .map((bp: any) => {
+        const prodId = bp.productId || bp.product_id || bp.id;
+        const parentCustProd = (companyProducts || []).find(
+          (cp: any) => (cp.productId || cp.product_id || cp.id) === prodId
+        );
+
+        const pName = bp.name || bp.product_name || bp.product?.name || parentCustProd?.name || parentCustProd?.product_name || '';
+        const pCode = bp.code || bp.product_code || bp.product?.code || parentCustProd?.code || parentCustProd?.product_code || '';
+
+        const rawModules = (bp.modules && bp.modules.length > 0) ? bp.modules : (parentCustProd?.modules || []);
+        const mappedModules = rawModules.map((m: any) => {
+          const modId = m.id || m.moduleId || m.module?.id;
+          const modObj = m.module || m;
+          const parentCustMod = parentCustProd?.modules?.find((pcm: any) => (pcm.id || pcm.moduleId) === modId);
+          const rawSubs = m.submodules || modObj.submodules || parentCustMod?.submodules || [];
+          return {
+            id: modId,
+            moduleId: modId,
+            name: modObj.name || modObj.moduleName || parentCustMod?.name || m.name || '',
+            submodules: rawSubs.map((s: any) => ({
+              id: s.id || s.submoduleId,
+              submoduleId: s.id || s.submoduleId,
+              name: s.name || s.submoduleName || s.name || '',
+            })),
+          };
+        });
+
+        return {
+          id: prodId,
+          productId: prodId,
+          product_id: prodId,
+          name: pName,
+          product_name: pName,
+          code: pCode,
+          product_code: pCode,
+          modules: mappedModules,
+        };
+      });
+  };
+
+  const handleBranchChange = (newBranchId: string) => {
+    setSelectedBranchId(newBranchId);
+    setCreateError(null); // Clear previous branch/product validation errors immediately
+
+    const selectable = getSelectableProducts(newBranchId);
+
+    // Check if the currently selected product is valid in the newly selected branch context
+    const validCurrentProduct = selectable.find(
+      (p: any) => (p.productId || p.product_id || p.id) === selectedProductId
+    );
+
+    if (validCurrentProduct) {
+      // Product remains valid; refresh its modules hierarchy for this branch
+      const validModules = validCurrentProduct.modules || [];
+      setProductModules(validModules);
+
+      const validCurrentModule = validModules.find(
+        (m: any) => (m.id || m.moduleId) === selectedModuleId
+      );
+
+      if (validCurrentModule) {
+        const validSubs = validCurrentModule.submodules || [];
+        setModuleSubmodules(validSubs);
+        const validCurrentSub = validSubs.find(
+          (s: any) => (s.id || s.submoduleId) === selectedSubmoduleId
+        );
+        if (!validCurrentSub) {
+          setSelectedSubmoduleId('');
+        }
+      } else {
+        setSelectedModuleId('');
+        setSelectedSubmoduleId('');
+        setModuleSubmodules([]);
+      }
+      updateDerivedDepartment(selectedProductId);
+    } else {
+      // Product is invalid under the new branch; clear product/module/submodule or auto-select if exactly 1
+      if (selectable.length === 1) {
+        const firstProd = selectable[0];
+        const pId = firstProd.productId || firstProd.product_id || firstProd.id;
+        setSelectedProductId(pId);
+        setSelectedModuleId('');
+        setSelectedSubmoduleId('');
+        setProductModules(firstProd.modules || []);
+        setModuleSubmodules([]);
+        updateDerivedDepartment(pId);
+      } else {
+        setSelectedProductId('');
+        setSelectedModuleId('');
+        setSelectedSubmoduleId('');
+        setProductModules([]);
+        setModuleSubmodules([]);
+        setDerivedDepartmentName('No product selected');
+      }
     }
   };
 
-  const handleProductChange = (productId: string, currentProds: any[] = companyProducts) => {
+  const handleProductChange = (productId: string, branchId: string = selectedBranchId) => {
     setSelectedProductId(productId);
+    setCreateError(null); // Clear any stale validation error
     setSelectedModuleId('');
     setSelectedSubmoduleId('');
     setProductModules([]);
@@ -256,11 +387,11 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     updateDerivedDepartment(productId);
 
     if (productId) {
-      const ownedProduct = currentProds.find(
+      const selectable = getSelectableProducts(branchId);
+      const ownedProduct = selectable.find(
         (p: any) => (p.productId || p.product_id || p.id) === productId
       );
 
-      // 6. MODULE / SUBMODULE: Load ONLY customer-owned modules
       if (ownedProduct && Array.isArray(ownedProduct.modules)) {
         setProductModules(ownedProduct.modules);
       }
@@ -269,6 +400,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
 
   const handleModuleChange = (moduleId: string) => {
     setSelectedModuleId(moduleId);
+    setCreateError(null); // Clear any stale validation error
     setSelectedSubmoduleId('');
     setModuleSubmodules([]);
     if (moduleId) {
@@ -277,6 +409,11 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
         setModuleSubmodules(mod.submodules);
       }
     }
+  };
+
+  const handleSubmoduleChange = (submoduleId: string) => {
+    setSelectedSubmoduleId(submoduleId);
+    setCreateError(null); // Clear any stale validation error
   };
 
   const loadDepartmentsForModal = async () => {
@@ -306,27 +443,6 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
     } else {
       setDerivedDepartmentName('Support Operations (General Support)');
     }
-  };
-
-  // Get selectable products based on branch
-  const getSelectableProducts = (branchId: string = selectedBranchId) => {
-    if (!branchId) {
-      return companyProducts;
-    }
-    const branch = companyBranches.find((b) => b.id === branchId);
-    if (!branch) return companyProducts;
-    const branchProds = branch.branchProducts || (branch as any).products || [];
-    if (branchProds.length === 0) return companyProducts;
-
-    return branchProds.map((bp: any) => ({
-      product_id: bp.productId || bp.product_id || bp.id,
-      productId: bp.productId || bp.product_id || bp.id,
-      product_name: bp.productName || bp.product?.name || bp.name,
-      name: bp.productName || bp.product?.name || bp.name,
-      product_code: bp.productCode || bp.product?.code || bp.code || '',
-      code: bp.productCode || bp.product?.code || bp.code || '',
-      modules: bp.modules?.map((m: any) => m.module || m) || [],
-    }));
   };
 
   const handleCreateSubmit = async (e: React.FormEvent) => {
@@ -1074,7 +1190,7 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
                             <select
                               className="form-control"
                               value={selectedSubmoduleId}
-                              onChange={(e) => setSelectedSubmoduleId(e.target.value)}
+                              onChange={(e) => handleSubmoduleChange(e.target.value)}
                             >
                               <option value="">All Submodules</option>
                               {moduleSubmodules.map((sm: any) => (

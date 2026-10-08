@@ -118,8 +118,11 @@ export const api = {
     request(`/companies/${companyId}/branches/${branchId}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleBranchStatus: (companyId: string, branchId: string, status: string) =>
     request(`/companies/${companyId}/branches/${branchId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-  assignBranchProducts: (companyId: string, branchId: string, productIds: string[]) =>
-    request(`/companies/${companyId}/branches/${branchId}/products`, { method: 'POST', body: JSON.stringify({ productIds }) }),
+  assignBranchProducts: (companyId: string, branchId: string, products: any) =>
+    request(`/companies/${companyId}/branches/${branchId}/products`, {
+      method: 'POST',
+      body: JSON.stringify(Array.isArray(products) ? { products } : products),
+    }),
 
   // Departments
   getDepartments: (params: any = {}) => request(`/departments${toQueryString(params)}`),

@@ -1394,6 +1394,15 @@ export class CompaniesService {
       }
     }
 
+    const newProductIds = normalizedBranchProds.map((bp) => bp.productId);
+    await this.prisma.branchProduct.updateMany({
+      where: {
+        branchId,
+        productId: { notIn: newProductIds },
+      },
+      data: { isActive: false },
+    });
+
     for (const bp of normalizedBranchProds) {
       const branchProd = await this.prisma.branchProduct.upsert({
         where: { uq_branch_product: { branchId, productId: bp.productId } },

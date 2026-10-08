@@ -1064,242 +1064,339 @@ export const EmployeesPage: React.FC = () => {
       {/* Edit Employee Modal */}
       {showEditModal && editingEmployee && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 650 }}>
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Edit2 size={20} color="#0b3b60" />
+          <div className="modal-content" style={{ maxWidth: 760, width: '95%', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+            {/* FIXED HEADER */}
+            <div className="modal-header" style={{ padding: '16px 20px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 8, background: '#e6f0f8', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#0b3b60' }}>
+                  <Edit2 size={18} />
+                </div>
                 <div>
-                  <div className="modal-title">Edit Specialist Employee</div>
-                  <div style={{ fontSize: 11, color: '#64748b' }}>ID: {editingEmployee.id} • {editingEmployee.email}</div>
+                  <div className="modal-title" style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', lineHeight: 1.2 }}>
+                    Edit Specialist Employee
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                    <span style={{ fontWeight: 600, color: '#1e293b' }}>{editingEmployee.name}</span> • ID: <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{editingEmployee.id}</span> • {editingEmployee.email}
+                  </div>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowEditModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+                style={{ background: '#f1f5f9', border: 'none', borderRadius: 6, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#64748b' }}
+                title="Close"
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit}>
-              <div className="modal-body" style={{ maxHeight: '68vh', overflowY: 'auto' }}>
+            {/* FORM WITH SCROLLABLE BODY AND FIXED FOOTER */}
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+              <div className="modal-body" style={{ flex: 1, overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 20 }}>
                 {editFormError && (
-                  <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>
-                    {editFormError}
+                  <div style={{ padding: '10px 14px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, fontSize: 13, border: '1px solid #fecaca', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AlertCircle size={16} />
+                    <span>{editFormError}</span>
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label className="form-label">Full Name <span className="required">*</span></label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    value={editFormData.name}
-                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
-                  />
-                </div>
+                {/* SECTION A: BASIC INFORMATION */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0b3b60', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 14, background: '#0b3b60', borderRadius: 2 }}></span>
+                    A. Basic Information
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Full Name <span className="required" style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        required
+                        style={{ height: 38 }}
+                        value={editFormData.name}
+                        onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                        placeholder="e.g. Rahul Sharma"
+                      />
+                    </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Primary Corporate Email</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      disabled
-                      value={editFormData.email}
-                      style={{ background: '#f1f5f9', color: '#64748b' }}
-                      title="Primary email cannot be modified directly"
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Contact Phone <span className="required">*</span></label>
-                    <PhoneInput
-                      required
-                      value={editFormData.phone}
-                      onChange={(val) => setEditFormData({ ...editFormData, phone: val })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Department Specialization <span className="required">*</span></label>
-                    <select
-                      className="form-control"
-                      required
-                      value={editFormData.department_id}
-                      onChange={(e) => setEditFormData({ ...editFormData, department_id: e.target.value })}
-                    >
-                      <option value="">Select Department</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name} ({d.code})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Support Tier Level <span className="required">*</span></label>
-                    <select
-                      className="form-control"
-                      required
-                      value={editFormData.level}
-                      onChange={(e) => {
-                        const lvl = e.target.value as any;
-                        setEditFormData({
-                          ...editFormData,
-                          level: lvl,
-                          designation: lvl === 'MANAGER' ? 'Support Manager' : `${lvl} Support Specialist`,
-                        });
-                      }}
-                    >
-                      <option value="L1">Tier L1 (Frontline)</option>
-                      <option value="L2">Tier L2 (Senior Specialist)</option>
-                      <option value="L3">Tier L3 (Principal Specialist)</option>
-                      <option value="MANAGER">Manager (Oversight & Reassignment)</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Designation Title</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      value={editFormData.designation}
-                      onChange={(e) => setEditFormData({ ...editFormData, designation: e.target.value })}
-                    />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Reporting Manager</label>
-                    <select
-                      className="form-control"
-                      value={editFormData.manager_id}
-                      onChange={(e) => setEditFormData({ ...editFormData, manager_id: e.target.value })}
-                    >
-                      <option value="">No Direct Manager</option>
-                      {employees
-                        .filter((emp) => emp.level === 'MANAGER' && emp.id !== editingEmployee.id)
-                        .map((mgr) => (
-                          <option key={mgr.id} value={mgr.id}>
-                            {mgr.name} ({mgr.department || 'General'})
-                          </option>
-                        ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                  <div className="form-group">
-                    <label className="form-label">Availability Status</label>
-                    <select
-                      className="form-control"
-                      value={editFormData.availability}
-                      onChange={(e) => setEditFormData({ ...editFormData, availability: e.target.value as any })}
-                    >
-                      <option value="AVAILABLE">AVAILABLE (Accepting tickets)</option>
-                      <option value="BUSY">BUSY (Active workload)</option>
-                      <option value="OFFLINE">OFFLINE (Not on shift)</option>
-                    </select>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Account Status</label>
-                    <select
-                      className="form-control"
-                      value={editFormData.status}
-                      onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as any })}
-                    >
-                      <option value="ACTIVE">ACTIVE (Enabled)</option>
-                      <option value="INACTIVE">INACTIVE (Disabled)</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Additional Emails */}
-                <div className="form-group" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <label className="form-label" style={{ margin: 0 }}>Additional Emails</label>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-xs"
-                      onClick={() => setEditFormData({ ...editFormData, alternate_emails: [...editFormData.alternate_emails, ''] })}
-                    >
-                      + Add Email
-                    </button>
-                  </div>
-                  {editFormData.alternate_emails.map((email, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Primary Corporate Email
+                      </label>
                       <input
                         type="email"
                         className="form-control"
-                        value={email}
-                        onChange={(e) => {
-                          const newEmails = [...editFormData.alternate_emails];
-                          newEmails[idx] = e.target.value;
-                          setEditFormData({ ...editFormData, alternate_emails: newEmails });
-                        }}
-                        placeholder="Alternate email"
+                        disabled
+                        value={editFormData.email}
+                        style={{ height: 38, background: '#f8fafc', color: '#64748b', cursor: 'not-allowed' }}
+                        title="Primary corporate email is managed via authentication master"
                       />
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-xs"
-                        onClick={() => {
-                          const newEmails = editFormData.alternate_emails.filter((_, i) => i !== idx);
-                          setEditFormData({ ...editFormData, alternate_emails: newEmails });
-                        }}
-                      >
-                        ✕
-                      </button>
                     </div>
-                  ))}
+
+                    <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Contact Phone <span className="required" style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <PhoneInput
+                        required
+                        value={editFormData.phone}
+                        onChange={(val) => setEditFormData({ ...editFormData, phone: val })}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {/* Additional Phones */}
-                <div className="form-group" style={{ marginBottom: 16 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <label className="form-label" style={{ margin: 0 }}>Additional Phones</label>
-                    <button
-                      type="button"
-                      className="btn btn-outline btn-xs"
-                      onClick={() => setEditFormData({ ...editFormData, alternate_phones: [...editFormData.alternate_phones, ''] })}
-                    >
-                      + Add Phone
-                    </button>
+                {/* SECTION B: ROLE & ORGANIZATION */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0b3b60', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 14, background: '#0b3b60', borderRadius: 2 }}></span>
+                    B. Role & Organization
                   </div>
-                  {editFormData.alternate_phones.map((phone, idx) => (
-                    <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                      <PhoneInput
-                        value={phone}
-                        onChange={(val) => {
-                          const newPhones = [...editFormData.alternate_phones];
-                          newPhones[idx] = val;
-                          setEditFormData({ ...editFormData, alternate_phones: newPhones });
-                        }}
-                        placeholder="Alternate phone"
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-xs"
-                        style={{ alignSelf: 'center', padding: '7px 10px' }}
-                        onClick={() => {
-                          const newPhones = editFormData.alternate_phones.filter((_, i) => i !== idx);
-                          setEditFormData({ ...editFormData, alternate_phones: newPhones });
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Department Specialization <span className="required" style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <select
+                        className="form-control"
+                        required
+                        style={{ height: 38, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                        value={editFormData.department_id}
+                        onChange={(e) => setEditFormData({ ...editFormData, department_id: e.target.value })}
+                      >
+                        <option value="">Select Department</option>
+                        {departments.map((d) => (
+                          <option key={d.id} value={d.id}>
+                            {d.name} ({d.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Support Tier Level <span className="required" style={{ color: '#dc2626' }}>*</span>
+                      </label>
+                      <select
+                        className="form-control"
+                        required
+                        style={{ height: 38 }}
+                        value={editFormData.level}
+                        onChange={(e) => {
+                          const lvl = e.target.value as any;
+                          setEditFormData({
+                            ...editFormData,
+                            level: lvl,
+                            designation: lvl === 'MANAGER' ? 'Support Manager' : `${lvl} Support Specialist`,
+                          });
                         }}
                       >
-                        ✕
+                        <option value="L1">Tier L1 (Frontline Support)</option>
+                        <option value="L2">Tier L2 (Senior Specialist)</option>
+                        <option value="L3">Tier L3 (Principal Specialist)</option>
+                        <option value="MANAGER">Manager (Operations & Reassignment)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Designation Title
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ height: 38 }}
+                        value={editFormData.designation}
+                        onChange={(e) => setEditFormData({ ...editFormData, designation: e.target.value })}
+                        placeholder="e.g. L1 Support Specialist"
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Reporting Manager
+                      </label>
+                      <select
+                        className="form-control"
+                        style={{ height: 38, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}
+                        value={editFormData.manager_id}
+                        onChange={(e) => setEditFormData({ ...editFormData, manager_id: e.target.value })}
+                      >
+                        <option value="">No Direct Manager</option>
+                        {employees
+                          .filter((emp) => emp.level === 'MANAGER' && emp.id !== editingEmployee.id)
+                          .map((mgr) => (
+                            <option key={mgr.id} value={mgr.id}>
+                              {mgr.name} ({mgr.department || 'General'})
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION C: WORK STATUS */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0b3b60', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 14, background: '#0b3b60', borderRadius: 2 }}></span>
+                    C. Work Status
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Availability Status
+                      </label>
+                      <select
+                        className="form-control"
+                        style={{ height: 38 }}
+                        value={editFormData.availability}
+                        onChange={(e) => setEditFormData({ ...editFormData, availability: e.target.value as any })}
+                      >
+                        <option value="AVAILABLE">AVAILABLE (Accepting tickets & tasks)</option>
+                        <option value="BUSY">BUSY (Active ticket workload)</option>
+                        <option value="OFFLINE">OFFLINE (Not on active shift)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 6 }}>
+                        Account Status
+                      </label>
+                      <select
+                        className="form-control"
+                        style={{ height: 38 }}
+                        value={editFormData.status}
+                        onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as any })}
+                      >
+                        <option value="ACTIVE">ACTIVE (Account enabled)</option>
+                        <option value="INACTIVE">INACTIVE (Account disabled)</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION D: CONTACT DETAILS */}
+                <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, padding: '16px 18px' }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: '#0b3b60', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 4, height: 14, background: '#0b3b60', borderRadius: 2 }}></span>
+                    D. Contact Details
+                  </div>
+
+                  {/* Additional Emails */}
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <label className="form-label" style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#334155' }}>
+                        Additional Emails
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs"
+                        onClick={() => setEditFormData({ ...editFormData, alternate_emails: [...editFormData.alternate_emails, ''] })}
+                        style={{ fontSize: 11, padding: '3px 8px' }}
+                      >
+                        + Add Email
                       </button>
                     </div>
-                  ))}
+                    {editFormData.alternate_emails.length === 0 ? (
+                      <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
+                        No additional emails configured.
+                      </div>
+                    ) : (
+                      editFormData.alternate_emails.map((email, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <input
+                            type="email"
+                            className="form-control"
+                            style={{ height: 38 }}
+                            value={email}
+                            onChange={(e) => {
+                              const newEmails = [...editFormData.alternate_emails];
+                              newEmails[idx] = e.target.value;
+                              setEditFormData({ ...editFormData, alternate_emails: newEmails });
+                            }}
+                            placeholder="alternate.email@kanvtech.com"
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-xs"
+                            style={{ padding: '0 12px', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => {
+                              const newEmails = editFormData.alternate_emails.filter((_, i) => i !== idx);
+                              setEditFormData({ ...editFormData, alternate_emails: newEmails });
+                            }}
+                            title="Remove Email"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Additional Phones */}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <label className="form-label" style={{ margin: 0, fontSize: 12, fontWeight: 600, color: '#334155' }}>
+                        Additional Phones
+                      </label>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-xs"
+                        onClick={() => setEditFormData({ ...editFormData, alternate_phones: [...editFormData.alternate_phones, ''] })}
+                        style={{ fontSize: 11, padding: '3px 8px' }}
+                      >
+                        + Add Phone
+                      </button>
+                    </div>
+                    {editFormData.alternate_phones.length === 0 ? (
+                      <div style={{ fontSize: 12, color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
+                        No additional phones configured.
+                      </div>
+                    ) : (
+                      editFormData.alternate_phones.map((phone, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                          <div style={{ flex: 1 }}>
+                            <PhoneInput
+                              value={phone}
+                              onChange={(val) => {
+                                const newPhones = [...editFormData.alternate_phones];
+                                newPhones[idx] = val;
+                                setEditFormData({ ...editFormData, alternate_phones: newPhones });
+                              }}
+                              placeholder="Alternate phone number"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-xs"
+                            style={{ padding: '0 12px', height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                            onClick={() => {
+                              const newPhones = editFormData.alternate_phones.filter((_, i) => i !== idx);
+                              setEditFormData({ ...editFormData, alternate_phones: newPhones });
+                            }}
+                            title="Remove Phone"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="modal-footer">
+              {/* FIXED FOOTER */}
+              <div className="modal-footer" style={{ padding: '14px 24px', borderTop: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={editSaving}>
+                <button type="submit" className="btn btn-primary" disabled={editSaving} style={{ minWidth: 160 }}>
                   {editSaving ? 'Saving Changes...' : 'Save Employee Details'}
                 </button>
               </div>

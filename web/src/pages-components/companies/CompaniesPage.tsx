@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../../api/client';
 import { Company, Product, Branch, CustomerProductEntitlement } from '../../types';
 import { CustomerProductEntitlementSelector } from '../../components/companies/CustomerProductEntitlementSelector';
@@ -14,6 +14,7 @@ import {
   Phone,
   Mail,
   User,
+  Users,
   Trash2,
   Edit2,
   Layers,
@@ -118,9 +119,45 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     contact_phone: '',
     contact_email: '',
     product_ids: [] as string[],
+    productEntitlements: [] as CustomerProductEntitlement[],
   });
   const [savingBranch, setSavingBranch] = useState(false);
   const [branchError, setBranchError] = useState<string | null>(null);
+
+  // Maximum allowed branch entitlements: only the active products, modules, and submodules owned by the parent customer
+  const parentCustomerProducts = useMemo<Product[]>(() => {
+    if (!selectedCompany || !selectedCompany.products) return [];
+    return (selectedCompany.products || [])
+      .filter((cp: any) => cp.isActive !== false && cp.is_active !== 0 && cp.is_active !== false)
+      .map((cp: any) => {
+        const prodId = cp.productId || cp.product_id || cp.id;
+        const masterProd = products.find((p) => p.id === prodId);
+        return {
+          id: prodId,
+          code: cp.code || cp.product_code || masterProd?.code || prodId,
+          name: cp.name || cp.product_name || masterProd?.name || 'Product',
+          category: cp.category || masterProd?.category || 'Enterprise Software',
+          description: cp.description || masterProd?.description,
+          isActive: true,
+          modules: (cp.modules || []).map((m: any) => ({
+            id: m.id || m.moduleId,
+            productId: prodId,
+            name: m.name || m.module_name || m.id,
+            code: m.code || m.id,
+            description: m.description,
+            isActive: true,
+            submodules: (m.submodules || []).map((s: any) => ({
+              id: s.id || s.submoduleId,
+              moduleId: m.id || m.moduleId,
+              name: s.name || s.submodule_name || s.id,
+              code: s.code || s.id,
+              description: s.description,
+              isActive: true,
+            })),
+          })),
+        } as Product;
+      });
+  }, [selectedCompany, products]);
 
   useEffect(() => {
     loadCompanies();
@@ -479,7 +516,8 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       contact_person: '',
       contact_phone: '',
       contact_email: '',
-      product_ids: selectedCompany?.products?.map((p: any) => p.product_id || p.productId) || [],
+      product_ids: [],
+      productEntitlements: [],
     });
     setBranchError(null);
     setShowBranchModal(true);
@@ -487,7 +525,24 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
   const handleOpenEditBranch = (branch: Branch) => {
     setEditingBranch(branch);
-    const assignedIds = (branch.branchProducts || branch.products || []).map((bp: any) => bp.productId || bp.product_id);
+    const existingEntitlements: CustomerProductEntitlement[] = (branch.products || (branch as any).branchProducts || []).map((bp: any) => {
+      const pId = bp.productId || bp.product_id || bp.id;
+      const modules = (bp.modules || []).map((m: any) => {
+        const mId = m.moduleId || m.module_id || m.id;
+        const subIds = m.selectedSubmoduleIds || (m.submodules || []).map((s: any) => s.id || s.submoduleId || s.submodule_id) || [];
+        return {
+          moduleId: mId,
+          submoduleIds: subIds,
+        };
+      });
+      return {
+        productId: pId,
+        purchaseType: 'SELECTED_MODULES',
+        modules,
+      };
+    });
+    const assignedIds = existingEntitlements.map((e) => e.productId);
+
     setBranchForm({
       branch_name: branch.branch_name || (branch as any).branchName || '',
       gstn: branch.gstn || '',
@@ -499,6 +554,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       contact_phone: branch.contact_phone || (branch as any).contactPhone || '',
       contact_email: branch.contact_email || (branch as any).contactEmail || '',
       product_ids: assignedIds,
+      productEntitlements: existingEntitlements,
     });
     setBranchError(null);
     setShowBranchModal(true);
@@ -553,13 +609,25 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
     setSavingBranch(true);
     try {
+      const branchPayload = {
+        branch_name: branchForm.branch_name.trim(),
+        gstn: branchForm.gstn.trim() || undefined,
+        address: branchForm.address.trim(),
+        city: branchForm.city.trim(),
+        state: branchForm.state.trim(),
+        pincode: branchForm.pincode.trim(),
+        contact_person: branchForm.contact_person.trim(),
+        contact_phone: branchForm.contact_phone.trim(),
+        contact_email: branchForm.contact_email.trim() || undefined,
+        products: branchForm.productEntitlements,
+        product_ids: branchForm.product_ids,
+      };
+
       if (editingBranch) {
-        await api.updateBranch(selectedCompany.id, editingBranch.id, branchForm);
-        if (branchForm.product_ids) {
-          await api.assignBranchProducts(selectedCompany.id, editingBranch.id, branchForm.product_ids);
-        }
+        await api.updateBranch(selectedCompany.id, editingBranch.id, branchPayload);
+        await api.assignBranchProducts(selectedCompany.id, editingBranch.id, branchForm.productEntitlements);
       } else {
-        await api.createBranch(selectedCompany.id, branchForm);
+        await api.createBranch(selectedCompany.id, branchPayload);
       }
       setShowBranchModal(false);
       loadBranchesForCompany(selectedCompany.id);
@@ -1934,192 +2002,309 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
 
       {/* BRANCH CREATE / EDIT MODAL */}
       {showBranchModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 600 }}>
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <MapPin size={20} color="#059669" />
-                <div className="modal-title">{editingBranch ? 'Edit Customer Branch' : 'Add New Branch'}</div>
+        <div className="modal-backdrop" style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            style={{
+              maxWidth: 780,
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              borderRadius: 12,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Fixed Header */}
+            <div
+              className="modal-header"
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '16px 22px',
+                borderBottom: '1px solid #e2e8f0',
+                background: '#ffffff',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 8,
+                    background: '#ecfdf5',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <MapPin size={20} color="#059669" />
+                </div>
+                <div>
+                  <div className="modal-title" style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                    {editingBranch ? 'Edit Customer Branch' : 'Add New Customer Branch'}
+                  </div>
+                  <div style={{ fontSize: 12, color: '#64748b', display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
+                    <Building2 size={13} color="#64748b" />
+                    <span>Parent Customer: <strong>{selectedCompany?.company_name || selectedCompany?.companyName}</strong></span>
+                  </div>
+                </div>
               </div>
               <button
+                type="button"
                 onClick={() => setShowBranchModal(false)}
-                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 16,
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  padding: 4,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
               >
                 ✕
               </button>
             </div>
 
-            <form onSubmit={handleSaveBranch}>
-              <div className="modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+            {/* Scrollable Form Body */}
+            <form
+              onSubmit={handleSaveBranch}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: 1,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                className="modal-body"
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  padding: '20px 24px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 18,
+                }}
+              >
                 {branchError && (
-                  <div style={{ padding: '8px 12px', background: '#fef2f2', color: '#b91c1c', borderRadius: 6, marginBottom: 12, fontSize: 12 }}>
-                    {branchError}
+                  <div
+                    style={{
+                      padding: '10px 14px',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      color: '#b91c1c',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <AlertCircle size={16} color="#dc2626" />
+                    <span>{branchError}</span>
                   </div>
                 )}
 
-                <div className="form-group">
-                  <label className="form-label">Branch Name *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    placeholder="e.g. Dahisar Branch, Kandivali Plant, Vapi Unit"
-                    value={branchForm.branch_name}
-                    onChange={(e) => setBranchForm({ ...branchForm, branch_name: e.target.value })}
+                {/* Section 1: Branch Identification & Location */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <MapPin size={15} color="#0284c7" />
+                    <span>Branch Identification & Location</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12, marginBottom: 12 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        Branch Name *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        required
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="e.g. Dahisar Branch, Kandivali Plant, Vapi Unit"
+                        value={branchForm.branch_name}
+                        onChange={(e) => setBranchForm({ ...branchForm, branch_name: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        GST Number
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="15-character GSTIN (Optional)"
+                        value={branchForm.gstn}
+                        onChange={(e) => setBranchForm({ ...branchForm, gstn: e.target.value.toUpperCase() })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-group" style={{ marginBottom: 12 }}>
+                    <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                      Branch Address *
+                    </label>
+                    <input
+                      type="text"
+                      className="form-control"
+                      required
+                      style={{ height: 38, fontSize: 13 }}
+                      placeholder="Full street / building / premises address"
+                      value={branchForm.address}
+                      onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        City *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        required
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="e.g. Mumbai"
+                        value={branchForm.city}
+                        onChange={(e) => setBranchForm({ ...branchForm, city: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        State *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        required
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="e.g. Maharashtra"
+                        value={branchForm.state}
+                        onChange={(e) => setBranchForm({ ...branchForm, state: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        PIN / Postal Code *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        required
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="e.g. 400068"
+                        value={branchForm.pincode}
+                        onChange={(e) => setBranchForm({ ...branchForm, pincode: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Contact Person */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Users size={15} color="#059669" />
+                    <span>Branch Contact Person</span>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        Contact Person *
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control"
+                        required
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="Branch Manager / Lead Name"
+                        value={branchForm.contact_person}
+                        onChange={(e) => setBranchForm({ ...branchForm, contact_person: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        Contact Phone *
+                      </label>
+                      <PhoneInput
+                        required
+                        value={branchForm.contact_phone}
+                        onChange={(val) => setBranchForm({ ...branchForm, contact_phone: val })}
+                      />
+                    </div>
+
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label" style={{ fontSize: 12, fontWeight: 600 }}>
+                        Contact Email *
+                      </label>
+                      <input
+                        type="email"
+                        className="form-control"
+                        required
+                        style={{ height: 38, fontSize: 13 }}
+                        placeholder="branch@company.com"
+                        value={branchForm.contact_email}
+                        onChange={(e) => setBranchForm({ ...branchForm, contact_email: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 3: Branch Product -> Module -> Submodule Entitlements */}
+                <div>
+                  <CustomerProductEntitlementSelector
+                    products={parentCustomerProducts}
+                    value={branchForm.productEntitlements}
+                    onChange={(ents, pIds) =>
+                      setBranchForm({
+                        ...branchForm,
+                        productEntitlements: ents,
+                        product_ids: pIds,
+                      })
+                    }
+                    title="Branch Product, Module & Submodule Entitlements"
+                    subtitle="Select specific products, modules, and submodules enabled for this branch location (subset of parent customer)."
                   />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">GST Number</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Enter GST Number (Optional)"
-                    value={branchForm.gstn}
-                    onChange={(e) => setBranchForm({ ...branchForm, gstn: e.target.value.toUpperCase() })}
-                  />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Branch Address *</label>
-                  <input
-                    type="text"
-                    className="form-control"
-                    required
-                    placeholder="Full street / building address"
-                    value={branchForm.address}
-                    onChange={(e) => setBranchForm({ ...branchForm, address: e.target.value })}
-                  />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-                  <div className="form-group">
-                    <label className="form-label">City *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      required
-                      placeholder="Mumbai"
-                      value={branchForm.city}
-                      onChange={(e) => setBranchForm({ ...branchForm, city: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">State *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      required
-                      placeholder="Maharashtra"
-                      value={branchForm.state}
-                      onChange={(e) => setBranchForm({ ...branchForm, state: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">PIN / Postal Code *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      required
-                      placeholder="400068"
-                      value={branchForm.pincode}
-                      onChange={(e) => setBranchForm({ ...branchForm, pincode: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
-                  <div className="form-group">
-                    <label className="form-label">Contact Person *</label>
-                    <input
-                      type="text"
-                      className="form-control"
-                      required
-                      placeholder="Branch Manager Name"
-                      value={branchForm.contact_person}
-                      onChange={(e) => setBranchForm({ ...branchForm, contact_person: e.target.value })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Contact Phone *</label>
-                    <PhoneInput
-                      required
-                      value={branchForm.contact_phone}
-                      onChange={(val) => setBranchForm({ ...branchForm, contact_phone: val })}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Contact Email *</label>
-                    <input
-                      type="email"
-                      className="form-control"
-                      required
-                      placeholder="branch@company.com"
-                      value={branchForm.contact_email}
-                      onChange={(e) => setBranchForm({ ...branchForm, contact_email: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                {/* Branch Product Assignment (Must subset of customer-owned products) */}
-                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                  <label className="form-label" style={{ fontWeight: 600 }}>
-                    Branch Products (Subset of Customer Products)
-                  </label>
-                  <div style={{ fontSize: 11, color: '#64748b', marginBottom: 8 }}>
-                    A branch can only be assigned products already owned by the parent customer organization.
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {selectedCompany?.products?.map((cp: any) => {
-                      const pId = cp.product_id || cp.productId;
-                      const pName = cp.name || cp.product_name || cp.product?.name;
-                      const pCode = cp.code || cp.product_code || cp.product?.code;
-                      const selected = branchForm.product_ids.includes(pId);
-                      return (
-                        <button
-                          type="button"
-                          key={pId}
-                          onClick={() => {
-                            if (selected) {
-                              setBranchForm({
-                                ...branchForm,
-                                product_ids: branchForm.product_ids.filter((id) => id !== pId),
-                              });
-                            } else {
-                              setBranchForm({
-                                ...branchForm,
-                                product_ids: [...branchForm.product_ids, pId],
-                              });
-                            }
-                          }}
-                          style={{
-                            padding: '6px 12px',
-                            borderRadius: 6,
-                            fontSize: 12,
-                            fontWeight: 500,
-                            border: selected ? '2px solid #059669' : '1px solid #cbd5e1',
-                            background: selected ? '#ecfdf5' : 'white',
-                            color: selected ? '#065f46' : '#334155',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          {selected ? '✓ ' : '+ '} {pName} {pCode ? `(${pCode})` : ''}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowBranchModal(false)}>
+              {/* Fixed Footer */}
+              <div
+                className="modal-footer"
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  gap: 12,
+                  padding: '14px 24px',
+                  borderTop: '1px solid #e2e8f0',
+                  background: '#ffffff',
+                }}
+              >
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowBranchModal(false)}
+                >
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={savingBranch}>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={savingBranch}
+                >
                   {savingBranch ? 'Saving...' : editingBranch ? 'Save Branch Changes' : 'Create Branch'}
                 </button>
               </div>

@@ -166,8 +166,9 @@ export class CompaniesController {
   @Post(':id/branches/:branchId/products')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Assign products to branch' })
-  async assignBranchProducts(@Param('id') id: string, @Param('branchId') branchId: string, @Body() body: { productIds: string[] }, @Request() req: any) {
-    await this.companiesService.assignBranchProducts(branchId, body.productIds || [], req.user?.id || req.user?.userId);
+  async assignBranchProducts(@Param('id') id: string, @Param('branchId') branchId: string, @Body() body: any, @Request() req: any) {
+    const productsData = body.products !== undefined ? body.products : (body.productIds !== undefined ? body.productIds : body);
+    await this.companiesService.assignBranchProducts(branchId, productsData || [], req.user?.id || req.user?.userId);
     return { success: true, message: 'Branch products assigned successfully' };
   }
 

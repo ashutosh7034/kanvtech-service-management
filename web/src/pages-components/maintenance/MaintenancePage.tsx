@@ -60,6 +60,7 @@ interface SLARule {
   priority: string;
   responseTimeHours: number;
   resolutionTimeHours: number;
+  customDescription?: string;
   notes?: string;
 }
 
@@ -113,6 +114,7 @@ export const MaintenancePage: React.FC = () => {
   const [slaPriority, setSlaPriority] = useState('ALL');
   const [slaResponseHours, setSlaResponseHours] = useState(1);
   const [slaResolutionHours, setSlaResolutionHours] = useState(4);
+  const [slaCustomDescription, setSlaCustomDescription] = useState('');
   const [slaRuleNotes, setSlaRuleNotes] = useState('');
 
   // Warning Modal
@@ -236,12 +238,14 @@ export const MaintenancePage: React.FC = () => {
       setSlaPriority(existing.priority);
       setSlaResponseHours(existing.responseTimeHours);
       setSlaResolutionHours(existing.resolutionTimeHours);
+      setSlaCustomDescription(existing.customDescription || '');
       setSlaRuleNotes(existing.notes || '');
     } else {
       setSlaTierOption('24x7 Critical (1h / 4h)');
       setSlaPriority('ALL');
       setSlaResponseHours(1);
       setSlaResolutionHours(4);
+      setSlaCustomDescription('');
       setSlaRuleNotes('');
     }
   };
@@ -268,6 +272,7 @@ export const MaintenancePage: React.FC = () => {
   const handleSaveSlaRule = () => {
     if (!activeSlaTarget) return;
 
+    const isCustom = slaTierOption === 'Custom SLA' || slaTierOption.includes('Custom');
     const newRule: SLARule = {
       id: `${activeSlaTarget.targetType}_${activeSlaTarget.targetId || Date.now()}`,
       targetType: activeSlaTarget.targetType,
@@ -283,6 +288,7 @@ export const MaintenancePage: React.FC = () => {
       priority: slaPriority,
       responseTimeHours: Number(slaResponseHours) || 1,
       resolutionTimeHours: Number(slaResolutionHours) || 4,
+      customDescription: isCustom && slaCustomDescription.trim() ? slaCustomDescription.trim() : undefined,
       notes: slaRuleNotes.trim() || undefined,
     };
 
@@ -368,6 +374,7 @@ export const MaintenancePage: React.FC = () => {
           priority: r.priority,
           responseTimeHours: r.responseTimeHours,
           resolutionTimeHours: r.resolutionTimeHours,
+          customDescription: r.customDescription,
           notes: r.notes,
         })),
       });
@@ -1322,7 +1329,24 @@ export const MaintenancePage: React.FC = () => {
                     </thead>
                     <tbody>
                       {slaRules.map((rule) => (
-                        <tr key={rule.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <tr
+                          key={rule.id}
+                          style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
+                          onClick={() =>
+                            openSlaConfigurator({
+                              targetType: rule.targetType,
+                              targetId: rule.targetId,
+                              targetName: rule.targetName,
+                              productId: rule.productId,
+                              productName: rule.productName,
+                              moduleId: rule.moduleId,
+                              moduleName: rule.moduleName,
+                              submoduleId: rule.submoduleId,
+                              submoduleName: rule.submoduleName,
+                            })
+                          }
+                          title="Click to edit SLA rule"
+                        >
                           <td style={{ padding: '6px 8px', fontWeight: 600, color: '#1e293b' }}>
                             {rule.targetName}
                           </td>
@@ -1336,12 +1360,20 @@ export const MaintenancePage: React.FC = () => {
                             {rule.responseTimeHours}h resp / {rule.resolutionTimeHours}h res
                           </td>
                           <td style={{ padding: '6px 8px', color: '#64748b', fontSize: 11 }}>
-                            {rule.notes || '—'}
+                            {rule.customDescription && (
+                              <div style={{ color: '#0284c7', fontWeight: 500, marginBottom: 2 }}>
+                                Scope: {rule.customDescription}
+                              </div>
+                            )}
+                            {rule.notes || (rule.customDescription ? null : '—')}
                           </td>
                           <td style={{ padding: '6px 8px', textAlign: 'right' }}>
                             <button
                               type="button"
-                              onClick={() => handleDeleteSlaRule(rule.id)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteSlaRule(rule.id);
+                              }}
                               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444' }}
                             >
                               <Trash2 size={14} />
@@ -1515,6 +1547,29 @@ export const MaintenancePage: React.FC = () => {
                   <option value="LOW">Low Priority Only</option>
                 </select>
               </div>
+
+              {/* Custom SLA Description / Scope: Visible only when Custom SLA Definition is chosen */}
+              {(slaTierOption === 'Custom SLA' || slaTierOption.includes('Custom')) && (
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>
+                    Custom SLA Description / Scope
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    style={{
+                      minHeight: 80,
+                      resize: 'vertical',
+                      fontSize: 13,
+                      lineHeight: 1.45,
+                      padding: '8px 10px',
+                    }}
+                    placeholder="Describe the custom SLA coverage, conditions, exclusions, escalation rules..."
+                    value={slaCustomDescription}
+                    onChange={(e) => setSlaCustomDescription(e.target.value)}
+                  />
+                </div>
+              )}
 
               <div className="form-group">
                 <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>

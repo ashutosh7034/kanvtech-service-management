@@ -17,7 +17,7 @@ export const DepartmentsPage: React.FC = () => {
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    code: '',
+    code: 'KSP',
     description: '',
     productIds: [] as string[],
     specializations: [] as DepartmentSpecialization[],
@@ -53,7 +53,7 @@ export const DepartmentsPage: React.FC = () => {
     setEditingDept(null);
     setFormData({
       name: '',
-      code: '',
+      code: 'KSP',
       description: '',
       productIds: [],
       specializations: [],

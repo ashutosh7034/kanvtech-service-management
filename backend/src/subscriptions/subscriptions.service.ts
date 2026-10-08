@@ -192,6 +192,7 @@ export class SubscriptionsService {
         priority?: string;
         responseTimeHours?: number;
         resolutionTimeHours?: number;
+        customDescription?: string;
         notes?: string;
       }>;
       planName?: string;
@@ -267,7 +268,8 @@ export class SubscriptionsService {
           : rule.productName
           ? `Product: ${rule.productName}`
           : 'Agreement Wide';
-        return `[Rule ${idx + 1}] ${target} -> Tier: ${rule.slaTier || 'Custom'} | Resp: ${rule.responseTimeHours ?? 'Standard'}h | Res: ${rule.resolutionTimeHours ?? 'Standard'}h | Pri: ${rule.priority || 'ALL'}${rule.notes ? ` (${rule.notes})` : ''}`;
+        const customDescPart = rule.customDescription ? ` | Custom Scope: ${rule.customDescription}` : '';
+        return `[Rule ${idx + 1}] ${target} -> Tier: ${rule.slaTier || 'Custom'} | Resp: ${rule.responseTimeHours ?? 'Standard'}h | Res: ${rule.resolutionTimeHours ?? 'Standard'}h | Pri: ${rule.priority || 'ALL'}${customDescPart}${rule.notes ? ` (${rule.notes})` : ''}`;
       }).join('\n');
       slaRulesSummary = `\n--- Configured SLA Rules ---\n${formattedRules}`;
     }

@@ -123,6 +123,28 @@ export const ChatPage: React.FC<ChatPageProps> = ({ initialConversationId }) => 
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [selectedConversation?.messages]);
 
+  // Handle outside clicks to close To / CC dropdowns
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent | TouchEvent) => {
+      const target = event.target as Node;
+      if (showToDropdown && toDropdownRef.current && !toDropdownRef.current.contains(target)) {
+        setShowToDropdown(false);
+      }
+      if (showCcDropdown && ccDropdownRef.current && !ccDropdownRef.current.contains(target)) {
+        setShowCcDropdown(false);
+      }
+    };
+
+    if (showToDropdown || showCcDropdown) {
+      document.addEventListener('mousedown', handleOutsideClick);
+      document.addEventListener('touchstart', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [showToDropdown, showCcDropdown]);
+
   const loadEmployees = async () => {
     try {
       const emps = await api.getInternalEmployees();
