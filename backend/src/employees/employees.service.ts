@@ -313,18 +313,34 @@ export class EmployeesService {
 
     const validPhone = data.phone !== undefined ? validatePhone(data.phone, 'Contact phone') : undefined;
 
+    let managerIdValue: string | null | undefined = undefined;
+    const rawManagerId = data.manager_id !== undefined ? data.manager_id : data.managerId;
+    if (rawManagerId !== undefined) {
+      if (!rawManagerId || typeof rawManagerId !== 'string' || rawManagerId.trim() === '' || rawManagerId.trim() === 'NONE' || rawManagerId.trim() === 'null') {
+        managerIdValue = null;
+      } else {
+        const cleanedId = rawManagerId.trim();
+        if (cleanedId === id) {
+          managerIdValue = null;
+        } else {
+          const mgr = await this.prisma.employee.findUnique({ where: { id: cleanedId } });
+          managerIdValue = mgr ? mgr.id : null;
+        }
+      }
+    }
+
     await this.prisma.employee.update({
       where: { id },
       data: {
         name: data.name !== undefined ? data.name.trim() : undefined,
-        alternateEmails: data.alternate_emails !== undefined ? data.alternate_emails.trim() : undefined,
+        alternateEmails: data.alternate_emails !== undefined ? (data.alternate_emails.trim() || null) : undefined,
         phone: validPhone,
-        alternatePhones: data.alternate_phones !== undefined ? data.alternate_phones.trim() : undefined,
+        alternatePhones: data.alternate_phones !== undefined ? (data.alternate_phones.trim() || null) : undefined,
         department: departmentName,
         departmentId,
         designation: data.designation !== undefined ? data.designation.trim() : undefined,
         level: data.level ? (data.level as EmployeeLevel) : undefined,
-        managerId: data.manager_id !== undefined ? data.manager_id : undefined,
+        managerId: managerIdValue,
         availability: data.availability ? (data.availability as EmployeeAvailability) : undefined,
         status: data.status ? (data.status as EmployeeStatus) : undefined,
       },

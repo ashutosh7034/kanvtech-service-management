@@ -143,6 +143,7 @@ export const EmployeesPage: React.FC = () => {
     try {
       const payload = {
         ...editFormData,
+        manager_id: editFormData.manager_id ? editFormData.manager_id.trim() : null,
         alternate_emails: editFormData.alternate_emails.filter(e => e.trim() !== '').join(','),
         alternate_phones: editFormData.alternate_phones.filter(p => p.trim() !== '').join(','),
       };
@@ -301,6 +302,7 @@ export const EmployeesPage: React.FC = () => {
     try {
       const payload = {
         ...formData,
+        manager_id: formData.manager_id ? formData.manager_id.trim() : null,
         alternate_emails: formData.alternate_emails.filter(e => e.trim() !== '').join(','),
         alternate_phones: formData.alternate_phones.filter(p => p.trim() !== '').join(','),
       };
