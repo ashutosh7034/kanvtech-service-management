@@ -67,9 +67,13 @@ export const AuditLogsPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.getAuditLogs();
-      setLogs(res.logs || []);
+      const list = Array.isArray(res)
+        ? res
+        : (res?.logs || res?.data || []);
+      setLogs(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error(err);
+      setLogs([]);
     } finally {
       setLoading(false);
     }

@@ -52,7 +52,12 @@ export const SLASettingsPage: React.FC = () => {
     setLoading(true);
     try {
       const res = await api.getSLASettings();
-      const list = res?.configs || res?.configurations || (Array.isArray(res) ? res : []);
+      const list =
+        res?.slas ||
+        res?.configs ||
+        res?.configurations ||
+        res?.data ||
+        (Array.isArray(res) ? res : []);
       setConfigs(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error(err);
