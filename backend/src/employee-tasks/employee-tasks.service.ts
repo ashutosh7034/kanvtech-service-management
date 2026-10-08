@@ -66,12 +66,31 @@ export class EmployeeTasksService {
     const role = (user?.role || '').toUpperCase();
     if (role === 'ADMIN' || role === 'SUPER_ADMIN' || role === 'MANAGER') {
       const userIdNum = Number(userId || 1);
-      const email = user?.email || (role === 'ADMIN' ? 'admin@kanvtech.com' : `manager_${userIdNum}@kanvtech.com`);
-      const name = role === 'ADMIN' || role === 'SUPER_ADMIN' ? 'System Administrator' : 'Operations Manager';
-      const empId = `EMP-${String(userIdNum).padStart(3, '0')}`;
 
+      // Verify if employee already exists for this userId
+      const existingByUserId = await this.prisma.employee.findUnique({
+        where: { userId: userIdNum },
+      });
+      if (existingByUserId) return existingByUserId.id;
+
+      // Check if employee exists by email
+      if (user?.email) {
+        const existingByEmail = await this.prisma.employee.findFirst({
+          where: { email: { equals: user.email, mode: 'insensitive' } },
+        });
+        if (existingByEmail) return existingByEmail.id;
+      }
+
+      const email = user?.email || (role === 'ADMIN' || role === 'SUPER_ADMIN' ? 'admin@kanvtech.com' : `manager_${userIdNum}@kanvtech.com`);
+      const name = role === 'ADMIN' || role === 'SUPER_ADMIN' ? 'System Administrator' : 'Operations Manager';
+      
+      // Generate a non-conflicting dedicated ID for administrative user
+      let empId = role === 'ADMIN' || role === 'SUPER_ADMIN' ? `EMP-ADM-${userIdNum}` : `EMP-MGR-${userIdNum}`;
       const existingEmp = await this.prisma.employee.findUnique({ where: { id: empId } });
-      if (existingEmp) return existingEmp.id;
+      if (existingEmp) {
+        if (existingEmp.userId === userIdNum) return existingEmp.id;
+        empId = `EMP-USR-${userIdNum}-${Date.now().toString().slice(-4)}`;
+      }
 
       const created = await this.prisma.employee.create({
         data: {
@@ -148,6 +167,7 @@ export class EmployeeTasksService {
     // Filter employees where targetRank < creatorRank and target is not the requester
     const eligible = allEmployees.filter((emp) => {
       if (emp.id === requestingEmployeeId) return false;
+      if (requestingUserId && emp.userId === Number(requestingUserId)) return false;
       const targetRank = this.getAuthorityRank(emp.user?.role, emp.level);
       return targetRank < creatorRank;
     });
