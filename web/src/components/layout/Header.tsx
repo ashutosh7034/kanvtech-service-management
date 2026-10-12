@@ -46,7 +46,7 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate }) => {
   }, []);
 
   const handleAttendanceToggle = async () => {
-    if (!user?.employeeId) return;
+    if (!user?.employeeId || user?.role === 'ADMIN') return;
     try {
       if (isCheckedIn) {
         await api.checkOut({ employeeId: user.employeeId });
@@ -116,8 +116,8 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate }) => {
       </div>
 
       <div className="header-right">
-        {/* Employee Check-in Quick Control */}
-        {user?.employeeId && (
+        {/* Employee Check-in Quick Control (Super Admin accounts are exempt) */}
+        {user?.employeeId && user?.role !== 'ADMIN' && (
           <button
             onClick={handleAttendanceToggle}
             title={isCheckedIn ? 'Click to Check Out' : 'Click to Check In'}

@@ -183,6 +183,7 @@ model Company {
   subscriptions   Subscription[]
   implementations Implementation[]
   credentials     CustomerCredential[]
+  inboundEmails   InboundEmailLog[]
 
   @@index([companyName], name: "idx_companies_name")
   @@index([isActive], name: "idx_companies_active")
@@ -205,6 +206,7 @@ model CompanyContact {
   company Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
   user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   tickets Ticket[]
+  inboundEmails InboundEmailLog[]
 
   @@index([companyId], name: "idx_contacts_company")
   @@index([email], name: "idx_contacts_email")
@@ -461,6 +463,7 @@ model Ticket {
   attachments        TicketAttachment[]
   feedback           TicketFeedback?
   reopenHistory      TicketReopenHistory[]
+  inboundEmails      InboundEmailLog[]
 
   @@index([status], name: "idx_tickets_status")
   @@index([companyId], name: "idx_tickets_company")
@@ -983,4 +986,40 @@ model EmailVerificationToken {
   @@index([userId], name: "idx_email_verify_user")
   @@index([tokenHash], name: "idx_email_verify_token")
   @@map("email_verification_tokens")
+}
+
+// 35. Inbound Email Integration & Logs
+model InboundEmailLog {
+  id               Int       @id @default(autoincrement())
+  messageId        String?   @map("message_id") @db.VarChar(255)
+  provider         String    @default("GENERIC_WEBHOOK") @db.VarChar(50)
+  senderEmail      String    @map("sender_email") @db.VarChar(191)
+  senderName       String?   @map("sender_name") @db.VarChar(150)
+  recipientEmail   String    @map("recipient_email") @db.VarChar(191)
+  subject          String    @db.VarChar(255)
+  bodyPlain        String?   @map("body_plain") @db.Text
+  bodyHtml         String?   @map("body_html") @db.Text
+  inReplyTo        String?   @map("in_reply_to") @db.VarChar(255)
+  references       String?   @db.Text
+  status           String    @default("PROCESSED") @db.VarChar(50) // PROCESSED, REPLY_APPENDED, PENDING_REVIEW, FAILED, DUPLICATE, IGNORED
+  matchedCompanyId String?   @map("matched_company_id") @db.VarChar(50)
+  matchedContactId Int?      @map("matched_contact_id")
+  ticketId         String?   @map("ticket_id") @db.VarChar(50)
+  errorMessage     String?   @map("error_message") @db.Text
+  retryCount       Int       @default(0) @map("retry_count")
+  rawPayloadJson   String?   @map("raw_payload_json") @db.Text
+  attachmentsJson  String?   @map("attachments_json") @db.Text
+  processedAt      DateTime? @map("processed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  company Company?        @relation(fields: [matchedCompanyId], references: [id], onDelete: SetNull)
+  contact CompanyContact? @relation(fields: [matchedContactId], references: [id], onDelete: SetNull)
+  ticket  Ticket?         @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+
+  @@index([messageId], name: "idx_inbound_msg_id")
+  @@index([senderEmail], name: "idx_inbound_sender")
+  @@index([status], name: "idx_inbound_status")
+  @@index([ticketId], name: "idx_inbound_ticket")
+  @@index([createdAt], name: "idx_inbound_created_at")
+  @@map("inbound_email_logs")
 }

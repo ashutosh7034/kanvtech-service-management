@@ -10,12 +10,15 @@ import {
   Query,
   UseGuards,
   Request,
+  BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { UserRole } from '@prisma/client';
 
 @ApiTags('Employees')
 @ApiBearerAuth()
@@ -70,7 +73,11 @@ export class EmployeesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new employee profile and credentials' })
   async createEmployee(@Body() body: any, @Request() req: any) {
-    const id = await this.employeesService.createEmployee(body, req.user?.id || req.user?.userId);
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+    };
+    const id = await this.employeesService.createEmployee(body, actor);
     return { success: true, employeeId: id, id, message: 'Employee created successfully' };
   }
 
@@ -78,7 +85,11 @@ export class EmployeesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update employee profile and availability' })
   async updateEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    await this.employeesService.updateEmployee(id, body, req.user?.id || req.user?.userId);
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+    };
+    await this.employeesService.updateEmployee(id, body, actor);
     return { success: true, message: 'Employee updated successfully' };
   }
 
@@ -87,7 +98,11 @@ export class EmployeesController {
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Promote employee to a specific tier or next tier' })
   async promoteEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const updated = await this.employeesService.promoteEmployee(id, body?.level, req.user?.id || req.user?.userId);
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+    };
+    const updated = await this.employeesService.promoteEmployee(id, body?.level, actor);
     return { success: true, employee: updated, message: 'Employee promoted successfully' };
   }
 
@@ -96,7 +111,11 @@ export class EmployeesController {
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Demote employee to a specific tier or lower tier' })
   async demoteEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const updated = await this.employeesService.demoteEmployee(id, body?.level, req.user?.id || req.user?.userId);
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+    };
+    const updated = await this.employeesService.demoteEmployee(id, body?.level, actor);
     return { success: true, employee: updated, message: 'Employee demoted successfully' };
   }
 
@@ -105,7 +124,11 @@ export class EmployeesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Toggle employee active/inactive status' })
   async toggleStatus(@Param('id') id: string, @Request() req: any) {
-    const updated = await this.employeesService.toggleEmployeeStatus(id, req.user?.id || req.user?.userId);
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+    };
+    const updated = await this.employeesService.toggleEmployeeStatus(id, actor);
     return { success: true, employee: updated, message: `Employee status set to ${updated?.status}` };
   }
 
@@ -113,15 +136,20 @@ export class EmployeesController {
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Deactivate / delete employee profile' })
   async deleteEmployee(@Param('id') id: string, @Request() req: any) {
-    const res = await this.employeesService.deleteEmployee(id, req.user?.id || req.user?.userId);
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+    };
+    const res = await this.employeesService.deleteEmployee(id, actor);
     return res;
   }
-
-
 
   @Post('attendance/check-in')
   @ApiOperation({ summary: 'Employee attendance check-in' })
   async checkIn(@Body() body: any, @Request() req: any) {
+    if (req.user?.role === 'ADMIN' || req.user?.role === UserRole.ADMIN) {
+      throw new BadRequestException('Super Admin is exempt from attendance check-in. Attendance records are not created for Super Admin accounts.');
+    }
     const employeeId = req.user?.employeeId || body.employeeId;
     const att = await this.employeesService.checkIn({
       employeeId,
@@ -135,6 +163,9 @@ export class EmployeesController {
   @Post('attendance/check-out')
   @ApiOperation({ summary: 'Employee attendance check-out' })
   async checkOut(@Body() body: any, @Request() req: any) {
+    if (req.user?.role === 'ADMIN' || req.user?.role === UserRole.ADMIN) {
+      throw new BadRequestException('Super Admin is exempt from attendance check-out.');
+    }
     const employeeId = req.user?.employeeId || body.employeeId;
     await this.employeesService.checkOut({
       employeeId,

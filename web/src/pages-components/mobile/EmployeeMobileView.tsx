@@ -133,7 +133,7 @@ export const EmployeeMobileView: React.FC = () => {
   };
 
   const handleAttendance = async () => {
-    if (!user?.employeeId) return;
+    if (!user?.employeeId || user?.role === 'ADMIN') return;
     try {
       if (isCheckedIn) {
         await api.checkOut({ employeeId: user.employeeId, address: locationText });
@@ -507,8 +507,8 @@ export const EmployeeMobileView: React.FC = () => {
             </div>
           )}
 
-          {/* TAB: ATTENDANCE & LOCATION */}
-          {activeTab === 'attendance' && (
+          {/* TAB: ATTENDANCE & LOCATION (Super Admin Exempt) */}
+          {activeTab === 'attendance' && user?.role !== 'ADMIN' && (
             <div>
               <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 4 }}>Attendance & Geo Check-in</div>
               <div style={{ fontSize: 11, color: '#64748b', marginBottom: 12 }}>
@@ -566,13 +566,15 @@ export const EmployeeMobileView: React.FC = () => {
             <Briefcase size={18} />
             <span>Assigned</span>
           </button>
-          <button
-            className={`mobile-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}
-            onClick={() => setActiveTab('attendance')}
-          >
-            <MapPin size={18} />
-            <span>Attendance</span>
-          </button>
+          {user?.role !== 'ADMIN' && (
+            <button
+              className={`mobile-nav-btn ${activeTab === 'attendance' ? 'active' : ''}`}
+              onClick={() => setActiveTab('attendance')}
+            >
+              <MapPin size={18} />
+              <span>Attendance</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

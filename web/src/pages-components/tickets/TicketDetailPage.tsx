@@ -55,6 +55,11 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
   const [reopenReason, setReopenReason] = useState('');
   const [reopening, setReopening] = useState(false);
 
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closeReason, setCloseReason] = useState('');
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+
   const [newComment, setNewComment] = useState('');
   const [commentType, setCommentType] = useState<'INTERNAL_NOTE' | 'CUSTOMER_COMMUNICATION'>('INTERNAL_NOTE');
   const [commenting, setCommenting] = useState(false);
@@ -237,6 +242,27 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
     }
   };
 
+  const handleCloseTicket = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    setClosing(true);
+    setCloseError(null);
+    try {
+      const res = await api.closeTicket(ticketId, {
+        closureReason: closeReason.trim() || undefined,
+      });
+      setShowCloseModal(false);
+      setCloseReason('');
+      showToast(res.message || 'Ticket successfully closed.', 'success');
+      loadTicket();
+    } catch (err: any) {
+      const msg = err.message || 'Failed to close ticket';
+      setCloseError(msg);
+      showToast(msg, 'danger');
+    } finally {
+      setClosing(false);
+    }
+  };
+
   if (loading || !ticket) {
     return <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Loading ticket work screen...</div>;
   }
@@ -247,6 +273,8 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
   const isCustomer = user?.role === 'CUSTOMER';
   const isCustomerOwner = isCustomer && user?.companyId === ticket.company_id;
   const isReopenEligible = ['MANAGER_REVIEW', 'CUSTOMER_FEEDBACK', 'RESOLVED', 'CLOSED'].includes(ticket.status);
+  const isResolvedEligibleForClose = ['CUSTOMER_FEEDBACK', 'RESOLVED', 'MANAGER_REVIEW'].includes(ticket.status);
+  const canCloseTicket = (isManagerOrAdmin || isCustomerOwner) && isResolvedEligibleForClose;
 
   return (
     <div>
@@ -256,10 +284,25 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
           <ArrowLeft size={14} /> Back to Tickets
         </button>
 
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          {/* Close Ticket action for authorized Admin / Manager / Customer */}
+          {canCloseTicket && (
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => {
+                setCloseError(null);
+                setCloseReason('');
+                setShowCloseModal(true);
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+            >
+              <Lock size={14} /> Close Ticket
+            </button>
+          )}
+
           {/* Customer Reopen Button */}
           {isCustomerOwner && isReopenEligible && ticket.status !== 'IN_PROGRESS' && (
-            <button className="btn btn-danger btn-sm" onClick={() => setShowReopenModal(true)}>
+            <button className="btn btn-secondary btn-sm" onClick={() => setShowReopenModal(true)}>
               <RotateCcw size={14} /> Reopen Ticket
             </button>
           )}
@@ -433,6 +476,8 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 12,
           }}
         >
           <div>
@@ -440,14 +485,29 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
               Technical Resolution Completed • Awaiting Customer Verification
             </div>
             <div style={{ fontSize: 13, color: '#14532d', marginTop: 2 }}>
-              Technical work has been delivered to the customer. Awaiting customer testing, CSAT rating, or reopen request.
+              Technical work has been delivered to the customer. Awaiting customer testing, CSAT rating, or manager/admin closure.
             </div>
           </div>
-          {isManagerOrAdmin && (
-            <button className="btn btn-secondary btn-sm" onClick={() => setShowReopenModal(true)}>
-              <RotateCcw size={13} /> Reopen Ticket
-            </button>
-          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {isManagerOrAdmin && (
+              <button
+                className="btn btn-danger btn-sm"
+                onClick={() => {
+                  setCloseError(null);
+                  setCloseReason('');
+                  setShowCloseModal(true);
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                <Lock size={13} /> Close Ticket
+              </button>
+            )}
+            {isManagerOrAdmin && (
+              <button className="btn btn-secondary btn-sm" onClick={() => setShowReopenModal(true)}>
+                <RotateCcw size={13} /> Reopen Ticket
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -930,6 +990,65 @@ export const TicketDetailPage: React.FC<Props> = ({ ticketId, onBack }) => {
                 </button>
                 <button type="submit" className="btn btn-danger" disabled={reopening}>
                   {reopening ? 'Reopening...' : 'Reopen Ticket'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Close Ticket Modal */}
+      {showCloseModal && (
+        <div className="modal-backdrop">
+          <div className="modal-content" style={{ maxWidth: 520 }}>
+            <div className="modal-header">
+              <div className="modal-title" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Lock size={18} color="#b91c1c" />
+                <span>Close Support Ticket</span>
+              </div>
+              <button
+                onClick={() => { setShowCloseModal(false); setCloseError(null); }}
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#64748b' }}
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleCloseTicket}>
+              <div className="modal-body">
+                {closeError && (
+                  <div className="alert alert-danger" style={{ marginBottom: 14, fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <AlertTriangle size={15} style={{ flexShrink: 0 }} />
+                    <span>{closeError}</span>
+                  </div>
+                )}
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 14px', borderRadius: 6, fontSize: 13, color: '#991b1b', marginBottom: 16 }}>
+                  <strong>Are you sure you want to close this ticket?</strong> This action will mark the ticket as closed.
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Closure Reason / Notes (Optional)</label>
+                  <textarea
+                    className="form-control"
+                    rows={3}
+                    placeholder={isCustomer ? "e.g. Solution verified and issue resolved" : "e.g. Customer confirmed fix via communication / manual closure"}
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                  />
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b' }}>
+                  Closing the ticket archives the resolution session, records final SLA status, and logs closure in the audit timeline.
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => { setShowCloseModal(false); setCloseError(null); }}
+                  disabled={closing}
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-danger" disabled={closing}>
+                  {closing ? 'Closing Ticket...' : 'Confirm & Close Ticket'}
                 </button>
               </div>
             </form>

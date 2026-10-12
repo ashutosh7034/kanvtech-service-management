@@ -87,7 +87,22 @@ export class FeedbackService {
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     if (ticket.status === TicketStatus.CLOSED) {
-      return;
+      if (params.source === 'FEEDBACK') {
+        return;
+      }
+      throw new BadRequestException('Ticket is already closed.');
+    }
+
+    const allowableClosureStatuses: TicketStatus[] = [
+      TicketStatus.CUSTOMER_FEEDBACK,
+      TicketStatus.RESOLVED,
+      TicketStatus.MANAGER_REVIEW,
+    ];
+
+    if (!allowableClosureStatuses.includes(ticket.status)) {
+      throw new BadRequestException(
+        `Cannot close an unresolved ticket in '${ticket.status}' status. The ticket must first be resolved.`,
+      );
     }
 
     if (!params.closureReason || !params.closureReason.trim()) {
@@ -100,6 +115,28 @@ export class FeedbackService {
       status: 'CLOSED',
       resolvedAt: ticket.resolutionEndedAt || new Date(),
     });
+
+    const closingActor = await this.prisma.user.findUnique({
+      where: { id: params.closedByUserId },
+      include: { employee: true, companyContacts: true },
+    });
+
+    const actorRole = closingActor?.role || 'USER';
+    const actorName =
+      closingActor?.employee?.name ||
+      closingActor?.companyContacts?.[0]?.name ||
+      (actorRole === 'ADMIN' ? 'System Administrator' : closingActor?.email || 'User');
+
+    let historyTitle = 'Ticket Successfully Closed';
+    if (params.source === 'FEEDBACK') {
+      historyTitle = `Ticket Closed via Customer Feedback (${actorName})`;
+    } else if (actorRole === 'ADMIN') {
+      historyTitle = `Ticket Closed Manually by Administrator (${actorName})`;
+    } else if (actorRole === 'MANAGER') {
+      historyTitle = `Ticket Closed Manually by Manager (${actorName})`;
+    } else if (actorRole === 'CUSTOMER') {
+      historyTitle = `Ticket Closed by Customer (${actorName})`;
+    }
 
     await this.prisma.ticket.update({
       where: { id: params.ticketId },
@@ -117,11 +154,14 @@ export class FeedbackService {
         ticketId: params.ticketId,
         actorUserId: params.closedByUserId,
         actionType: 'CLOSED',
-        title: 'Ticket Successfully Closed',
-        description: params.closureReason,
+        title: historyTitle,
+        description: params.closureReason.trim(),
         metadataJson: JSON.stringify({
           closedBy: params.closedByUserId,
-          reason: params.closureReason,
+          closedByName: actorName,
+          closedByRole: actorRole,
+          reason: params.closureReason.trim(),
+          source: params.source || 'MANUAL',
           finalSlaStatus: slaResult.status,
           totalResolutionSeconds: ticket.totalResolutionSeconds,
         }),
@@ -133,7 +173,7 @@ export class FeedbackService {
         eventType: 'TICKET_CLOSED',
         ticketId: params.ticketId,
         title: `Ticket Closed: ${params.ticketId}`,
-        message: `Your service ticket ${params.ticketId} has been closed. Thank you for partnering with Kanvtech.`,
+        message: `Your service ticket ${params.ticketId} has been closed. Reason: ${params.closureReason.trim()}`,
         recipientUserId: ticket.customerContact.userId || undefined,
         recipientEmail: ticket.customerContact.email,
         linkUrl: `/tickets/${params.ticketId}`,
@@ -145,7 +185,14 @@ export class FeedbackService {
       action: 'TICKET_CLOSED',
       entityType: 'TICKET',
       entityId: params.ticketId,
-      newValues: { closureReason: params.closureReason, finalSlaStatus: slaResult.status },
+      newValues: {
+        previousStatus: ticket.status,
+        newStatus: TicketStatus.CLOSED,
+        closureReason: params.closureReason.trim(),
+        closedByRole: actorRole,
+        closedByName: actorName,
+        finalSlaStatus: slaResult.status,
+      },
     });
   }
 

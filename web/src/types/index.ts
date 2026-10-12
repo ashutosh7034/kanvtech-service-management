@@ -132,13 +132,15 @@ export interface Employee {
   department_id?: string | null;
   designation: string;
   level: 'MANAGER' | 'L1' | 'L2' | 'L3';
+  role?: UserRole;
+  is_super_admin?: boolean;
   manager_id?: string | null;
   manager_name?: string;
   availability: 'AVAILABLE' | 'BUSY' | 'OFFLINE';
   status: 'ACTIVE' | 'INACTIVE';
   created_at: string;
   active_ticket_count?: number;
-  current_attendance_status?: 'CHECKED_IN' | 'CHECKED_OUT';
+  current_attendance_status?: 'CHECKED_IN' | 'CHECKED_OUT' | null;
 }
 
 export interface NotificationItem {

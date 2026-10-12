@@ -56,6 +56,16 @@ export class ImportController {
       preview = await this.importService.validateEmployeeImport(file.buffer);
     } else if (normalizedType === 'branches') {
       preview = await this.importService.validateBranchImport(file.buffer);
+    } else if (normalizedType === 'prospects') {
+      preview = await this.importService.validateProspectImport(file.buffer);
+    } else if (normalizedType === 'subscriptions') {
+      preview = await this.importService.validateSubscriptionImport(file.buffer);
+    } else if (normalizedType === 'implementations') {
+      preview = await this.importService.validateImplementationImport(file.buffer);
+    } else if (normalizedType === 'tickets') {
+      preview = await this.importService.validateTicketImport(file.buffer);
+    } else if (normalizedType === 'tasks') {
+      preview = await this.importService.validateTaskImport(file.buffer);
     } else {
       throw new BadRequestException(`Unsupported preview type '${type}'`);
     }
@@ -85,6 +95,16 @@ export class ImportController {
       result = await this.importService.commitEmployeeImport(body.rows, actorUserId);
     } else if (normalizedType === 'branches') {
       result = await this.importService.commitBranchImport(body.rows, actorUserId);
+    } else if (normalizedType === 'prospects') {
+      result = await this.importService.commitProspectImport(body.rows, actorUserId);
+    } else if (normalizedType === 'subscriptions') {
+      result = await this.importService.commitSubscriptionImport(body.rows, actorUserId);
+    } else if (normalizedType === 'implementations') {
+      result = await this.importService.commitImplementationImport(body.rows, actorUserId);
+    } else if (normalizedType === 'tickets') {
+      result = await this.importService.commitTicketImport(body.rows, actorUserId);
+    } else if (normalizedType === 'tasks') {
+      result = await this.importService.commitTaskImport(body.rows, actorUserId);
     } else {
       throw new BadRequestException(`Unsupported commit type '${type}'`);
     }

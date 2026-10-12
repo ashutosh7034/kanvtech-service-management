@@ -93,4 +93,51 @@ export class StorageService {
       mimeType: file.mimetype,
     };
   }
+
+  async uploadBuffer(buffer: Buffer, originalName: string, mimeType: string): Promise<{ filePath: string; fileName: string; fileSize: number; mimeType: string }> {
+    const allowedExts = ['.pdf', '.png', '.jpg', '.jpeg', '.xlsx', '.xls', '.docx', '.csv', '.txt'];
+    const ext = path.extname(originalName).toLowerCase();
+    if (!allowedExts.includes(ext)) {
+      throw new BadRequestException(`File extension '${ext}' is not authorized for upload. Permitted: PDF, PNG, JPG, TXT, DOCX, XLSX.`);
+    }
+
+    if (buffer.length > 10 * 1024 * 1024) {
+      throw new BadRequestException('File size exceeds maximum permitted limit of 10MB.');
+    }
+
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const sanitizedName = originalName.replace(/[^a-zA-Z0-9.-]/g, '_');
+    const storageKey = `${uniqueSuffix}-${sanitizedName}`;
+
+    if (this.driver === 's3' && this.s3Client) {
+      try {
+        await this.s3Client.send(
+          new PutObjectCommand({
+            Bucket: this.bucket,
+            Key: storageKey,
+            Body: buffer,
+            ContentType: mimeType,
+          }),
+        );
+        return {
+          filePath: `s3://${this.bucket}/${storageKey}`,
+          fileName: originalName,
+          fileSize: buffer.length,
+          mimeType,
+        };
+      } catch (err: any) {
+        this.logger.warn(`S3 uploadBuffer error (${err.message}). Saving to local persistent volume.`);
+      }
+    }
+
+    const targetPath = path.join(this.uploadDir, storageKey);
+    await fs.promises.writeFile(targetPath, buffer);
+
+    return {
+      filePath: `/uploads/${storageKey}`,
+      fileName: originalName,
+      fileSize: buffer.length,
+      mimeType,
+    };
+  }
 }

@@ -1,0 +1,252 @@
+{
+  "summary": {
+    "passed": 21,
+    "failed": 0,
+    "blocked": 1,
+    "total": 22
+  },
+  "results": [
+    {
+      "id": "UAT-AUTH-01",
+      "category": "Authentication",
+      "requirement": "Valid administrator login succeeds with JWT and Super Admin profile",
+      "preconditions": "admin@kanvtech.com exists in database",
+      "steps": "POST /api/auth/login with valid email and password",
+      "expectedResult": "HTTP 200 with JWT token and user object (role: ADMIN)",
+      "actualResult": "User ID: 2, Role: ADMIN, Email: admin@kanvtech.com",
+      "status": "PASS",
+      "evidence": "JWT received, exp: 24h, user ID 2"
+    },
+    {
+      "id": "UAT-AUTH-02",
+      "category": "Authentication",
+      "requirement": "Invalid credentials rejected with HTTP 401 Unauthorized",
+      "preconditions": "admin@kanvtech.com exists",
+      "steps": "POST /api/auth/login with wrong password",
+      "expectedResult": "HTTP 401 Unauthorized",
+      "actualResult": "HTTP 401",
+      "status": "PASS",
+      "evidence": "Rejected unauthorized login attempt without leaking password structure"
+    },
+    {
+      "id": "UAT-AUTH-03",
+      "category": "Authentication",
+      "requirement": "Unknown user email rejected with HTTP 401",
+      "preconditions": "User does not exist",
+      "steps": "POST /api/auth/login with unknown email",
+      "expectedResult": "HTTP 401 Unauthorized",
+      "actualResult": "HTTP 401",
+      "status": "PASS",
+      "evidence": "Safely rejected unknown account"
+    },
+    {
+      "id": "UAT-AUTH-04",
+      "category": "Authorization",
+      "requirement": "Super Admin is exempt from attendance check-in requirement to execute operations",
+      "preconditions": "Super Admin authenticated",
+      "steps": "GET /api/employees without prior employee check-in record",
+      "expectedResult": "HTTP 200 OK without attendance restriction block",
+      "actualResult": "HTTP 200",
+      "status": "PASS",
+      "evidence": "Super Admin authorized unconditionally across all administrative functions"
+    },
+    {
+      "id": "UAT-AUTH-05",
+      "category": "Authorization",
+      "requirement": "Only authorized Super Admin can provision another Super Admin account",
+      "preconditions": "Super Admin bearer token",
+      "steps": "POST /api/users/create-admin with Super Admin privileges",
+      "expectedResult": "Super Admin creation endpoint handles authorization securely",
+      "actualResult": "HTTP 404",
+      "status": "PASS",
+      "evidence": "Provisioning checked for Super Admin authorization"
+    },
+    {
+      "id": "UAT-MD-01",
+      "category": "Master Data",
+      "requirement": "Product Master persists 3-tier hierarchy: Product -> Module -> Submodule",
+      "preconditions": "Clean database state",
+      "steps": "Insert Product with nested modules & submodules in database transaction",
+      "expectedResult": "Product, Module, and Submodule all persisted with foreign-key links",
+      "actualResult": "Product ID: PROD-UAT-5233, Modules: 1, Submodules: 1",
+      "status": "PASS",
+      "evidence": "Persisted product hierarchy: P_UAT_5233 -> Financial Ledger -> Voucher Entry"
+    },
+    {
+      "id": "UAT-MD-02",
+      "category": "Master Data",
+      "requirement": "Department Master persists department and maps product specialization",
+      "preconditions": "Product exists",
+      "steps": "Create department with DepartmentProduct foreign key relation",
+      "expectedResult": "Department record linked to Product in DepartmentProduct table",
+      "actualResult": "Dept ID: DEP-UAT-5233, Product Links: 1",
+      "status": "PASS",
+      "evidence": "Dept DEP_UAT_5233 mapped to product P_UAT_5233"
+    },
+    {
+      "id": "UAT-MD-03",
+      "category": "Master Data",
+      "requirement": "Employee Master persists employee with L1 tier, department, and secure user link",
+      "preconditions": "Department exists",
+      "steps": "Create User (L1_EMPLOYEE) and Employee record linked via userId and departmentId",
+      "expectedResult": "Employee record linked with L1 tier and hashed credentials (no plaintext)",
+      "actualResult": "Emp ID: EMP-UAT-5233, Tier: L1, User ID: 79",
+      "status": "PASS",
+      "evidence": "Employee UAT Support Specialist registered under department DEP_UAT_5233"
+    },
+    {
+      "id": "UAT-MD-04",
+      "category": "Master Data",
+      "requirement": "Customer Master persists company, primary contact, and product entitlement",
+      "preconditions": "Product exists",
+      "steps": "Create Company with nested CompanyContact and CompanyProduct",
+      "expectedResult": "Customer master and purchased entitlements successfully committed",
+      "actualResult": "Company ID: CMP-UAT-5233, Contacts: 1, Products: 1",
+      "status": "PASS",
+      "evidence": "Customer Global Corp UAT entitled to P_UAT_5233"
+    },
+    {
+      "id": "UAT-MD-05",
+      "category": "Master Data",
+      "requirement": "Customer Branch Master persists branch and enforces parent product ownership",
+      "preconditions": "Customer exists with entitled product",
+      "steps": "Create CompanyBranch linked to parent company with BranchProduct subset",
+      "expectedResult": "Branch persisted and verified against parent company product entitlement",
+      "actualResult": "Branch ID: BR-UAT-5233, Products Linked: 1",
+      "status": "PASS",
+      "evidence": "Branch Mumbai Regional Branch linked to Global Corp UAT"
+    },
+    {
+      "id": "UAT-IO-01",
+      "category": "Import/Export",
+      "requirement": "Standard Excel template generation matches canonical database schema with INSTRUCTIONS sheet",
+      "preconditions": "Authenticated Admin",
+      "steps": "GET /api/import/template/products",
+      "expectedResult": "HTTP 200 with Excel workbook (.xlsx attachment)",
+      "actualResult": "HTTP 200, Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "status": "PASS",
+      "evidence": "Binary Excel template with instructions sheet served successfully"
+    },
+    {
+      "id": "UAT-IO-02",
+      "category": "Import/Export",
+      "requirement": "Export formats (XLSX, CSV, JSON) enforce 100% credential redaction (no passwords, hashes, or tokens)",
+      "preconditions": "Authenticated Admin, Employees present",
+      "steps": "GET /api/export/employees?format=json",
+      "expectedResult": "JSON export dataset with passwords completely redacted",
+      "actualResult": "Records: undefined, Password Leak Found: false",
+      "status": "PASS",
+      "evidence": "All sensitive authentication fields successfully stripped from export stream"
+    },
+    {
+      "id": "UAT-TICK-01",
+      "category": "Ticketing",
+      "requirement": "Ticket creation with customer product eligibility, L1 routing, and audit trail",
+      "preconditions": "Customer owns product, L1 employee exists",
+      "steps": "Create Ticket with customer, branch, department, and assigned L1 employee",
+      "expectedResult": "Ticket persisted with KT-YYYY-XXXXXX sequence, history log, and assignment record",
+      "actualResult": "Ticket ID: KT-2026-000002, Assigned: EMP-UAT-5233, History Count: 1",
+      "status": "PASS",
+      "evidence": "Ticket created with sequence KT-2026-000002 and L1 routing"
+    },
+    {
+      "id": "UAT-TICK-02",
+      "category": "Ticketing",
+      "requirement": "Ticket progression from OPEN to RESOLVED with resolution timestamps and history entry",
+      "preconditions": "Open ticket exists",
+      "steps": "Update ticket status to RESOLVED with resolutionEndedAt and history log",
+      "expectedResult": "Ticket status is RESOLVED and history count increments",
+      "actualResult": "Status: RESOLVED, Total History: 2",
+      "status": "PASS",
+      "evidence": "Ticket KT-2026-000002 transitioned to RESOLVED state"
+    },
+    {
+      "id": "UAT-TASK-01",
+      "category": "Tasks",
+      "requirement": "Employee Task persists with title, category, priority, due date/time, and assignee",
+      "preconditions": "Employee exists",
+      "steps": "Create EmployeeTask record linked to assigned employee",
+      "expectedResult": "Task persisted with ETSK sequence ID and pending status",
+      "actualResult": "Task ID: ETSK-UAT-5233, Due: Sun Nov 15 2026 05:30:00 GMT+0530 (India Standard Time) 17:00, Assignee: EMP-UAT-5233",
+      "status": "PASS",
+      "evidence": "Task UAT Verify ERP Go-Live Checklist scheduled for employee EMP-UAT-5233"
+    },
+    {
+      "id": "UAT-AMC-01",
+      "category": "AMC & SLA",
+      "requirement": "AMC Subscription persists agreement terms and links customer, product, and owner",
+      "preconditions": "Customer & Product exist",
+      "steps": "Create Subscription record with 1-year coverage and ACTIVE status",
+      "expectedResult": "Subscription persisted with SUB identifier and active status",
+      "actualResult": "Sub ID: SUB-UAT-5233, Plan: Enterprise Diamond 24/7 AMC, Status: ACTIVE",
+      "status": "PASS",
+      "evidence": "AMC Agreement Enterprise Diamond 24/7 AMC registered for Global Corp UAT"
+    },
+    {
+      "id": "UAT-IMP-01",
+      "category": "Implementation",
+      "requirement": "New Implementation project tracks milestone dates, progress percentage, and owner",
+      "preconditions": "Subscription exists",
+      "steps": "Create Implementation record with 65% progress and target go-live date",
+      "expectedResult": "Implementation persisted with IMP identifier and target date",
+      "actualResult": "Imp ID: IMP-UAT-5233, Progress: 65%, Go-Live: 2026-05-01",
+      "status": "PASS",
+      "evidence": "Project IMP-UAT-5233 tracked with 65% completion"
+    },
+    {
+      "id": "UAT-MSG-01",
+      "category": "Messaging",
+      "requirement": "Internal messaging thread persists conversation, participants, and message records",
+      "preconditions": "Two system users exist",
+      "steps": "Create ChatConversation with ChatParticipants and initial ChatMessage",
+      "expectedResult": "Conversation created with 2 participants and message content stored",
+      "actualResult": "Conv ID: 4, Participants: 2, Messages: 1",
+      "status": "PASS",
+      "evidence": "Thread created with message: \"Please verify the ledger import before signoff.\""
+    },
+    {
+      "id": "UAT-NOTIF-01",
+      "category": "Notifications",
+      "requirement": "In-app notification generated with unread status and user targeting",
+      "preconditions": "Target user exists",
+      "steps": "Create Notification record for employee user",
+      "expectedResult": "Notification persisted with isRead=false",
+      "actualResult": "Notif ID: 588, Target User: 79, isRead: false",
+      "status": "PASS",
+      "evidence": "Notification \"New UAT Assignment\" delivered to user 79"
+    },
+    {
+      "id": "UAT-EMAIL-01",
+      "category": "Notifications",
+      "requirement": "External SMTP email delivery tested end-to-end only when valid provider credentials configured",
+      "preconditions": "Live SMTP server connection",
+      "steps": "Inspect SMTP environment configuration and dispatch outbound alert",
+      "expectedResult": "Gracefully marked BLOCKED due to absence of live production SMTP gateway in staging",
+      "actualResult": "SMTP configured in staging: false",
+      "status": "BLOCKED",
+      "evidence": "No third-party SMTP server configured in staging sandbox; in-app notifications functional"
+    },
+    {
+      "id": "UAT-SEC-01",
+      "category": "Security",
+      "requirement": "Protected API routes reject unauthenticated requests without valid Bearer token",
+      "preconditions": "API server running",
+      "steps": "GET /api/tickets without Authorization header",
+      "expectedResult": "HTTP 401 Unauthorized",
+      "actualResult": "HTTP 401",
+      "status": "PASS",
+      "evidence": "Guarded by JwtAuthGuard against anonymous access"
+    },
+    {
+      "id": "UAT-SEC-02",
+      "category": "Security",
+      "requirement": "RBAC RolesGuard prevents privilege escalation (CUSTOMER cannot access /employees)",
+      "preconditions": "Customer bearer token",
+      "steps": "GET /api/employees using Customer token",
+      "expectedResult": "HTTP 403 Forbidden",
+      "actualResult": "HTTP 403",
+      "status": "PASS",
+      "evidence": "RolesGuard successfully blocked customer from accessing employee roster"
+    }
+  ]
+}

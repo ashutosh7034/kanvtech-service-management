@@ -205,7 +205,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
               onClick={() => onNavigate('import')}
             >
               <FileSpreadsheet size={16} />
-              <span>Import Data</span>
+              <span>Import & Export Data</span>
             </button>
           </>
         )}

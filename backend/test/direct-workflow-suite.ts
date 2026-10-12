@@ -55,7 +55,7 @@ async function runDirectWorkflowSuite() {
   const ticketsService = new TicketsService(prisma, assignmentsService, slaService, timerService, auditService, notificationsService);
   const productsService = new ProductsService(prisma, auditService);
   const subscriptionsService = new SubscriptionsService(prisma, auditService, notificationsService);
-  const implementationsService = new ImplementationsService(prisma, auditService);
+  const implementationsService = new ImplementationsService(prisma, auditService, notificationsService);
   const jwtService = new JwtService({ secret: process.env.JWT_SECRET || 'kanvtech-super-secret-production-jwt-key-2026' });
   const authService = new AuthService(prisma, jwtService);
 

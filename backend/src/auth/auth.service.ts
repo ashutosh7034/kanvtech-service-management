@@ -39,7 +39,7 @@ export class AuthService {
     }
   }
 
-  async login(email: string, pass: string) {
+  async login(email: string, pass: string, rememberMe = false) {
     const normalizedEmail = (email || '').trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
       where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
@@ -125,7 +125,11 @@ export class AuthService {
       contactId,
     };
 
-    const token = this.jwtService.sign(payload);
+    const expiresIn = rememberMe
+      ? (process.env.JWT_REMEMBER_ME_EXPIRES_IN || '30d')
+      : (process.env.JWT_EXPIRES_IN || '24h');
+
+    const token = this.jwtService.sign(payload, { expiresIn });
 
     return {
       token,

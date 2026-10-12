@@ -31,6 +31,7 @@ export const EmployeesPage: React.FC = () => {
     department_id: '',
     designation: 'L1 Support Specialist',
     level: 'L1' as 'MANAGER' | 'L1' | 'L2' | 'L3',
+    role: 'L1_EMPLOYEE' as string,
     manager_id: '',
     password: '',
   });
@@ -317,6 +318,7 @@ export const EmployeesPage: React.FC = () => {
         department_id: departments[0]?.id || '',
         designation: 'L1 Support Specialist',
         level: 'L1',
+        role: 'L1_EMPLOYEE',
         manager_id: '',
         password: '',
       });
@@ -380,7 +382,9 @@ export const EmployeesPage: React.FC = () => {
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12, fontSize: 12, color: '#64748b' }}>
         <span>Total Staff: <strong>{employees.length}</strong></span>
         <span>•</span>
-        <span>Managers: <strong>{employees.filter((e) => e.level === ('MANAGER' as any)).length}</strong></span>
+        <span>Super Admins: <strong style={{ color: '#7c3aed' }}>{employees.filter((e) => e.role === 'ADMIN' || e.is_super_admin).length}</strong></span>
+        <span>•</span>
+        <span>Managers: <strong>{employees.filter((e) => e.level === ('MANAGER' as any) && e.role !== 'ADMIN').length}</strong></span>
         <span>•</span>
         <span>L1 Specialists: <strong>{employees.filter((e) => e.level === 'L1').length}</strong></span>
         <span>•</span>
@@ -388,7 +392,7 @@ export const EmployeesPage: React.FC = () => {
         <span>•</span>
         <span>L3 Principal: <strong>{employees.filter((e) => e.level === 'L3').length}</strong></span>
         <span>•</span>
-        <span>Checked In: <strong style={{ color: '#16a34a' }}>{employees.filter((e) => e.current_attendance_status === 'CHECKED_IN').length}</strong></span>
+        <span>Checked In: <strong style={{ color: '#16a34a' }}>{employees.filter((e) => e.role !== 'ADMIN' && e.current_attendance_status === 'CHECKED_IN').length}</strong></span>
       </div>
 
       {/* Filter Bar */}
@@ -485,32 +489,51 @@ export const EmployeesPage: React.FC = () => {
                     </div>
                   </td>
                   <td>
-                    <span
-                      style={{
-                        padding: '2px 8px',
-                        background:
-                          emp.level === ('MANAGER' as any)
-                            ? '#fef3c7'
-                            : emp.level === 'L3'
-                            ? '#fee2e2'
-                            : emp.level === 'L2'
-                            ? '#fef9c3'
-                            : '#eff6ff',
-                        color:
-                          emp.level === ('MANAGER' as any)
-                            ? '#b45309'
-                            : emp.level === 'L3'
-                            ? '#b91c1c'
-                            : emp.level === 'L2'
-                            ? '#854d0e'
-                            : '#1d4ed8',
-                        borderRadius: 6,
-                        fontWeight: 700,
-                        fontSize: 11,
-                      }}
-                    >
-                      {emp.level === ('MANAGER' as any) ? 'Manager' : `Tier ${emp.level}`}
-                    </span>
+                    {emp.role === 'ADMIN' || emp.is_super_admin ? (
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          background: '#ede9fe',
+                          color: '#6d28d9',
+                          borderRadius: 6,
+                          fontWeight: 700,
+                          fontSize: 11,
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                        }}
+                      >
+                        <ShieldCheck size={12} />
+                        Super Admin
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          background:
+                            emp.level === ('MANAGER' as any)
+                              ? '#fef3c7'
+                              : emp.level === 'L3'
+                              ? '#fee2e2'
+                              : emp.level === 'L2'
+                              ? '#fef9c3'
+                              : '#eff6ff',
+                          color:
+                            emp.level === ('MANAGER' as any)
+                              ? '#b45309'
+                              : emp.level === 'L3'
+                              ? '#b91c1c'
+                              : emp.level === 'L2'
+                              ? '#854d0e'
+                              : '#1d4ed8',
+                          borderRadius: 6,
+                          fontWeight: 700,
+                          fontSize: 11,
+                        }}
+                      >
+                        {emp.level === ('MANAGER' as any) ? 'Manager' : `Tier ${emp.level}`}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -859,26 +882,47 @@ export const EmployeesPage: React.FC = () => {
                   </div>
 
                   <div className="form-group">
-                    <label className="form-label">Support Tier Level <span className="required">*</span></label>
+                    <label className="form-label">{isAdmin ? 'Support Tier / System Role' : 'Support Tier Level'} <span className="required">*</span></label>
                     <select
                       className="form-control"
-                      value={formData.level}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          level: e.target.value as any,
-                          designation:
-                            e.target.value === 'MANAGER'
-                              ? 'Department Operations Manager'
-                              : `${e.target.value} Support Specialist`,
-                        })
-                      }
+                      value={formData.role === 'ADMIN' ? 'ADMIN' : formData.level}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === 'ADMIN') {
+                          setFormData({
+                            ...formData,
+                            role: 'ADMIN',
+                            level: 'MANAGER',
+                            designation: 'System Administrator',
+                          });
+                        } else if (val === 'MANAGER') {
+                          setFormData({
+                            ...formData,
+                            role: 'MANAGER',
+                            level: 'MANAGER',
+                            designation: 'Department Operations Manager',
+                          });
+                        } else {
+                          setFormData({
+                            ...formData,
+                            role: val === 'L3' ? 'L3_EMPLOYEE' : val === 'L2' ? 'L2_EMPLOYEE' : 'L1_EMPLOYEE',
+                            level: val as any,
+                            designation: `${val} Support Specialist`,
+                          });
+                        }
+                      }}
                     >
                       <option value="L1">Level 1 (Triage & Workload Auto-Routing)</option>
                       <option value="L2">Level 2 (Senior Technical Diagnostic)</option>
                       <option value="L3">Level 3 (Principal Architecture & Patches)</option>
-                      <option value="MANAGER">Manager (Department Review & Escalations)</option>
+                      {isAdmin && <option value="MANAGER">Manager (Department Review & Escalations)</option>}
+                      {isAdmin && <option value="ADMIN">★ Super Admin (Full Platform Administrator)</option>}
                     </select>
+                    {!isAdmin && (
+                      <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                        Rule: Managers may provision Level 1, 2, or 3 Specialist tiers. Manager & Admin roles are restricted.
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1189,6 +1233,7 @@ export const EmployeesPage: React.FC = () => {
                         required
                         style={{ height: 38 }}
                         value={editFormData.level}
+                        disabled={editingEmployee.role === 'ADMIN' || (!isAdmin && editingEmployee.level === 'MANAGER')}
                         onChange={(e) => {
                           const lvl = e.target.value as any;
                           setEditFormData({
@@ -1201,7 +1246,7 @@ export const EmployeesPage: React.FC = () => {
                         <option value="L1">Tier L1 (Frontline Support)</option>
                         <option value="L2">Tier L2 (Senior Specialist)</option>
                         <option value="L3">Tier L3 (Principal Specialist)</option>
-                        <option value="MANAGER">Manager (Operations & Reassignment)</option>
+                        {isAdmin && <option value="MANAGER">Manager (Operations & Reassignment)</option>}
                       </select>
                     </div>
 

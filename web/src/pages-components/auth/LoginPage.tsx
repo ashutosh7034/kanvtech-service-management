@@ -1,15 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const { login } = useAuth();
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     try {
@@ -22,14 +24,42 @@ export const LoginPage: React.FC = () => {
     } catch {
       // Ignore localStorage access issues
     }
+
+    // Check for browser autofill on email if not already set
+    const checkAutofill = () => {
+      if (emailInputRef.current && emailInputRef.current.value && !email) {
+        setEmail(emailInputRef.current.value);
+      }
+    };
+    const t1 = setTimeout(checkAutofill, 100);
+    const t2 = setTimeout(checkAutofill, 500);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError(null);
 
-    const emailTrimmed = email.trim();
-    if (!emailTrimmed && !password) {
+    // Read form values directly from the DOM form elements to guarantee
+    // browser autofilled values are captured even if synthetic input events were not dispatched.
+    const form = e.currentTarget;
+    const formElements = form.elements;
+    const emailEl = formElements.namedItem('email') as HTMLInputElement | null;
+    const passwordEl = formElements.namedItem('password') as HTMLInputElement | null;
+    const rememberMeEl = formElements.namedItem('rememberMe') as HTMLInputElement | null;
+
+    const emailTrimmed = ((emailEl ? emailEl.value : email) || '').trim();
+    const passwordValue = passwordEl?.value || passwordInputRef.current?.value || '';
+    const rememberMeValue = rememberMeEl ? rememberMeEl.checked : rememberMe;
+
+    if (emailTrimmed && emailTrimmed !== email) {
+      setEmail(emailTrimmed);
+    }
+
+    if (!emailTrimmed && !passwordValue) {
       setError('Please enter your email and password.');
       return;
     }
@@ -37,7 +67,7 @@ export const LoginPage: React.FC = () => {
       setError('Please enter your email.');
       return;
     }
-    if (!password) {
+    if (!passwordValue) {
       setError('Please enter your password.');
       return;
     }
@@ -49,14 +79,34 @@ export const LoginPage: React.FC = () => {
 
     setLoading(true);
     try {
-      if (rememberMe) {
+      if (rememberMeValue) {
         localStorage.setItem('kanvtech_remember_me', 'true');
         localStorage.setItem('kanvtech_remembered_email', emailTrimmed);
       } else {
         localStorage.removeItem('kanvtech_remember_me');
         localStorage.removeItem('kanvtech_remembered_email');
       }
-      await login(emailTrimmed, password, rememberMe);
+      await login(emailTrimmed, passwordValue, rememberMeValue);
+
+      // Support Chrome & Chromium native password manager via W3C Credential Management API
+      if (typeof window !== 'undefined' && (window as any).PasswordCredential && navigator.credentials?.store) {
+        try {
+          const cred = new (window as any).PasswordCredential({
+            id: emailTrimmed,
+            password: passwordValue,
+            name: emailTrimmed,
+          });
+          await navigator.credentials.store(cred);
+        } catch {
+          // Fallback if browser restrictions apply
+        }
+      }
+
+      // Perform real browser navigation to dashboard so Chrome's password manager
+      // registers the successful login transition and presents the Save Password prompt
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard';
+      }
     } catch (err: any) {
       const msg = err.message || '';
       if (msg === 'Failed to fetch' || msg.includes('Network Error') || !window.navigator.onLine || msg === 'Server request failed') {
@@ -140,15 +190,27 @@ export const LoginPage: React.FC = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <form
+            id="login-form"
+            name="login"
+            method="post"
+            action="/api/auth/login"
+            onSubmit={handleSubmit}
+            noValidate={false}
+          >
             <div className="form-group">
-              <label className="form-label">Corporate Email</label>
+              <label htmlFor="email" className="form-label">Corporate Email</label>
               <div style={{ position: 'relative' }}>
                 <input
+                  ref={emailInputRef}
+                  id="email"
+                  name="email"
                   type="email"
+                  autoComplete="username"
                   className="form-control"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
+                  onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
                   placeholder="Enter corporate email"
                   required
                   autoFocus
@@ -157,20 +219,23 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div className="form-group">
-              <label className="form-label">Password</label>
+              <label htmlFor="password" className="form-label">Password</label>
               <div style={{ position: 'relative' }}>
                 <input
+                  ref={passwordInputRef}
+                  id="password"
+                  name="password"
                   type={showPassword ? 'text' : 'password'}
+                  autoComplete="current-password"
                   className="form-control"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter password"
                   style={{ paddingRight: 38 }}
                   required
                 />
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((prev) => !prev)}
                   title={showPassword ? 'Hide password' : 'Show password'}
                   aria-label={showPassword ? 'Hide password' : 'Show password'}
                   style={{
@@ -194,8 +259,10 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+              <label htmlFor="rememberMe" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
                 <input
+                  id="rememberMe"
+                  name="rememberMe"
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
@@ -206,10 +273,18 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <button
+              id="login-submit-button"
               type="submit"
               className="btn btn-primary"
-              disabled={loading}
-              style={{ width: '100%', justifyContent: 'center', padding: 10, marginTop: 4 }}
+              aria-busy={loading}
+              style={{
+                width: '100%',
+                justifyContent: 'center',
+                padding: 10,
+                marginTop: 4,
+                pointerEvents: loading ? 'none' : 'auto',
+                opacity: loading ? 0.75 : 1,
+              }}
             >
               {loading ? 'Authenticating...' : 'Sign In to Portal'}
               {!loading && <ArrowRight size={15} />}

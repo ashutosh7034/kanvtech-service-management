@@ -6,10 +6,24 @@ import { Logger } from '@nestjs/common';
 import * as express from 'express';
 import * as path from 'path';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const logger = new Logger('KanvtechBackend');
   const app = await NestFactory.create(AppModule);
+
+  // Cookie parser middleware for secure HttpOnly cookie session support
+  app.use(cookieParser());
+
+  // Payload body limit for enterprise data backups and Excel imports
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+  // Trust upstream reverse proxies (essential for secure cookies and IP detection in production)
+  const expressApp = app.getHttpAdapter().getInstance();
+  if (expressApp && typeof expressApp.set === 'function') {
+    expressApp.set('trust proxy', 1);
+  }
 
   // Production HTTP Security Headers
   app.use(
@@ -49,7 +63,7 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
   });
 
   // Global exception filter

@@ -29,6 +29,7 @@ export async function request<T = any>(
 
   const response = await fetch(`${API_BASE}${endpoint}`, {
     cache: 'no-store',
+    credentials: 'include',
     ...options,
     headers,
   });
@@ -42,7 +43,14 @@ export async function request<T = any>(
   }
 
   const contentType = response.headers.get('content-type');
-  if (contentType && contentType.includes('application/vnd.openxmlformats-officedocument')) {
+  const isBinaryOrAttachment =
+    contentType &&
+    (contentType.includes('application/vnd.openxmlformats-officedocument') ||
+      contentType.includes('text/csv') ||
+      contentType.includes('application/octet-stream') ||
+      (options.headers as any)?.['Accept'] === 'application/octet-stream');
+
+  if (isBinaryOrAttachment) {
     return (await response.blob()) as any;
   }
 
@@ -76,6 +84,7 @@ export function toQueryString(params: any = {}): string {
 export const api = {
   // Auth
   login: (credentials: any) => request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
+  logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
   changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword?: string }) =>
     request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
@@ -173,6 +182,23 @@ export const api = {
   commitImport: (type: string, rows: any[]) =>
     request(`/import/commit/${type}`, { method: 'POST', body: JSON.stringify({ rows }) }),
   devReset: () => request('/import/dev-reset', { method: 'POST' }),
+
+  // Data Export & System Recovery
+  getExportModules: () => request('/export/modules'),
+  downloadExport: (moduleKey: string, format: 'xlsx' | 'csv' | 'json') =>
+    request(`/export/download?module=${encodeURIComponent(moduleKey)}&format=${encodeURIComponent(format)}`, {
+      headers: { Accept: 'application/octet-stream' },
+    }),
+  previewBackupRestore: (payload: FormData | any) =>
+    request('/export/backup/preview', {
+      method: 'POST',
+      body: payload instanceof FormData ? payload : JSON.stringify(payload),
+    }),
+  commitBackupRestore: (data: { backupPayload: any; confirmed: boolean }) =>
+    request('/export/backup/restore', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   // Reports
   getDashboard: () => request('/reports/dashboard'),

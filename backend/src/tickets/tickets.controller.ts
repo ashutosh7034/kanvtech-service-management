@@ -297,13 +297,22 @@ export class TicketsController {
         throw new ForbiddenException('Unauthorized: You can only close tickets for your own company');
       }
     }
+
+    const defaultReason =
+      req.user.role === 'CUSTOMER'
+        ? 'Customer confirmed resolution and closed ticket'
+        : (req.user.role === 'ADMIN'
+            ? 'Manual closure by System Administrator'
+            : 'Manual closure by authorized Manager');
+
     await this.feedbackService.closeTicket({
       ticketId: id,
       closedByUserId: req.user.userId,
       closureReason:
         body.closureReason ||
         body.closure_reason ||
-        (req.user.role === 'CUSTOMER' ? 'Customer confirmed resolution and closed ticket' : 'Manual closure by authorized manager'),
+        body.reason ||
+        defaultReason,
       source: req.user.role === 'CUSTOMER' ? 'FEEDBACK' : 'MANUAL',
     });
     const closedTicket = await this.ticketsService.getTicketById(id);
