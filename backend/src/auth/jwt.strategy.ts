@@ -32,10 +32,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: any) {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, activeSessionId: true },
     });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('User account is invalid or inactive.');
+    }
+
+    // Enforce one active login session per user account across web and mobile
+    if (!payload.sessionId || payload.sessionId !== user.activeSessionId) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'Unauthorized',
+        code: 'SESSION_TERMINATED',
+        message: 'Your account has been logged in on another device. You have been logged out for security reasons.',
+      });
     }
 
     return {
@@ -46,6 +56,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       employeeId: payload.employeeId,
       companyId: payload.companyId,
       contactId: payload.contactId,
+      sessionId: payload.sessionId,
     };
   }
 }

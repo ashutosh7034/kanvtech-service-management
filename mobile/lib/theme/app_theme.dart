@@ -10,7 +10,6 @@ class AppTheme {
         primary: AppColors.brandPrimary,
         secondary: AppColors.brandSecondary,
         surface: AppColors.bgSurface,
-        background: AppColors.bgApp,
         error: AppColors.danger,
       ),
       fontFamily: 'Inter',
@@ -25,7 +24,7 @@ class AppTheme {
           fontWeight: FontWeight.w600,
         ),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: AppColors.bgSurface,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -36,7 +35,8 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.bgSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
           borderSide: const BorderSide(color: AppColors.borderMedium),
@@ -47,10 +47,12 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(6),
-          borderSide: const BorderSide(color: AppColors.brandPrimary, width: 1.5),
+          borderSide:
+              const BorderSide(color: AppColors.brandPrimary, width: 1.5),
         ),
         hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 13),
-        labelStyle: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        labelStyle:
+            const TextStyle(color: AppColors.textSecondary, fontSize: 13),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(

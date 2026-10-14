@@ -85,9 +85,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(null);
     };
 
+    const handleSessionTerminated = () => {
+      setUser(null);
+      setToken(null);
+    };
+
     window.addEventListener('auth_unauthorized', handleUnauthorized);
+    window.addEventListener('auth_session_terminated', handleSessionTerminated);
+
+    // Lightweight session-validity check on window focus / tab visibility change
+    let lastCheckTime = 0;
+    const checkActiveSession = async () => {
+      const now = Date.now();
+      if (now - lastCheckTime < 20000) return; // at most once every 20s
+      lastCheckTime = now;
+
+      const currentToken =
+        localStorage.getItem('kanvtech_token') || sessionStorage.getItem('kanvtech_token');
+      if (!currentToken) return;
+
+      try {
+        await api.me();
+      } catch {
+        // api.me() will trigger 401 handler in client.ts if session is terminated
+      }
+    };
+
+    window.addEventListener('focus', checkActiveSession);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        checkActiveSession();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       window.removeEventListener('auth_unauthorized', handleUnauthorized);
+      window.removeEventListener('auth_session_terminated', handleSessionTerminated);
+      window.removeEventListener('focus', checkActiveSession);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

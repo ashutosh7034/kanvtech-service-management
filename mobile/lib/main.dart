@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'providers/auth_provider.dart';
 import 'providers/tickets_provider.dart';
+import 'providers/allotment_provider.dart';
+import 'providers/operations_provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/customer/customer_dashboard_screen.dart';
-import 'screens/employee/employee_dashboard_screen.dart';
+import 'screens/role_shells.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -21,6 +22,8 @@ class KanvtechMobileApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => TicketsProvider()),
+        ChangeNotifierProvider(create: (_) => AllotmentProvider()),
+        ChangeNotifierProvider(create: (_) => OperationsProvider()),
       ],
       child: MaterialApp(
         title: 'Kanvtech Service Management',
@@ -42,7 +45,17 @@ class AuthGate extends StatelessWidget {
     if (auth.isLoading) {
       return const Scaffold(
         body: Center(
-          child: CircularProgressIndicator(),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Connecting to Kanvtech Service Platform...',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+              ),
+            ],
+          ),
         ),
       );
     }
@@ -51,10 +64,17 @@ class AuthGate extends StatelessWidget {
       return const LoginScreen();
     }
 
-    if (auth.user!.isCustomer) {
-      return const CustomerDashboardScreen();
+    final user = auth.user!;
+
+    if (user.isCustomer) {
+      return const CustomerShell();
+    } else if (user.isAdmin) {
+      return const AdminShell();
+    } else if (user.isManager) {
+      return const ManagerShell();
     } else {
-      return const EmployeeDashboardScreen();
+      // L1, L2, L3 Support Specialists & General Staff
+      return const TechnicianShell();
     }
   }
 }

@@ -16,14 +16,25 @@ class StatusBadge extends StatelessWidget {
         bg = AppColors.infoBg;
         text = AppColors.info;
         break;
-      case 'ASSIGNED':
       case 'IN_PROGRESS':
         bg = const Color(0xFFEFF6FF);
         text = AppColors.brandSecondary;
         break;
-      case 'ESCALATED':
-        bg = AppColors.warningBg;
-        text = AppColors.warning;
+      case 'PAUSED':
+        bg = const Color(0xFFFEF3C7);
+        text = const Color(0xFFB45309);
+        break;
+      case 'REOPENED':
+        bg = const Color(0xFFFEE2E2);
+        text = const Color(0xFFB91C1C);
+        break;
+      case 'MANAGER_REVIEW':
+        bg = const Color(0xFFF3E8FF);
+        text = const Color(0xFF6B21A8);
+        break;
+      case 'CUSTOMER_FEEDBACK':
+        bg = const Color(0xFFE0E7FF);
+        text = const Color(0xFF3730A3);
         break;
       case 'RESOLVED':
         bg = AppColors.successBg;
@@ -43,7 +54,7 @@ class StatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: text.withOpacity(0.2)),
+        border: Border.all(color: text.withAlpha(50)),
       ),
       child: Text(
         status.replaceAll('_', ' '),

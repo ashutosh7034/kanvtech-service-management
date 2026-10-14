@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
+    auth.clearSessionTerminatedMessage();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
@@ -45,31 +46,92 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  void _showServerConfigDialog() {
+    final auth = context.read<AuthProvider>();
+    final controller = TextEditingController(text: auth.serverUrl);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Backend API Server'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Enter the backend API base endpoint URL (e.g. http://10.0.2.2:5000/api for emulator or LAN IP for device):',
+              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                labelText: 'Base API URL',
+                hintText: 'http://10.0.2.2:5000/api',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              auth.setServerUrl(null);
+              Navigator.pop(ctx);
+            },
+            child: const Text('Reset Default'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              auth.setServerUrl(controller.text.trim());
+              Navigator.pop(ctx);
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
 
     return Scaffold(
       backgroundColor: AppColors.bgApp,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings_ethernet,
+                color: AppColors.brandPrimary),
+            tooltip: 'Server Settings (${auth.serverUrl})',
+            onPressed: _showServerConfigDialog,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Header
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandPrimaryLight,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.shield_outlined,
-                    color: AppColors.brandPrimary,
-                    size: 40,
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      color: AppColors.brandPrimaryLight,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.shield_outlined,
+                      color: AppColors.brandPrimary,
+                      size: 40,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -92,7 +154,48 @@ class _LoginScreenState extends State<LoginScreen> {
                     color: AppColors.textMuted,
                   ),
                 ),
-                const SizedBox(height: 32),
+                if (auth.sessionTerminatedMessage != null) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.dangerBg,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.security_update_warning_outlined,
+                          color: AppColors.danger,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            auth.sessionTerminatedMessage!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.danger,
+                              height: 1.4,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        GestureDetector(
+                          onTap: () => auth.clearSessionTerminatedMessage(),
+                          child: const Icon(
+                            Icons.close,
+                            size: 16,
+                            color: AppColors.danger,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
 
                 // Card container
                 Card(
@@ -125,13 +228,17 @@ class _LoginScreenState extends State<LoginScreen> {
                           obscureText: _obscurePassword,
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            prefixIcon: const Icon(Icons.lock_outline, size: 18),
+                            prefixIcon:
+                                const Icon(Icons.lock_outline, size: 18),
                             suffixIcon: IconButton(
                               icon: Icon(
-                                _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                _obscurePassword
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined,
                                 size: 18,
                               ),
-                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              onPressed: () => setState(
+                                  () => _obscurePassword = !_obscurePassword),
                             ),
                           ),
                         ),
@@ -142,7 +249,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2),
                                 )
                               : const Text('Sign In to Account'),
                         ),
@@ -170,9 +278,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   alignment: WrapAlignment.center,
                   children: [
                     _demoChip(context, 'Customer', 'CUSTOMER'),
-                    _demoChip(context, 'L1 Tech', 'L1_EMPLOYEE'),
-                    _demoChip(context, 'L2 Tech', 'L2_EMPLOYEE'),
-                    _demoChip(context, 'L3 Tech', 'L3_EMPLOYEE'),
+                    _demoChip(context, 'L1 Specialist', 'L1_EMPLOYEE'),
+                    _demoChip(context, 'L2 Specialist', 'L2_EMPLOYEE'),
+                    _demoChip(context, 'L3 Specialist', 'L3_EMPLOYEE'),
                     _demoChip(context, 'Manager', 'MANAGER'),
                     _demoChip(context, 'Admin', 'ADMIN'),
                   ],
@@ -191,7 +299,10 @@ class _LoginScreenState extends State<LoginScreen> {
       side: const BorderSide(color: AppColors.borderMedium),
       label: Text(
         label,
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+        style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary),
       ),
       onPressed: () {
         context.read<AuthProvider>().switchDemoRole(role);

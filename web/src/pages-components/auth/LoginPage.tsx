@@ -15,6 +15,12 @@ export const LoginPage: React.FC = () => {
 
   useEffect(() => {
     try {
+      const sessionNotice = sessionStorage.getItem('kanvtech_session_notice');
+      if (sessionNotice) {
+        setError(sessionNotice);
+        sessionStorage.removeItem('kanvtech_session_notice');
+      }
+
       const isRemembered = localStorage.getItem('kanvtech_remember_me') === 'true';
       const savedEmail = localStorage.getItem('kanvtech_remembered_email');
       if (isRemembered && savedEmail) {
@@ -22,7 +28,7 @@ export const LoginPage: React.FC = () => {
         setRememberMe(true);
       }
     } catch {
-      // Ignore localStorage access issues
+      // Ignore storage access issues
     }
 
     // Check for browser autofill on email if not already set
