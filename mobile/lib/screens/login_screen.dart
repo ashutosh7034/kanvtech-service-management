@@ -304,8 +304,18 @@ class _LoginScreenState extends State<LoginScreen> {
             fontWeight: FontWeight.w500,
             color: AppColors.textPrimary),
       ),
-      onPressed: () {
-        context.read<AuthProvider>().switchDemoRole(role);
+      onPressed: () async {
+        final auth = context.read<AuthProvider>();
+        auth.clearSessionTerminatedMessage();
+        final success = await auth.switchDemoRole(role);
+        if (!success && context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(auth.errorMessage ?? 'Login failed. Check server connectivity.'),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        }
       },
     );
   }

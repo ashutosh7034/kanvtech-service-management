@@ -147,25 +147,47 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<bool> switchDemoRole(String role) async {
-    // Official evaluation and demo credentials from repository documentation
+    // Official evaluation and demo credentials matching active database accounts
     final credentials = {
-      'ADMIN': {'email': 'admin@kanvtech.com', 'password': 'admin123'},
-      'MANAGER': {'email': 'manager@kanvtech.com', 'password': 'manager123'},
-      'L1_EMPLOYEE': {'email': 'amit.l1@kanvtech.com', 'password': 'l1pass123'},
+      'ADMIN': {
+        'email': 'admin@kanvtech.com',
+        'password': 'Password@123',
+        'fallbackPassword': 'admin123',
+      },
+      'MANAGER': {
+        'email': 'manager@kanvtech.com',
+        'password': 'Password@123',
+        'fallbackPassword': 'manager123',
+      },
+      'L1_EMPLOYEE': {
+        'email': 'l1.amit@kanvtech.com',
+        'password': 'Password@123',
+        'fallbackPassword': 'l1pass123',
+      },
       'L2_EMPLOYEE': {
-        'email': 'rahul.l2@kanvtech.com',
-        'password': 'l2pass123'
+        'email': 'l2.vikram@kanvtech.com',
+        'password': 'Password@123',
+        'fallbackPassword': 'l2pass123',
       },
       'L3_EMPLOYEE': {
-        'email': 'priya.l3@kanvtech.com',
-        'password': 'l3pass123'
+        'email': 'l3.priya@kanvtech.com',
+        'password': 'Password@123',
+        'fallbackPassword': 'l3pass123',
       },
-      'CUSTOMER': {'email': 'contact@acme.com', 'password': 'cust123'},
+      'CUSTOMER': {
+        'email': 'rajesh@acme.com',
+        'password': 'Password@123',
+        'fallbackPassword': 'cust123',
+      },
     };
 
     final creds = credentials[role];
     if (creds != null) {
-      return await login(creds['email']!, creds['password']!);
+      final success = await login(creds['email']!, creds['password']!);
+      if (!success && creds['fallbackPassword'] != null) {
+        return await login(creds['email']!, creds['fallbackPassword']!);
+      }
+      return success;
     }
     return false;
   }
