@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 import 'customer/customer_dashboard_screen.dart';
 import 'customer/create_ticket_screen.dart';
@@ -9,6 +11,7 @@ import 'common/tasks_screen.dart';
 import 'common/chat_screen.dart';
 import 'common/attendance_screen.dart';
 import 'common/profile_screen.dart';
+import 'login_screen.dart';
 
 // ---------------------------------------------------------------------------
 // CUSTOMER SHELL
@@ -233,3 +236,29 @@ class _AdminShellState extends State<AdminShell> {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// ROLE SHELL DISPATCHER
+// ---------------------------------------------------------------------------
+class RoleShellDispatcher extends StatelessWidget {
+  const RoleShellDispatcher({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+    if (!auth.isAuthenticated || auth.user == null) {
+      return const LoginScreen();
+    }
+    final user = auth.user!;
+    if (user.isCustomer) {
+      return const CustomerShell();
+    } else if (user.isAdmin) {
+      return const AdminShell();
+    } else if (user.isManager) {
+      return const ManagerShell();
+    } else {
+      return const TechnicianShell();
+    }
+  }
+}
+

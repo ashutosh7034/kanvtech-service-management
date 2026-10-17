@@ -355,3 +355,324 @@ class DashboardStatsModel {
     );
   }
 }
+
+class DepartmentModel {
+  final String id;
+  final String name;
+  final String? code;
+  final String? description;
+  final bool isActive;
+  final int employeeCount;
+  final String? managerName;
+  final List<String> specializations;
+
+  DepartmentModel({
+    required this.id,
+    required this.name,
+    this.code,
+    this.description,
+    this.isActive = true,
+    this.employeeCount = 0,
+    this.managerName,
+    this.specializations = const [],
+  });
+
+  factory DepartmentModel.fromJson(Map<String, dynamic> json) {
+    List<String> specs = [];
+    if (json['specializations'] is List) {
+      specs = (json['specializations'] as List)
+          .map((s) => s is Map ? s['name']?.toString() ?? '' : s.toString())
+          .where((s) => s.isNotEmpty)
+          .toList();
+    }
+
+    int count = 0;
+    if (json['employees'] is List) {
+      count = (json['employees'] as List).length;
+    } else if (json['employeeCount'] != null) {
+      count = int.tryParse('${json['employeeCount']}') ?? 0;
+    }
+
+    return DepartmentModel(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      code: json['code']?.toString(),
+      description: json['description']?.toString(),
+      isActive: json['isActive'] != false && json['is_active'] != false,
+      employeeCount: count,
+      managerName: json['manager']?['name']?.toString(),
+      specializations: specs,
+    );
+  }
+}
+
+class EmployeeDetailModel {
+  final String id;
+  final int userId;
+  final String name;
+  final String email;
+  final String? phone;
+  final String role;
+  final String level;
+  final String? departmentId;
+  final String? departmentName;
+  final String status;
+  final String availability;
+  final int assignedTicketsCount;
+
+  EmployeeDetailModel({
+    required this.id,
+    required this.userId,
+    required this.name,
+    required this.email,
+    this.phone,
+    required this.role,
+    required this.level,
+    this.departmentId,
+    this.departmentName,
+    this.status = 'ACTIVE',
+    this.availability = 'AVAILABLE',
+    this.assignedTicketsCount = 0,
+  });
+
+  factory EmployeeDetailModel.fromJson(Map<String, dynamic> json) {
+    int ticketCount = 0;
+    if (json['assignedTickets'] is List) {
+      ticketCount = (json['assignedTickets'] as List).length;
+    } else if (json['openTicketsCount'] != null || json['assignedTicketsCount'] != null) {
+      ticketCount = int.tryParse('${json['openTicketsCount'] ?? json['assignedTicketsCount']}') ?? 0;
+    }
+
+    return EmployeeDetailModel(
+      id: json['id']?.toString() ?? '',
+      userId: json['userId'] is int
+          ? json['userId']
+          : int.tryParse('${json['userId'] ?? json['user_id'] ?? 0}') ?? 0,
+      name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      phone: json['phone']?.toString(),
+      role: json['role']?.toString() ?? json['user']?['role']?.toString() ?? 'EMPLOYEE',
+      level: json['level']?.toString() ?? 'L1',
+      departmentId: json['departmentId']?.toString() ?? json['department_id']?.toString(),
+      departmentName: json['department']?['name']?.toString() ?? json['departmentName']?.toString(),
+      status: json['status']?.toString() ?? 'ACTIVE',
+      availability: json['availability']?.toString() ?? 'AVAILABLE',
+      assignedTicketsCount: ticketCount,
+    );
+  }
+}
+
+class ProspectModel {
+  final String id;
+  final String companyName;
+  final String contactPerson;
+  final String? email;
+  final String phone;
+  final String? address;
+  final String enquiry;
+  final String status;
+  final String? source;
+  final DateTime createdAt;
+
+  ProspectModel({
+    required this.id,
+    required this.companyName,
+    required this.contactPerson,
+    this.email,
+    required this.phone,
+    this.address,
+    required this.enquiry,
+    required this.status,
+    this.source,
+    required this.createdAt,
+  });
+
+  factory ProspectModel.fromJson(Map<String, dynamic> json) {
+    return ProspectModel(
+      id: json['id']?.toString() ?? '',
+      companyName: json['companyName']?.toString() ?? json['company_name']?.toString() ?? '',
+      contactPerson: json['contactPerson']?.toString() ?? json['contact_person']?.toString() ?? '',
+      email: json['email']?.toString(),
+      phone: json['phone']?.toString() ?? '',
+      address: json['address']?.toString(),
+      enquiry: json['enquiry']?.toString() ?? json['description']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'NEW',
+      source: json['source']?.toString(),
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? json['created_at']?.toString() ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+class ImplementationModel {
+  final String id;
+  final String companyId;
+  final String companyName;
+  final String productId;
+  final String productName;
+  final String stage;
+  final String status;
+  final int progressPercent;
+  final DateTime? targetDate;
+  final List<ImplementationTaskModel> tasks;
+
+  ImplementationModel({
+    required this.id,
+    required this.companyId,
+    required this.companyName,
+    required this.productId,
+    required this.productName,
+    required this.stage,
+    required this.status,
+    required this.progressPercent,
+    this.targetDate,
+    this.tasks = const [],
+  });
+
+  factory ImplementationModel.fromJson(Map<String, dynamic> json) {
+    final rawTasks = json['tasks'] as List? ?? [];
+    return ImplementationModel(
+      id: json['id']?.toString() ?? '',
+      companyId: json['companyId']?.toString() ?? json['company_id']?.toString() ?? '',
+      companyName: json['company']?['companyName']?.toString() ?? json['companyName']?.toString() ?? 'Company',
+      productId: json['productId']?.toString() ?? json['product_id']?.toString() ?? '',
+      productName: json['product']?['name']?.toString() ?? json['productName']?.toString() ?? 'Product',
+      stage: json['stage']?.toString() ?? 'PLANNING',
+      status: json['status']?.toString() ?? 'IN_PROGRESS',
+      progressPercent: json['progressPercent'] is int
+          ? json['progressPercent']
+          : int.tryParse('${json['progressPercent'] ?? json['progress'] ?? 0}') ?? 0,
+      targetDate: json['targetDate'] != null
+          ? DateTime.tryParse(json['targetDate'].toString())
+          : null,
+      tasks: rawTasks.map((t) => ImplementationTaskModel.fromJson(t as Map<String, dynamic>)).toList(),
+    );
+  }
+}
+
+class ImplementationTaskModel {
+  final String id;
+  final String title;
+  final String stage;
+  final bool isCompleted;
+
+  ImplementationTaskModel({
+    required this.id,
+    required this.title,
+    required this.stage,
+    required this.isCompleted,
+  });
+
+  factory ImplementationTaskModel.fromJson(Map<String, dynamic> json) {
+    return ImplementationTaskModel(
+      id: json['id']?.toString() ?? '',
+      title: json['title']?.toString() ?? 'Task',
+      stage: json['stage']?.toString() ?? 'PLANNING',
+      isCompleted: json['isCompleted'] == true || json['is_completed'] == true,
+    );
+  }
+}
+
+class SubscriptionModel {
+  final String id;
+  final String companyId;
+  final String companyName;
+  final String productId;
+  final String productName;
+  final String planType;
+  final DateTime startDate;
+  final DateTime endDate;
+  final String status;
+  final double? annualValue;
+
+  SubscriptionModel({
+    required this.id,
+    required this.companyId,
+    required this.companyName,
+    required this.productId,
+    required this.productName,
+    required this.planType,
+    required this.startDate,
+    required this.endDate,
+    required this.status,
+    this.annualValue,
+  });
+
+  factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
+    return SubscriptionModel(
+      id: json['id']?.toString() ?? '',
+      companyId: json['companyId']?.toString() ?? json['company_id']?.toString() ?? '',
+      companyName: json['company']?['companyName']?.toString() ?? json['companyName']?.toString() ?? 'Company',
+      productId: json['productId']?.toString() ?? json['product_id']?.toString() ?? '',
+      productName: json['product']?['name']?.toString() ?? json['productName']?.toString() ?? 'Product',
+      planType: json['planType']?.toString() ?? json['plan_type']?.toString() ?? 'STANDARD',
+      startDate: DateTime.tryParse(json['startDate']?.toString() ?? json['start_date']?.toString() ?? '') ?? DateTime.now(),
+      endDate: DateTime.tryParse(json['endDate']?.toString() ?? json['end_date']?.toString() ?? '') ?? DateTime.now().add(const Duration(days: 365)),
+      status: json['status']?.toString() ?? 'ACTIVE',
+      annualValue: json['annualValue'] != null ? double.tryParse(json['annualValue'].toString()) : null,
+    );
+  }
+}
+
+class AuditLogModel {
+  final int id;
+  final DateTime createdAt;
+  final String actorEmail;
+  final String actorRole;
+  final String action;
+  final String entityType;
+  final String? entityId;
+  final String? ipAddress;
+
+  AuditLogModel({
+    required this.id,
+    required this.createdAt,
+    required this.actorEmail,
+    required this.actorRole,
+    required this.action,
+    required this.entityType,
+    this.entityId,
+    this.ipAddress,
+  });
+
+  factory AuditLogModel.fromJson(Map<String, dynamic> json) {
+    return AuditLogModel(
+      id: json['id'] is int ? json['id'] : int.tryParse('${json['id'] ?? 0}') ?? 0,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '') ?? DateTime.now(),
+      actorEmail: json['actor_email']?.toString() ?? json['actorEmail']?.toString() ?? 'System',
+      actorRole: json['actor_role']?.toString() ?? json['actorRole']?.toString() ?? 'SYSTEM',
+      action: json['action']?.toString() ?? '',
+      entityType: json['entity_type']?.toString() ?? json['entityType']?.toString() ?? '',
+      entityId: json['entity_id']?.toString() ?? json['entityId']?.toString(),
+      ipAddress: json['ip_address']?.toString() ?? json['ipAddress']?.toString(),
+    );
+  }
+}
+
+class SlaConfigModel {
+  final String priority;
+  final int responseTimeHours;
+  final int resolutionTimeHours;
+  final int warningThresholdPercent;
+
+  SlaConfigModel({
+    required this.priority,
+    required this.responseTimeHours,
+    required this.resolutionTimeHours,
+    required this.warningThresholdPercent,
+  });
+
+  factory SlaConfigModel.fromJson(Map<String, dynamic> json) {
+    return SlaConfigModel(
+      priority: json['priority']?.toString().toUpperCase() ?? 'MEDIUM',
+      responseTimeHours: json['response_time_hours'] is int
+          ? json['response_time_hours']
+          : int.tryParse('${json['response_time_hours'] ?? json['responseTimeHours'] ?? 24}') ?? 24,
+      resolutionTimeHours: json['resolution_time_hours'] is int
+          ? json['resolution_time_hours']
+          : int.tryParse('${json['resolution_time_hours'] ?? json['resolutionTimeHours'] ?? 72}') ?? 72,
+      warningThresholdPercent: json['warning_threshold_percent'] is int
+          ? json['warning_threshold_percent']
+          : int.tryParse('${json['warning_threshold_percent'] ?? json['warningThresholdPercent'] ?? 75}') ?? 75,
+    );
+  }
+}

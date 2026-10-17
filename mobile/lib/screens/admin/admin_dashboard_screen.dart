@@ -4,7 +4,20 @@ import '../../providers/auth_provider.dart';
 import '../../providers/operations_provider.dart';
 import '../../providers/tickets_provider.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_drawer.dart';
 import '../manager/manager_dashboard_screen.dart';
+import '../management/companies_screen.dart';
+import '../management/departments_screen.dart';
+import '../management/employees_screen.dart';
+import '../management/products_screen.dart';
+import '../management/implementations_screen.dart';
+import '../management/maintenance_screen.dart';
+import '../management/prospects_screen.dart';
+import '../management/reports_screen.dart';
+import '../management/escalations_screen.dart';
+import '../management/approvals_screen.dart';
+import '../management/sla_settings_screen.dart';
+import '../management/audit_logs_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -100,6 +113,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: RefreshIndicator(
         onRefresh: () async {
           await ops.fetchAdminDashboard();
@@ -201,7 +215,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
             // Management Quick Actions
             const Text(
-              'Administrative Governance',
+              'Administrative Governance & Master Data',
               style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
@@ -209,46 +223,111 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             ),
             const SizedBox(height: 10),
 
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.assignment_ind,
-                    color: AppColors.brandPrimary),
-                title: const Text('Task Allotment & Workload Queue',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                subtitle: const Text(
-                    'Specialist workload distribution and ticket reassignments',
-                    style: TextStyle(fontSize: 12)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const ManagerDashboardScreen()),
-                  );
-                },
-              ),
+            _navTile(
+              icon: Icons.assignment_ind,
+              title: 'Task Allotment & Workload Queue',
+              subtitle: 'Specialist workload distribution and manual ticket assignments',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManagerDashboardScreen())),
             ),
-            const SizedBox(height: 8),
-
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.settings_suggest,
-                    color: AppColors.brandPrimary),
-                title: const Text('Ticket Auto-Assignment Rule',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                subtitle: Text(
-                    'Currently routed to: ${ops.autoAssignmentLevel}',
-                    style: const TextStyle(fontSize: 12)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () =>
-                    _showAssignmentSettingDialog(ops.autoAssignmentLevel),
-              ),
+            _navTile(
+              icon: Icons.priority_high,
+              title: 'Senior Tier Escalation Queue',
+              subtitle: 'L2 and L3 escalated tickets review and rebalancing',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EscalationsScreen())),
+            ),
+            _navTile(
+              icon: Icons.verified_outlined,
+              title: 'Resolution Approvals',
+              subtitle: 'Review resolved tickets and sign off on technical resolutions',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ApprovalsScreen())),
+            ),
+            _navTile(
+              icon: Icons.business_outlined,
+              title: 'Customer Master Directory',
+              subtitle: 'Manage client companies, branch locations, and contacts',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompaniesScreen())),
+            ),
+            _navTile(
+              icon: Icons.apartment_outlined,
+              title: 'Department Master',
+              subtitle: 'Configure departments, specializations, and leads',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DepartmentsScreen())),
+            ),
+            _navTile(
+              icon: Icons.people_outline,
+              title: 'Specialist Employee Directory',
+              subtitle: 'Directory, tier management (L1/L2/L3), and status',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EmployeesScreen())),
+            ),
+            _navTile(
+              icon: Icons.inventory_2_outlined,
+              title: 'Product Master Catalog',
+              subtitle: 'Enterprise software products, modules, and submodules',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen())),
+            ),
+            _navTile(
+              icon: Icons.rocket_launch_outlined,
+              title: 'Client Implementations',
+              subtitle: 'Track new onboarding projects, milestone stages, and tasks',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImplementationsScreen())),
+            ),
+            _navTile(
+              icon: Icons.handshake_outlined,
+              title: 'Annual Maintenance & AMC Subscriptions',
+              subtitle: 'Manage client contracts, renewal dates, and expiry alerts',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MaintenanceScreen())),
+            ),
+            _navTile(
+              icon: Icons.contact_support_outlined,
+              title: 'Enquiries & Prospects',
+              subtitle: 'Track incoming client requests and conversion pipeline',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProspectsScreen())),
+            ),
+            _navTile(
+              icon: Icons.analytics_outlined,
+              title: 'Operational Analytics & Reports',
+              subtitle: 'Resolution by tier, SLA compliance, and workload stats',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsScreen())),
+            ),
+            _navTile(
+              icon: Icons.tune,
+              title: 'SLA Configuration',
+              subtitle: 'Response & resolution time limits for priority tiers',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SlaSettingsScreen())),
+            ),
+            _navTile(
+              icon: Icons.security,
+              title: 'Security & Audit Logs',
+              subtitle: 'Platform security audit trail, user actions, and timestamps',
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditLogsScreen())),
+            ),
+            _navTile(
+              icon: Icons.settings_suggest,
+              title: 'Ticket Auto-Assignment Rule',
+              subtitle: 'Currently routed to default tier: ${ops.autoAssignmentLevel}',
+              onTap: () => _showAssignmentSettingDialog(ops.autoAssignmentLevel),
             ),
             const SizedBox(height: 40),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _navTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: ListTile(
+        leading: Icon(icon, color: AppColors.brandPrimary),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        trailing: const Icon(Icons.chevron_right, size: 18),
+        onTap: onTap,
       ),
     );
   }

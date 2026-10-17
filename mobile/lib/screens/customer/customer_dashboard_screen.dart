@@ -5,6 +5,7 @@ import '../../providers/tickets_provider.dart';
 import '../../models/ticket_model.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/app_drawer.dart';
 import 'create_ticket_screen.dart';
 import 'customer_ticket_detail_screen.dart';
 
@@ -50,6 +51,7 @@ class _CustomerDashboardScreenState extends State<CustomerDashboardScreen> {
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       floatingActionButton: canCreate
           ? FloatingActionButton.extended(
               backgroundColor: AppColors.brandPrimary,

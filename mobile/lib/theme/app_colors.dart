@@ -16,6 +16,10 @@ class AppColors {
 
   static const Color borderSubtle = Color(0xFFE2E8F0);
   static const Color borderMedium = Color(0xFFCBD5E1);
+  static const Color borderLight = borderSubtle;
+
+  static const Color accent = brandSecondary;
+  static const Color accentLight = brandPrimaryLight;
 
   static const Color success = Color(0xFF16A34A);
   static const Color successBg = Color(0xFFF0FDF4);

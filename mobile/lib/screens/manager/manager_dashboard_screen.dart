@@ -6,6 +6,7 @@ import '../../providers/allotment_provider.dart';
 import '../../models/ticket_model.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/app_drawer.dart';
 import '../employee/employee_ticket_detail_screen.dart';
 
 class ManagerDashboardScreen extends StatefulWidget {
@@ -241,6 +242,7 @@ class _ManagerDashboardScreenState extends State<ManagerDashboardScreen>
           ],
         ),
       ),
+      drawer: const AppDrawer(),
       body: TabBarView(
         controller: _tabController,
         children: [

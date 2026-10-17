@@ -5,6 +5,7 @@ import '../../providers/tickets_provider.dart';
 import '../../models/ticket_model.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/status_badge.dart';
+import '../../widgets/app_drawer.dart';
 import 'employee_ticket_detail_screen.dart';
 
 class EmployeeDashboardScreen extends StatefulWidget {
@@ -55,6 +56,7 @@ class _EmployeeDashboardScreenState extends State<EmployeeDashboardScreen> {
           ),
         ],
       ),
+      drawer: const AppDrawer(),
       body: RefreshIndicator(
         onRefresh: () => ticketsProvider.fetchTickets(),
         child: Column(

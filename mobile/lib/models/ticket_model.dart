@@ -199,6 +199,10 @@ class TicketModel {
   bool get canCustomerReopen => isCustomerFeedback || isResolved;
   bool get canCustomerRate =>
       isCustomerFeedback || (isResolved && feedback == null);
+
+  String get ticketNumber => id;
+  String get level => assignedLevel;
+  bool get slaBreached => slaStatus == 'BREACHED';
 }
 
 class TicketCommentModel {
