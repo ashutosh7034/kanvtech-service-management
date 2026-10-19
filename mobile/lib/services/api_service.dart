@@ -41,7 +41,7 @@ class ApiService {
     }
     if (kIsWeb) return 'http://localhost:5000/api';
     try {
-      if (Platform.isAndroid) return 'http://10.0.2.2:5000/api';
+      if (Platform.isAndroid) return 'http://127.0.0.1:5000/api';
     } catch (_) {}
     return 'http://localhost:5000/api';
   }
@@ -492,7 +492,7 @@ class ApiService {
       headers: _headers(),
     );
     final data = _processResponse(res);
-    final rawList = data['products'] ?? data['data'];
+    final rawList = data is Map ? (data['products'] ?? data['data']) : (data is List ? data : null);
     if (rawList is List) {
       return rawList
           .map((p) => ProductModel.fromJson(p as Map<String, dynamic>))
@@ -824,8 +824,9 @@ class ApiService {
     );
     final res = await http.get(uri, headers: _headers());
     final data = _processResponse(res);
-    final rawList =
-        data['employees'] ?? data['data'] ?? (data is List ? data : []);
+    final rawList = data is Map
+        ? (data['employees'] ?? data['data'] ?? [])
+        : (data is List ? data : []);
     if (rawList is List) {
       return rawList
           .map((e) => EmployeeDetailModel.fromJson(e as Map<String, dynamic>))
@@ -1131,7 +1132,9 @@ class ApiService {
       headers: _headers(),
     );
     final data = _processResponse(res);
-    final rawList = data['configs'] ?? data['configurations'] ?? [];
+    final rawList = data is Map
+        ? (data['configs'] ?? data['configurations'] ?? data['data'] ?? [])
+        : (data is List ? data : []);
     if (rawList is List) {
       return rawList
           .map((c) => SlaConfigModel.fromJson(c as Map<String, dynamic>))
@@ -1165,7 +1168,9 @@ class ApiService {
       headers: _headers(),
     );
     final data = _processResponse(res);
-    final rawList = data['logs'] ?? [];
+    final rawList = data is Map
+        ? (data['logs'] ?? data['data'] ?? [])
+        : (data is List ? data : []);
     if (rawList is List) {
       return rawList
           .map((l) => AuditLogModel.fromJson(l as Map<String, dynamic>))

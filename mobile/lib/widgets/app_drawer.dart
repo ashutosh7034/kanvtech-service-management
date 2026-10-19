@@ -55,12 +55,21 @@ class AppDrawer extends StatelessWidget {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        width: 32,
+                        height: 32,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(10),
+                          color: AppColors.brandAccent,
+                          borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Icon(Icons.shield, color: Colors.white, size: 28),
+                        alignment: Alignment.center,
+                        child: const Text(
+                          'K',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 12),
                       const Column(

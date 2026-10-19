@@ -169,24 +169,27 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                   onChanged: (val) => setState(() => _search = val),
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: filters.map((f) {
-                    final isSel = _statusFilter == f;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: ChoiceChip(
-                        label: Text(f),
-                        selected: isSel,
-                        selectedColor: AppColors.brandPrimary,
-                        labelStyle: TextStyle(
-                          color: isSel ? Colors.white : AppColors.textPrimary,
-                          fontSize: 12,
-                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: filters.map((f) {
+                      final isSel = _statusFilter == f;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(f),
+                          selected: isSel,
+                          selectedColor: AppColors.brandPrimary,
+                          labelStyle: TextStyle(
+                            color: isSel ? Colors.white : AppColors.textPrimary,
+                            fontSize: 12,
+                            fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onSelected: (val) => setState(() => _statusFilter = f),
                         ),
-                        onSelected: (val) => setState(() => _statusFilter = f),
-                      ),
-                    );
-                  }).toList(),
+                      );
+                    }).toList(),
+                  ),
                 ),
               ],
             ),

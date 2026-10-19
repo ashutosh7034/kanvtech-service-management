@@ -77,28 +77,31 @@ class _EscalationsScreenState extends State<EscalationsScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             color: Colors.white,
-            child: Row(
-              children: [
-                const Text('Filter by Tier:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                const SizedBox(width: 12),
-                ...tiers.map((t) {
-                  final isSel = _selectedTier == t;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(t == 'ALL' ? 'All Escalations' : '$t Escalated'),
-                      selected: isSel,
-                      selectedColor: AppColors.brandPrimary,
-                      labelStyle: TextStyle(
-                        color: isSel ? Colors.white : AppColors.textPrimary,
-                        fontSize: 12,
-                        fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  const Text('Filter by Tier:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const SizedBox(width: 12),
+                  ...tiers.map((t) {
+                    final isSel = _selectedTier == t;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(t == 'ALL' ? 'All Escalations' : '$t Escalated'),
+                        selected: isSel,
+                        selectedColor: AppColors.brandPrimary,
+                        labelStyle: TextStyle(
+                          color: isSel ? Colors.white : AppColors.textPrimary,
+                          fontSize: 12,
+                          fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                        ),
+                        onSelected: (val) => setState(() => _selectedTier = t),
                       ),
-                      onSelected: (val) => setState(() => _selectedTier = t),
-                    ),
-                  );
-                }),
-              ],
+                    );
+                  }),
+                ],
+              ),
             ),
           ),
           Expanded(

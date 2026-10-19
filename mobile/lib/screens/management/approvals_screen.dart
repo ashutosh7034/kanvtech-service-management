@@ -3,6 +3,7 @@ import '../../services/api_service.dart';
 import '../../models/ticket_model.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_drawer.dart';
+import '../../widgets/status_badge.dart';
 import '../employee/employee_ticket_detail_screen.dart';
 
 class ApprovalsScreen extends StatefulWidget {
@@ -111,21 +112,16 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Text(
-                                        '#${t.ticketNumber} • ${t.problemType}',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.success.withValues(alpha: 0.12),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
+                                      Expanded(
                                         child: Text(
-                                          t.status,
-                                          style: const TextStyle(color: AppColors.success, fontWeight: FontWeight.bold, fontSize: 10),
+                                          '#${t.ticketNumber} • ${t.problemType}',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
+                                      const SizedBox(width: 8),
+                                      StatusBadge(status: t.status),
                                     ],
                                   ),
                                   const SizedBox(height: 6),

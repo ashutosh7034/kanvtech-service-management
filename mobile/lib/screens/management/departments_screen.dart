@@ -193,9 +193,12 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                                                 children: [
                                                   Row(
                                                     children: [
-                                                      Text(
-                                                        d.name,
-                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                                      Flexible(
+                                                        child: Text(
+                                                          d.name,
+                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
                                                       ),
                                                       if (d.code != null && d.code!.isNotEmpty) ...[
                                                         const SizedBox(width: 8),

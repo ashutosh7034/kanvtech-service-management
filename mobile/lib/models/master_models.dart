@@ -400,7 +400,7 @@ class DepartmentModel {
       description: json['description']?.toString(),
       isActive: json['isActive'] != false && json['is_active'] != false,
       employeeCount: count,
-      managerName: json['manager']?['name']?.toString(),
+      managerName: json['manager'] is Map ? json['manager']['name']?.toString() : json['manager']?.toString(),
       specializations: specs,
     );
   }
@@ -443,6 +443,12 @@ class EmployeeDetailModel {
       ticketCount = int.tryParse('${json['openTicketsCount'] ?? json['assignedTicketsCount']}') ?? 0;
     }
 
+    final userMap = json['user'] is Map ? json['user'] as Map : null;
+    final deptVal = json['department'];
+    final deptName = (deptVal is Map ? deptVal['name']?.toString() : null) ??
+        (deptVal is String ? deptVal : null) ??
+        json['departmentName']?.toString();
+
     return EmployeeDetailModel(
       id: json['id']?.toString() ?? '',
       userId: json['userId'] is int
@@ -451,10 +457,10 @@ class EmployeeDetailModel {
       name: json['name']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString(),
-      role: json['role']?.toString() ?? json['user']?['role']?.toString() ?? 'EMPLOYEE',
+      role: json['role']?.toString() ?? userMap?['role']?.toString() ?? 'EMPLOYEE',
       level: json['level']?.toString() ?? 'L1',
       departmentId: json['departmentId']?.toString() ?? json['department_id']?.toString(),
-      departmentName: json['department']?['name']?.toString() ?? json['departmentName']?.toString(),
+      departmentName: deptName,
       status: json['status']?.toString() ?? 'ACTIVE',
       availability: json['availability']?.toString() ?? 'AVAILABLE',
       assignedTicketsCount: ticketCount,

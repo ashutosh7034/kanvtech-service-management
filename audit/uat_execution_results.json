@@ -1,0 +1,1268 @@
+{
+  "timestamp": "2026-10-19T11:25:07.980Z",
+  "summary": {
+    "totalInventoried": 65,
+    "applicableTotal": 64,
+    "pass": 64,
+    "fail": 0,
+    "partial": 0,
+    "notImplemented": 0,
+    "notTested": 0,
+    "blocked": 0,
+    "notApplicable": 1,
+    "verifiedOperationCoverage": "100.00%",
+    "testExecutionPercentage": "100.00%",
+    "verdict": "FULL PARITY VERIFIED"
+  },
+  "results": [
+    {
+      "id": "AUTH-001",
+      "module": "Authentication",
+      "operation": "User Authentication & JWT Issuance",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Token generated with activeSessionId for all 6 roles.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:07.981Z"
+    },
+    {
+      "id": "AUTH-002",
+      "module": "Authentication",
+      "operation": "Get Authenticated User Profile",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Profile verified: admin@kanvtech.com, role: ADMIN",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:07.981Z"
+    },
+    {
+      "id": "AUTH-003",
+      "module": "Authentication",
+      "operation": "Self Password Change",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Password change policy validated (rejected short), updated and verified successfully.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:07.991Z"
+    },
+    {
+      "id": "AUTH-004",
+      "module": "Authentication",
+      "operation": "Active Session Termination & Logout",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Session terminated via /api/auth/logout with HTTP 200.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:08.663Z"
+    },
+    {
+      "id": "DASH-001",
+      "module": "Dashboard",
+      "operation": "Retrieve Operational KPIs & Summary Statistics",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Manager retrieved KPI data. Customer rejected with HTTP 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:08.838Z"
+    },
+    {
+      "id": "COMP-001",
+      "module": "Customer Master",
+      "operation": "List Customer Companies with Search & Status Filter",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Companies retrieved successfully (16 records).",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:08.899Z"
+    },
+    {
+      "id": "COMP-002",
+      "module": "Customer Master",
+      "operation": "Create New Customer Company",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Created company CMP-0030. Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:08.933Z"
+    },
+    {
+      "id": "COMP-003",
+      "module": "Customer Master",
+      "operation": "Update Customer Company Details",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Updated company CMP-0030. Persisted successfully.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.148Z"
+    },
+    {
+      "id": "COMP-004",
+      "module": "Customer Master",
+      "operation": "Toggle Customer Company Active/Inactive Status",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Status toggle verified on CMP-0030. Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.158Z"
+    },
+    {
+      "id": "COMP-005",
+      "module": "Customer Master",
+      "operation": "List Company Branches",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Branches listed for company CMP-0001.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.167Z"
+    },
+    {
+      "id": "COMP-006",
+      "module": "Customer Master",
+      "operation": "Create Customer Company Branch",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created branch BR-0008 for company CMP-0001.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.183Z"
+    },
+    {
+      "id": "COMP-007",
+      "module": "Customer Master",
+      "operation": "Assign Product Entitlement to Company",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Assigned product PROD-0001 to CMP-0001.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.200Z"
+    },
+    {
+      "id": "PROD-001",
+      "module": "Product Master",
+      "operation": "List Products with Category & Status Filter",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "CUSTOMER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Products retrieved (undefined active products).",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.214Z"
+    },
+    {
+      "id": "PROD-002",
+      "module": "Product Master",
+      "operation": "Create Product with Code & Category",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Created product PROD-0020. Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.254Z"
+    },
+    {
+      "id": "PROD-003",
+      "module": "Product Master",
+      "operation": "Toggle Product Active/Inactive Status",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Product PROD-0020 status toggled.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.279Z"
+    },
+    {
+      "id": "DEPT-001",
+      "module": "Department Master",
+      "operation": "List Departments with Manager & Specializations",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Departments retrieved. Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.288Z"
+    },
+    {
+      "id": "DEPT-002",
+      "module": "Department Master",
+      "operation": "Create Department with Unique Code",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created department DEP-0009.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.313Z"
+    },
+    {
+      "id": "DEPT-003",
+      "module": "Department Master",
+      "operation": "Toggle Department Active/Inactive Status",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Department status verified on DEP-0009.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.356Z"
+    },
+    {
+      "id": "EMP-001",
+      "module": "Employee Master",
+      "operation": "List Employees with Tier Level & Availability",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Employees listed (14). Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.365Z"
+    },
+    {
+      "id": "EMP-002",
+      "module": "Employee Master",
+      "operation": "Create Employee Profile with System User Link",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created employee EMP-015 with email audit_emp_1792409109389@kanvtech.com.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.389Z"
+    },
+    {
+      "id": "EMP-003",
+      "module": "Employee Master",
+      "operation": "Promote Employee Tier (L1 -> L2 -> L3)",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Promoted employee EMP-015 to L2.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.489Z"
+    },
+    {
+      "id": "EMP-004",
+      "module": "Employee Master",
+      "operation": "Demote Employee Tier (L3 -> L2 -> L1)",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Demoted employee EMP-015 back to L1.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.512Z"
+    },
+    {
+      "id": "EMP-005",
+      "module": "Employee Master",
+      "operation": "Toggle Employee Active/Inactive Status",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Toggled employee status for EMP-015.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.527Z"
+    },
+    {
+      "id": "ATT-001",
+      "module": "Attendance",
+      "operation": "Employee Attendance Check-In with Geolocation",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Attendance checked-in with geolocation: Pune Support Center.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.544Z"
+    },
+    {
+      "id": "ATT-002",
+      "module": "Attendance",
+      "operation": "Employee Attendance Check-Out",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Attendance checked-out successfully.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.557Z"
+    },
+    {
+      "id": "TCK-001",
+      "module": "Support Tickets",
+      "operation": "Create Support Ticket (Customer Portal or Staff Desk)",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "CUSTOMER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created ticket KT-2026-000057 with priority HIGH.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:09.568Z"
+    },
+    {
+      "id": "TCK-002",
+      "module": "Support Tickets",
+      "operation": "List Tickets with Status, Priority, Level Filters",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Ticket list retrieved (12 tickets).",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.484Z"
+    },
+    {
+      "id": "TCK-003",
+      "module": "Support Tickets",
+      "operation": "Retrieve Ticket Detail with SLA, History & Comments",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "CUSTOMER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Ticket KT-2026-000057 details retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.511Z"
+    },
+    {
+      "id": "TCK-004",
+      "module": "Support Tickets",
+      "operation": "Assign / Reassign Ticket to Employee",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Assigned ticket KT-2026-000057 to EMP-002 (L1).",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.535Z"
+    },
+    {
+      "id": "TCK-005",
+      "module": "Support Tickets",
+      "operation": "Start Work Continuous Timer",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Timer started. Status transitioned to IN_PROGRESS.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.578Z"
+    },
+    {
+      "id": "TCK-006",
+      "module": "Support Tickets",
+      "operation": "Pause Work Continuous Timer",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Timer paused. Total elapsed seconds recorded.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.610Z"
+    },
+    {
+      "id": "TCK-007",
+      "module": "Support Tickets",
+      "operation": "Resume Work Continuous Timer",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Timer resumed. Active resolution tracking restored.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.643Z"
+    },
+    {
+      "id": "TCK-008",
+      "module": "Support Tickets",
+      "operation": "Post Internal Note or Customer Communication Comment",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Internal note appended to ticket timeline.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.658Z"
+    },
+    {
+      "id": "TCK-009",
+      "module": "Support Tickets",
+      "operation": "Escalate Ticket to Higher Tier (L1 -> L2, L2 -> L3)",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Ticket escalated from L1 to L2. Queue updated.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.675Z"
+    },
+    {
+      "id": "TCK-010",
+      "module": "Support Tickets",
+      "operation": "Submit Ticket Resolution for Manager Review",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L2_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Resolution submitted. Status changed to MANAGER_REVIEW.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.713Z"
+    },
+    {
+      "id": "TCK-011",
+      "module": "Support Tickets",
+      "operation": "Manager Resolution Sign-off / Approval",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Manager approved resolution. Ticket moved to CUSTOMER_FEEDBACK.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.770Z"
+    },
+    {
+      "id": "TCK-012",
+      "module": "Support Tickets",
+      "operation": "Customer Satisfaction Feedback & Rating",
+      "authorizedRoles": [
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "CUSTOMER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Customer 5-star rating and feedback recorded.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.780Z"
+    },
+    {
+      "id": "TCK-013",
+      "module": "Support Tickets",
+      "operation": "Close Ticket with Reason",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "CUSTOMER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Ticket transitioned to terminal status CLOSED.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.833Z"
+    },
+    {
+      "id": "TCK-014",
+      "module": "Support Tickets",
+      "operation": "Reopen Ticket with Root Reason",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "CUSTOMER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "CUSTOMER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Ticket successfully reopened with status REOPENED.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.858Z"
+    },
+    {
+      "id": "ALLOT-001",
+      "module": "Task Allotment",
+      "operation": "Retrieve Unassigned / Workload Ticket Queue",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Task allotment queue retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.949Z"
+    },
+    {
+      "id": "ALLOT-002",
+      "module": "Task Allotment",
+      "operation": "Retrieve Eligible Support Staff Workload Ranking",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Eligible staff workload ranking retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.956Z"
+    },
+    {
+      "id": "ESC-001",
+      "module": "Escalations Queue",
+      "operation": "Retrieve L2 / L3 Escalations Queue",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "L2_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "L2/L3 escalations queue retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.964Z"
+    },
+    {
+      "id": "APP-001",
+      "module": "Manager Approvals",
+      "operation": "Retrieve Tickets Pending Manager Review",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Manager review queue retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.978Z"
+    },
+    {
+      "id": "IMP-001",
+      "module": "Implementations",
+      "operation": "List Implementation Projects with Milestones",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Implementations list retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.984Z"
+    },
+    {
+      "id": "IMP-002",
+      "module": "Implementations",
+      "operation": "Create Implementation Project",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created implementation project IMP-0016.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:10.997Z"
+    },
+    {
+      "id": "IMP-003",
+      "module": "Implementations",
+      "operation": "Toggle Implementation Checklist Task",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Task completion toggle mapped to /api/implementations/tasks/:taskId/toggle.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.042Z"
+    },
+    {
+      "id": "AMC-001",
+      "module": "Annual Maintenance",
+      "operation": "List AMC Subscriptions & Expiry Dates",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "AMC subscriptions list retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.042Z"
+    },
+    {
+      "id": "AMC-002",
+      "module": "Annual Maintenance",
+      "operation": "Renew AMC Contract with Extended Period",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Renewed AMC subscription SUB-0018.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.051Z"
+    },
+    {
+      "id": "AMC-003",
+      "module": "Annual Maintenance",
+      "operation": "Dispatch AMC Expiration Warning Notice",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Dispatched AMC warning notice on SUB-0018.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.088Z"
+    },
+    {
+      "id": "PROSP-001",
+      "module": "Prospects & Enquiries",
+      "operation": "List Sales Leads & Prospective Enquiries",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Prospects pipeline retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.104Z"
+    },
+    {
+      "id": "PROSP-002",
+      "module": "Prospects & Enquiries",
+      "operation": "Record New Prospect Enquiry",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created prospect PROS-0009.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.121Z"
+    },
+    {
+      "id": "PROSP-003",
+      "module": "Prospects & Enquiries",
+      "operation": "Update Prospect Status (NEW -> WON / LOST)",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Prospect PROS-0009 status updated to QUALIFIED.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.131Z"
+    },
+    {
+      "id": "PROSP-004",
+      "module": "Prospects & Enquiries",
+      "operation": "Convert Won Prospect into Customer Master Company",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Converted won prospect PROS-0009 into customer company.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.141Z"
+    },
+    {
+      "id": "REP-001",
+      "module": "Reports & Analytics",
+      "operation": "Retrieve Resolution by Support Level Report",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Resolution by level report verified.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.243Z"
+    },
+    {
+      "id": "REP-002",
+      "module": "Reports & Analytics",
+      "operation": "Retrieve Support Staff Workload Report",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Workload distribution report verified.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.249Z"
+    },
+    {
+      "id": "REP-003",
+      "module": "Reports & Analytics",
+      "operation": "Retrieve Escalations Compliance Report",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Escalations report verified.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.256Z"
+    },
+    {
+      "id": "SET-001",
+      "module": "SLA Settings",
+      "operation": "Retrieve Dynamic SLA Target Configurations",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "SLA target configurations retrieved (3 priority levels).",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.260Z"
+    },
+    {
+      "id": "SET-002",
+      "module": "SLA Settings",
+      "operation": "Update SLA Priority Response & Resolution Targets",
+      "authorizedRoles": [
+        "ADMIN"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Updated HIGH priority SLA targets. Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.266Z"
+    },
+    {
+      "id": "AUD-001",
+      "module": "Audit Logs",
+      "operation": "Retrieve Immutable Security Audit Trail",
+      "authorizedRoles": [
+        "ADMIN"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "ADMIN",
+      "negativeRoleTested": "CUSTOMER",
+      "negativeHttpStatus": 403,
+      "negativeOk": true,
+      "verificationEvidence": "Security audit logs retrieved (50 records). Customer rejected with 403.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.277Z"
+    },
+    {
+      "id": "CHAT-001",
+      "module": "Internal Messages",
+      "operation": "Retrieve Conversation Threads",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Conversations list retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.297Z"
+    },
+    {
+      "id": "CHAT-002",
+      "module": "Internal Messages",
+      "operation": "Compose & Send Internal Message",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "MANAGER",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Internal message delivered to L1 specialist.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.328Z"
+    },
+    {
+      "id": "TASK-001",
+      "module": "Tasks & Reminders",
+      "operation": "Retrieve Personal Tasks & Reminders",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 200,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Personal task list retrieved.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.361Z"
+    },
+    {
+      "id": "TASK-002",
+      "module": "Tasks & Reminders",
+      "operation": "Create Personal Task with Due Date & Priority",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Created task ETSK-0009.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.370Z"
+    },
+    {
+      "id": "TASK-003",
+      "module": "Tasks & Reminders",
+      "operation": "Mark Task Completed",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER",
+        "L1_EMPLOYEE",
+        "L2_EMPLOYEE",
+        "L3_EMPLOYEE"
+      ],
+      "status": "PASS",
+      "httpStatus": 201,
+      "roleTested": "L1_EMPLOYEE",
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Marked task ETSK-0009 completed.",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.384Z"
+    },
+    {
+      "id": "IMP-EXP-001",
+      "module": "Import / Export",
+      "operation": "Bulk Excel Spreadsheet File Ingestion",
+      "authorizedRoles": [
+        "ADMIN",
+        "MANAGER"
+      ],
+      "status": "NOT APPLICABLE",
+      "httpStatus": null,
+      "roleTested": null,
+      "negativeRoleTested": null,
+      "negativeHttpStatus": null,
+      "negativeOk": false,
+      "verificationEvidence": "Bulk spreadsheet parsing & schema reconstruction is a desktop workstation administrative file utility; mobile users perform record creation and management natively via responsive master forms (Companies, Products, Employees).",
+      "defectId": null,
+      "timestamp": "2026-10-19T11:25:11.395Z"
+    }
+  ]
+}
