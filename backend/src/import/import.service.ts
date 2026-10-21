@@ -30,6 +30,7 @@ export interface ImportPreviewResult {
   duplicateCount: number;
   errors: ImportError[];
   previewRows: any[];
+  validRows?: any[];
 }
 
 function parseExcelDate(val: any): string | null {
@@ -1132,17 +1133,25 @@ export class ImportService {
   // --- CUSTOMERS / COMPANIES IMPORT ---
   async validateCompanyImport(fileBuffer: Buffer): Promise<ImportPreviewResult> {
     const wb = XLSX.read(fileBuffer, { type: 'buffer' });
-    const rawRows: any[] = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]);
+    const targetSheetName =
+      wb.SheetNames.find(
+        (name) => name.trim().toUpperCase() === 'CUSTOMERS' || name.trim().toUpperCase() === 'COMPANIES',
+      ) || wb.SheetNames[0];
+    const targetSheet = wb.Sheets[targetSheetName];
+    const rawRows: any[] = XLSX.utils.sheet_to_json(targetSheet);
     const errors: ImportError[] = [];
     const validRows: any[] = [];
+    const seenNames = new Set<string>();
     const seenEmails = new Set<string>();
+    const seenGstns = new Set<string>();
     let duplicateCount = 0;
 
     const existingCompanies = await this.prisma.company.findMany({
-      select: { primaryEmail: true, gstn: true },
+      select: { companyName: true, primaryEmail: true, gstn: true },
     });
-    const dbEmails = new Set(existingCompanies.map((c) => c.primaryEmail.toLowerCase()));
-    const dbGstns = new Set(existingCompanies.map((c) => c.gstn?.toUpperCase()).filter(Boolean));
+    const dbNames = new Set(existingCompanies.map((c) => c.companyName.toLowerCase().trim()));
+    const dbEmails = new Set(existingCompanies.map((c) => c.primaryEmail.toLowerCase().trim()));
+    const dbGstns = new Set(existingCompanies.map((c) => c.gstn?.toUpperCase().trim()).filter(Boolean));
 
     const allProducts = await this.prisma.product.findMany({
       where: { isActive: true },
@@ -1172,8 +1181,20 @@ export class ImportService {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const gstnRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
 
+    let populatedRowsCount = 0;
     for (let i = 0; i < rawRows.length; i++) {
       const row = rawRows[i];
+
+      // Ignore blank rows cleanly without treating them as invalid customer records
+      const isBlank =
+        !row ||
+        typeof row !== 'object' ||
+        Object.values(row).every((val) => val === null || val === undefined || String(val).trim() === '');
+      if (isBlank) {
+        continue;
+      }
+
+      populatedRowsCount++;
       const rowNum = i + 2;
 
       const companyName = String(row['Company Name'] || row['company_name'] || row['Name'] || row['name'] || '').trim();
@@ -1214,6 +1235,12 @@ export class ImportService {
       if (!companyName) {
         errors.push({ rowNumber: rowNum, field: 'Company Name', value: companyName, message: 'Company name is required' });
         rowHasError = true;
+      } else if (seenNames.has(companyName.toLowerCase()) || dbNames.has(companyName.toLowerCase())) {
+        errors.push({ rowNumber: rowNum, field: 'Company Name', value: companyName, message: `Duplicate company name '${companyName}' (already exists in database or spreadsheet)` });
+        duplicateCount++;
+        rowHasError = true;
+      } else {
+        seenNames.add(companyName.toLowerCase());
       }
 
       if (!address) {
@@ -1225,7 +1252,7 @@ export class ImportService {
         errors.push({ rowNumber: rowNum, field: 'Primary Email', value: primaryEmail, message: 'Valid primary email is required' });
         rowHasError = true;
       } else if (seenEmails.has(primaryEmail) || dbEmails.has(primaryEmail)) {
-        errors.push({ rowNumber: rowNum, field: 'Primary Email', value: primaryEmail, message: 'Duplicate email (already exists)' });
+        errors.push({ rowNumber: rowNum, field: 'Primary Email', value: primaryEmail, message: `Duplicate email '${primaryEmail}' (already exists in database or spreadsheet)` });
         duplicateCount++;
         rowHasError = true;
       } else {
@@ -1245,10 +1272,12 @@ export class ImportService {
       if (gstn && !gstnRegex.test(gstn)) {
         errors.push({ rowNumber: rowNum, field: 'GSTN', value: gstn, message: 'Invalid GSTN format (Expected: 15 alphanumeric characters)' });
         rowHasError = true;
-      } else if (gstn && dbGstns.has(gstn)) {
-        errors.push({ rowNumber: rowNum, field: 'GSTN', value: gstn, message: 'Duplicate GSTN (already registered)' });
+      } else if (gstn && (seenGstns.has(gstn) || dbGstns.has(gstn))) {
+        errors.push({ rowNumber: rowNum, field: 'GSTN', value: gstn, message: `Duplicate GSTN '${gstn}' (already registered in database or spreadsheet)` });
         duplicateCount++;
         rowHasError = true;
+      } else if (gstn) {
+        seenGstns.add(gstn);
       }
 
       // ENTITLEMENT PARSING & VALIDATION:
@@ -1287,22 +1316,40 @@ export class ImportService {
     }
 
     return {
-      totalRows: rawRows.length,
+      totalRows: populatedRowsCount,
       validCount: validRows.length,
-      invalidCount: rawRows.length - validRows.length,
+      invalidCount: populatedRowsCount - validRows.length,
       duplicateCount,
       errors,
       previewRows: validRows.slice(0, 10),
+      validRows,
     };
   }
 
-  async commitCompanyImport(rows: any[], actorUserId?: number): Promise<{ importedCount: number }> {
+  async commitCompanyImport(rows: any[], actorUserId?: number): Promise<{
+    importedCount: number;
+    failedCount: number;
+    errors: Array<{ rowNumber?: number; companyName?: string; reason: string }>;
+  }> {
     let importedCount = 0;
-    for (const row of rows) {
-      await this.companiesService.createCompany(row, actorUserId);
-      importedCount++;
+    let failedCount = 0;
+    const errors: Array<{ rowNumber?: number; companyName?: string; reason: string }> = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        await this.companiesService.createCompany(row, actorUserId);
+        importedCount++;
+      } catch (err: any) {
+        failedCount++;
+        errors.push({
+          rowNumber: i + 1,
+          companyName: row.company_name || row.companyName || 'Unknown',
+          reason: err.message || 'Failed to create customer',
+        });
+      }
     }
-    return { importedCount };
+    return { importedCount, failedCount, errors };
   }
 
   // --- BRANCHES IMPORT ---

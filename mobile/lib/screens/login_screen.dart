@@ -59,7 +59,7 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Enter the backend API base endpoint URL (e.g. http://127.0.0.1:5000/api for emulator bridge or LAN IP for device):',
+              'Enter the backend API base endpoint URL (e.g. https://192.168.1.4:8444/api for office Wi-Fi):',
               style: TextStyle(fontSize: 12, color: AppColors.textMuted),
             ),
             const SizedBox(height: 12),
@@ -67,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
               controller: controller,
               decoration: const InputDecoration(
                 labelText: 'Base API URL',
-                hintText: 'http://127.0.0.1:5000/api',
+                hintText: 'https://192.168.1.4:8444/api',
               ),
             ),
           ],

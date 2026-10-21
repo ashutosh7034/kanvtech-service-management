@@ -116,14 +116,19 @@ export const ImportPage: React.FC = () => {
   };
 
   const handleCommit = async () => {
-    if (!preview || !preview.previewRows || preview.validCount === 0) return;
+    const rowsToCommit = preview?.validRows && preview.validRows.length > 0 ? preview.validRows : preview?.previewRows;
+    if (!preview || !rowsToCommit || rowsToCommit.length === 0 || preview.validCount === 0) return;
     setCommitting(true);
     try {
-      const res = await api.commitImport(importType, preview.previewRows);
+      const res = await api.commitImport(importType, rowsToCommit);
       setSummary(res);
       setPreview(null);
       setFile(null);
-      showToast(`Successfully imported ${res.importedCount} records into the database!`, 'success');
+      if (res.failedCount && res.failedCount > 0) {
+        showToast(`Import completed with warnings: ${res.importedCount} committed, ${res.failedCount} failed.`, 'warning');
+      } else {
+        showToast(`Successfully imported ${res.importedCount} records into the database!`, 'success');
+      }
       fetchModules(); // Refresh export counters
     } catch (err: any) {
       showToast(err.message, 'danger');
@@ -870,13 +875,49 @@ export const ImportPage: React.FC = () => {
             </div>
           )}
 
-          {/* Success Summary */}
+          {/* Success / Warning Summary */}
           {summary && (
-            <div className="card" style={{ background: '#f0fdf4', border: '1px solid #bbf7d0' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#166534', fontWeight: 600 }}>
-                <CheckCircle2 size={20} color="#16a34a" />
-                <span>Import Succeeded! {summary.importedCount} records committed to the live database.</span>
+            <div
+              className="card"
+              style={{
+                background: summary.failedCount && summary.failedCount > 0 ? '#fffbeb' : '#f0fdf4',
+                border: `1px solid ${summary.failedCount && summary.failedCount > 0 ? '#fde68a' : '#bbf7d0'}`,
+                padding: 16,
+              }}
+            >
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  color: summary.failedCount && summary.failedCount > 0 ? '#92400e' : '#166534',
+                  fontWeight: 600,
+                  fontSize: 14,
+                }}
+              >
+                {summary.failedCount && summary.failedCount > 0 ? (
+                  <AlertTriangle size={20} color="#d97706" />
+                ) : (
+                  <CheckCircle2 size={20} color="#16a34a" />
+                )}
+                <span>
+                  {summary.failedCount && summary.failedCount > 0
+                    ? `Import Completed with Warnings: ${summary.importedCount} records committed, ${summary.failedCount} records failed.`
+                    : `Import Succeeded! ${summary.importedCount} records committed to the live database.`}
+                </span>
               </div>
+              {summary.errors && summary.errors.length > 0 && (
+                <div style={{ marginTop: 12, maxHeight: 180, overflowY: 'auto' }}>
+                  <div style={{ fontWeight: 600, fontSize: 12, color: '#b91c1c', marginBottom: 4 }}>
+                    Failed Records Breakdown:
+                  </div>
+                  {summary.errors.map((e: any, idx: number) => (
+                    <div key={idx} style={{ fontSize: 12, color: '#991b1b', padding: '3px 0' }}>
+                      Row {e.rowNumber || idx + 1}: {e.companyName ? <strong>[{e.companyName}] </strong> : ''}{e.reason}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>

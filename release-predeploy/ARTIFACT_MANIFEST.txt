@@ -9,7 +9,6 @@ Generated Date: 2026-10-21
 Artifact Name:       app-release.apk
 Relative Path:       release-predeploy/mobile/app-release.apk
 Canonical Path:      mobile/build/app/outputs/flutter-apk/app-release.apk
-Canonical Backup:    mobile/build/app/outputs/flutter-apk/app-release-canonical-backup.apk
 Application ID:      com.kanvtech.kanvtech_mobile
 Application Label:   Kanvtech Service
 Version Name:        2.0.0
@@ -18,10 +17,10 @@ Min SDK:             24 (Android 7.0+)
 Target SDK:          36 (Android 16)
 File Size (Bytes):   55127484
 File Size (MB):      52.57 MB
-Build Timestamp:     2026-10-19T10:43:23.998Z
-SHA-256 Checksum:    047595809d7310243f063b60896f1fc7b2a0bf6132ee01ec88c1ecaf1978dd7a
+Build Timestamp:     2026-10-21T12:22:48.000Z
+SHA-256 Checksum:    ab2cd903413cc89bd71d39a90bb492e2e5c7f3bcd34716a7748eedb46484b31a
 Checks Completed:    - flutter analyze: PASS (0 issues found, 0 warnings)
-                     - flutter test: PASS (18/18 tests passed across 4 test suites)
+                     - flutter test: PASS (23/23 tests passed across 5 test suites)
                      - flutter build apk --release: PASS (assembleRelease exit code 0)
                      - adb install -r: PASS (Tested on Google Pixel 8a AVD emulator-5554)
                      - Runtime testing: PASS (Cold start, session logout, in-app Server Config,
@@ -64,7 +63,7 @@ Checks Completed:    - npx tsc --noEmit: PASS (0 TypeScript errors)
 4. DEPLOYMENT & CHECKLIST DOCUMENTS
 --------------------------------------------------------------------------------
 - release-predeploy/PREDEPLOYMENT_REPORT.md
-  Size: 8094 bytes | SHA-256: ce8ae22701d764d7e8149aa68fe957af23f6bf7313c551170672f2b7addd547e
+  Size: 7984 bytes | SHA-256: 99542c1967f1998d88fcafbcef249224dcbc3836564ddc9856398db9856edb0a
 - release-predeploy/SERVER_DEPLOYMENT_CHECKLIST.md
   Size: 6421 bytes | SHA-256: 16c56557393598beb5077b0660f59c5077abca399abffd0d96f2d72e09de54d4
 - release-predeploy/backend/BUILD_AND_RUNTIME_INSTRUCTIONS.md

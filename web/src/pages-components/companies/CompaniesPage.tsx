@@ -33,6 +33,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(15);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -162,7 +163,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   useEffect(() => {
     loadCompanies();
     loadProducts();
-  }, [page, search, statusFilter]);
+  }, [page, limit, search, statusFilter]);
 
   const loadProducts = async () => {
     try {
@@ -176,7 +177,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const loadCompanies = async () => {
     setLoading(true);
     try {
-      const res = await api.getCompanies({ page, limit: 15, search, isActive: statusFilter });
+      const res = await api.getCompanies({ page, limit, search, isActive: statusFilter });
       setCompanies(res.data);
       setTotal(res.total);
     } catch (err) {
@@ -829,6 +830,78 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Pagination Controls */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginTop: 14,
+          padding: '10px 16px',
+          background: '#f8fafc',
+          borderRadius: 8,
+          border: '1px solid #e2e8f0',
+          flexWrap: 'wrap',
+          gap: 12,
+        }}
+      >
+        <div style={{ fontSize: 13, color: '#475569' }}>
+          Showing <strong>{companies.length > 0 ? (page - 1) * limit + 1 : 0}</strong> to{' '}
+          <strong>{Math.min(page * limit, total)}</strong> of <strong>{total}</strong> customers
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, color: '#475569' }}>
+            <span>Rows per page:</span>
+            <select
+              value={limit}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setPage(1);
+              }}
+              style={{
+                padding: '4px 8px',
+                borderRadius: 6,
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                fontSize: 12,
+                cursor: 'pointer',
+              }}
+            >
+              <option value={15}>15</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              style={{ opacity: page <= 1 ? 0.5 : 1, cursor: page <= 1 ? 'not-allowed' : 'pointer' }}
+            >
+              Previous
+            </button>
+            <span style={{ fontSize: 12, fontWeight: 600, color: '#334155', padding: '0 6px' }}>
+              Page {page} of {Math.max(1, Math.ceil(total / limit))}
+            </span>
+            <button
+              type="button"
+              className="btn btn-secondary btn-sm"
+              disabled={page >= Math.ceil(total / limit) || total === 0}
+              onClick={() => setPage((p) => p + 1)}
+              style={{
+                opacity: page >= Math.ceil(total / limit) || total === 0 ? 0.5 : 1,
+                cursor: page >= Math.ceil(total / limit) || total === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Customer Detail Modal / View */}

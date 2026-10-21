@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io' show SocketException;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
@@ -14,10 +14,20 @@ class SessionTerminatedException implements Exception {
   String toString() => message;
 }
 
+class UnauthorizedException implements Exception {
+  final String message;
+  const UnauthorizedException([this.message = 'Session expired or unauthorized']);
+
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
+
+  static const Duration requestTimeout = Duration(seconds: 15);
 
   String? _token;
   String? _customBaseUrl;
@@ -25,7 +35,11 @@ class ApiService {
 
   void setCustomBaseUrl(String? url) {
     if (url != null && url.trim().isNotEmpty) {
-      _customBaseUrl = url.trim().replaceAll(RegExp(r'/+$'), '');
+      var normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
+      if (!normalized.endsWith('/api')) {
+        normalized = '$normalized/api';
+      }
+      _customBaseUrl = normalized;
     } else {
       _customBaseUrl = null;
     }
@@ -37,13 +51,14 @@ class ApiService {
     }
     const configuredUrl = String.fromEnvironment('API_URL');
     if (configuredUrl.isNotEmpty) {
-      return configuredUrl.replaceAll(RegExp(r'/+$'), '');
+      var normalized = configuredUrl.replaceAll(RegExp(r'/+$'), '');
+      if (!normalized.endsWith('/api')) {
+        normalized = '$normalized/api';
+      }
+      return normalized;
     }
     if (kIsWeb) return 'http://localhost:5000/api';
-    try {
-      if (Platform.isAndroid) return 'http://127.0.0.1:5000/api';
-    } catch (_) {}
-    return 'http://localhost:5000/api';
+    return 'https://192.168.1.4:8444/api';
   }
 
   void setToken(String? token) {
@@ -93,6 +108,21 @@ class ApiService {
         onSessionTerminated?.call(msg);
         throw const SessionTerminatedException(msg);
       }
+      final msg = (data is Map ? data['message'] ?? data['error'] : null) ?? 'Invalid email or password';
+      throw UnauthorizedException(msg.toString());
+    }
+
+    if (res.statusCode == 403) {
+      final msg = (data is Map ? data['message'] ?? data['error'] : null) ?? 'Access denied';
+      throw Exception(msg.toString());
+    }
+
+    if (res.statusCode == 404) {
+      throw Exception('Endpoint not found (HTTP 404): ${res.request?.url.path ?? ''}');
+    }
+
+    if (res.statusCode == 429) {
+      throw Exception('Too many login attempts. Please wait a moment and try again.');
     }
 
     if (data is Map) {
@@ -102,7 +132,7 @@ class ApiService {
       if (msg is List) {
         throw Exception(msg.join(', '));
       }
-      throw Exception(msg);
+      throw Exception(msg.toString());
     }
     throw Exception('Request failed with HTTP status ${res.statusCode}');
   }
@@ -121,7 +151,9 @@ class ApiService {
         'password': password,
         'rememberMe': rememberMe,
       }),
-    );
+    ).timeout(requestTimeout, onTimeout: () {
+      throw const SocketException('Connection timed out. Please check your network connection and server status.');
+    });
     final data = _processResponse(res);
     if (data is Map<String, dynamic> && data['token'] != null) {
       _token = data['token'];
@@ -134,7 +166,9 @@ class ApiService {
     final res = await http.get(
       Uri.parse('$baseUrl/auth/me'),
       headers: _headers(),
-    );
+    ).timeout(requestTimeout, onTimeout: () {
+      throw const SocketException('Connection timed out. Please check your network connection and server status.');
+    });
     final data = _processResponse(res);
     if (data is Map && data['user'] != null) {
       return UserModel.fromJson(data['user']);
