@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io' show SocketException, HandshakeException;
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
@@ -31,6 +33,7 @@ class AuthProvider with ChangeNotifier {
     _sessionTerminatedMessage = message;
     SharedPreferences.getInstance().then((prefs) {
       prefs.remove('kanvtech_mobile_token');
+      prefs.remove('kanvtech_mobile_user');
     });
     notifyListeners();
   }
@@ -58,26 +61,40 @@ class AuthProvider with ChangeNotifier {
       if (savedToken != null && savedToken.isNotEmpty) {
         _token = savedToken;
         _api.setToken(savedToken);
+
+        // Load cached user profile if present to maintain offline/transient readiness
+        final savedUserJson = prefs.getString('kanvtech_mobile_user');
+        if (savedUserJson != null && savedUserJson.isNotEmpty) {
+          try {
+            _user = UserModel.fromJson(jsonDecode(savedUserJson));
+          } catch (_) {}
+        }
+
         try {
-          _user = await _api.getMe();
-        } catch (e) {
-          // Token expired, invalid, or session terminated
+          final refreshedUser = await _api.getMe();
+          _user = refreshedUser;
+          await prefs.setString('kanvtech_mobile_user', jsonEncode(refreshedUser.toJson()));
+        } on UnauthorizedException {
+          // Token expired or invalid on the server
           _token = null;
           _user = null;
           _api.setToken(null);
           await prefs.remove('kanvtech_mobile_token');
-          if (e is SessionTerminatedException) {
-            _sessionTerminatedMessage = e.message;
-          }
+          await prefs.remove('kanvtech_mobile_user');
+        } on SessionTerminatedException catch (e) {
+          _token = null;
+          _user = null;
+          _api.setToken(null);
+          await prefs.remove('kanvtech_mobile_token');
+          await prefs.remove('kanvtech_mobile_user');
+          _sessionTerminatedMessage = e.message;
+        } catch (_) {
+          // Transient network error (SocketException, Timeout, offline, etc.)
+          // Preserve the saved token and user session! Do not clear credentials.
         }
       }
-    } catch (e) {
-      _token = null;
-      _user = null;
-      _api.setToken(null);
-      if (e is SessionTerminatedException) {
-        _sessionTerminatedMessage = e.message;
-      }
+    } catch (_) {
+      // SharedPreferences access failure
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -87,8 +104,8 @@ class AuthProvider with ChangeNotifier {
   Future<void> setServerUrl(String? url) async {
     final prefs = await SharedPreferences.getInstance();
     if (url != null && url.trim().isNotEmpty) {
-      _serverUrl = url.trim();
-      _api.setCustomBaseUrl(_serverUrl);
+      _api.setCustomBaseUrl(url.trim());
+      _serverUrl = _api.baseUrl;
       await prefs.setString('kanvtech_server_url', _serverUrl!);
     } else {
       _serverUrl = null;
@@ -113,15 +130,41 @@ class AuthProvider with ChangeNotifier {
       if (_token != null) {
         await prefs.setString('kanvtech_mobile_token', _token!);
       }
+      if (_user != null) {
+        await prefs.setString('kanvtech_mobile_user', jsonEncode(_user!.toJson()));
+      }
       _isLoading = false;
       notifyListeners();
       return true;
     } catch (e) {
-      _errorMessage = e.toString().replaceFirst('Exception: ', '');
+      _errorMessage = _formatErrorMessage(e);
       _isLoading = false;
       notifyListeners();
       return false;
     }
+  }
+
+  String _formatErrorMessage(dynamic e) {
+    final str = e.toString();
+    if (e is HandshakeException ||
+        str.contains('CERTIFICATE_VERIFY_FAILED') ||
+        str.contains('HandshakeException')) {
+      return 'TLS / SSL certificate verification failed connecting to $serverUrl. Please ensure the server SSL certificate is valid and trusted.';
+    }
+    if (e is SocketException ||
+        str.contains('Connection refused') ||
+        str.contains('SocketException') ||
+        str.contains('Network is unreachable')) {
+      return 'Cannot connect to server at $serverUrl. Please check that you are connected to the office Wi-Fi and the server is online.';
+    }
+    if (str.contains('Connection timed out') ||
+        str.contains('TimeoutException')) {
+      return 'Connection to $serverUrl timed out. Please check your Wi-Fi signal and server status.';
+    }
+    if (e is UnauthorizedException || str.contains('UnauthorizedException')) {
+      return str.replaceFirst('UnauthorizedException: ', '').replaceFirst('Exception: ', '');
+    }
+    return str.replaceFirst('Exception: ', '');
   }
 
   Future<void> refreshProfile() async {
@@ -142,6 +185,7 @@ class AuthProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('kanvtech_mobile_token');
+      await prefs.remove('kanvtech_mobile_user');
     } catch (_) {}
     notifyListeners();
   }

@@ -36,9 +36,8 @@ In accordance with strict safety mandates:
 
 ### 2.3 Mobile Application (Flutter 3.47.5 / Android)
 - **Static Analysis:** `flutter analyze` &rarr; **PASS** (0 issues found, 0 warnings across all Dart files).
-- **Automated Tests:** `flutter test` &rarr; **PASS** (18/18 tests passed across 4 test suites).
+- **Automated Tests:** `flutter test` &rarr; **PASS** (23/23 tests passed across 5 test suites).
 - **Release Testing APK:** Built and verified at `mobile/build/app/outputs/flutter-apk/app-release.apk` (and packaged in `release-predeploy/mobile/app-release.apk`).
-- **Canonical Backup:** Preserved at `mobile/build/app/outputs/flutter-apk/app-release-canonical-backup.apk`.
 - **Runtime Sideload Testing:** Successfully installed via `adb install -r` on Google Pixel 8a emulator (`emulator-5554`, Android 16 API 36). Verified cold start, 1-touch demo authentication, KPI dashboard, navigation drawer, and customer directory.
 
 ---
@@ -54,8 +53,8 @@ In accordance with strict safety mandates:
 | **Version Code** | `1` |
 | **Target SDK / Min SDK**| Target SDK `36` (Android 16), Min SDK `24` (Android 7.0+) |
 | **File Size** | `55,127,484 bytes` (52.57 MB) |
-| **Build Timestamp** | `2026-10-19T10:43:23.998Z` |
-| **SHA-256 Checksum** | `047595809d7310243f063b60896f1fc7b2a0bf6132ee01ec88c1ecaf1978dd7a` |
+| **Build Timestamp** | `2026-10-21T12:22:48.000Z` |
+| **SHA-256 Checksum** | `ab2cd903413cc89bd71d39a90bb492e2e5c7f3bcd34716a7748eedb46484b31a` |
 | **Signing Setup** | Android Standard Debug Key (Appropriate for internal Wi-Fi sideload testing; not for Google Play Store) |
 
 ---
