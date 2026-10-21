@@ -59,7 +59,7 @@ async function runAllTests() {
   const companiesService = new CompaniesService(prisma, auditService);
   const employeesService = new EmployeesService(prisma, auditService);
   const ticketsService = new TicketsService(prisma, assignmentsService, slaService, timerService, auditService, notificationsService);
-  const importService = new ImportService(prisma, companiesService, employeesService);
+  const importService = new ImportService(prisma, companiesService, employeesService, auditService);
   const storageService = new StorageService();
   const jwtService = new JwtService({ secret: process.env.JWT_SECRET || 'kanvtech-super-secret-production-jwt-key-2026' });
   const authService = new AuthService(prisma, jwtService);

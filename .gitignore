@@ -70,6 +70,8 @@ yarn-error.log*
 # IDE / Editor artifacts
 .idea/
 .vscode/
+*.iml
+**/*.iml
 *.suo
 *.ntvs*
 *.njsproj

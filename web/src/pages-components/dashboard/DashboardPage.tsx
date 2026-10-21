@@ -3,6 +3,7 @@ import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { SLABadge } from '../../components/common/SLABadge';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
 import {
   Ticket,
   AlertOctagon,
@@ -113,7 +114,7 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
   };
 
   if (loading) {
-    return <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>Loading operational metrics...</div>;
+    return <LoadingSpinner message="Loading service operations & KPI metrics..." size="lg" fullHeight />;
   }
 
   const volume = data?.volume || {};
@@ -279,7 +280,7 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
           </div>
 
           {/* Metric Badges */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          <div className="dashboard-tasks-grid">
             <div
               style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '10px 14px', borderRadius: 6, cursor: 'pointer' }}
               onClick={() => onNavigate('task_reminders')}
@@ -324,12 +325,12 @@ export const DashboardPage: React.FC<Props> = ({ onNavigate }) => {
       )}
 
       {/* Middle Section: SLA Breakdown & Priority Distribution */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 20, marginBottom: 20 }}>
+      <div className="dashboard-analytics-grid">
         <div className="card" style={{ marginBottom: 0 }}>
           <div className="card-header">
             <div className="card-title">Operational SLA Breakdown</div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, textAlign: 'center' }}>
+          <div className="dashboard-sla-grid">
             <div style={{ background: '#f8fafc', padding: 14, borderRadius: 6, border: '1px solid #e2e8f0' }}>
               <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>{sla.onTrack || 0}</div>
               <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>On Track</div>

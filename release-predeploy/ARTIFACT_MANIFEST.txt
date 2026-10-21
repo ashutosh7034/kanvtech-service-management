@@ -1,0 +1,84 @@
+================================================================================
+KANVTECH SERVICE MANAGEMENT PLATFORM — RELEASE ARTIFACT MANIFEST
+Pre-Deployment Release Package (Generated for Office Server Transfer)
+Generated Date: 2026-10-21
+================================================================================
+
+1. MOBILE APPLICATION ARTIFACT
+--------------------------------------------------------------------------------
+Artifact Name:       app-release.apk
+Relative Path:       release-predeploy/mobile/app-release.apk
+Canonical Path:      mobile/build/app/outputs/flutter-apk/app-release.apk
+Canonical Backup:    mobile/build/app/outputs/flutter-apk/app-release-canonical-backup.apk
+Application ID:      com.kanvtech.kanvtech_mobile
+Application Label:   Kanvtech Service
+Version Name:        2.0.0
+Version Code:        1
+Min SDK:             24 (Android 7.0+)
+Target SDK:          36 (Android 16)
+File Size (Bytes):   55127484
+File Size (MB):      52.57 MB
+Build Timestamp:     2026-10-19T10:43:23.998Z
+SHA-256 Checksum:    047595809d7310243f063b60896f1fc7b2a0bf6132ee01ec88c1ecaf1978dd7a
+Checks Completed:    - flutter analyze: PASS (0 issues found, 0 warnings)
+                     - flutter test: PASS (18/18 tests passed across 4 test suites)
+                     - flutter build apk --release: PASS (assembleRelease exit code 0)
+                     - adb install -r: PASS (Tested on Google Pixel 8a AVD emulator-5554)
+                     - Runtime testing: PASS (Cold start, session logout, in-app Server Config,
+                       admin authentication, KPI dashboard, drawer navigation, master directory)
+Signing Key:         Android Standard Debug Signing Key (Configured in build.gradle.kts)
+Limitations:         - Suitable for local Wi-Fi / developer testing. Not for Google Play Store release.
+                     - Verified on emulator; physical handset manual checklist remains to be performed.
+                     - Firebase Cloud Messaging (FCM) is not configured; app uses REST API polling.
+
+2. BACKEND API ARTIFACT & SPECIFICATION
+--------------------------------------------------------------------------------
+Artifact Name:       NestJS Production Backend Build
+Relative Path:       backend/dist/
+Build Instructions:  release-predeploy/backend/BUILD_AND_RUNTIME_INSTRUCTIONS.md
+Stack:               NestJS 10, Prisma 5, TypeScript 5.5, Node.js 18/20
+Version:             2.0.0
+Internal Port:       5000
+Reverse Proxy Route: https://192.168.1.4:8444/api/*
+Checks Completed:    - npx tsc --noEmit: PASS (0 TypeScript errors)
+                     - npx nest build: PASS (Compiled cleanly into backend/dist/)
+                     - 64/64 UAT REST operations: PASS (100% functional parity verified)
+Database Mode:       Strictly Read-Only (Port 5433 staging; Port 5432 HikCentral untouched)
+Database Migrations: ZERO migrations required (100% backward-compatible with existing schema)
+
+3. WEB FRONTEND ARTIFACT & SPECIFICATION
+--------------------------------------------------------------------------------
+Artifact Name:       Next.js 15.5.25 Production Web Bundle
+Relative Path:       web/.next/
+Build Instructions:  release-predeploy/web/BUILD_AND_RUNTIME_INSTRUCTIONS.md
+Stack:               Next.js 15.5.25 / React 18 / TypeScript 5.5
+Version:             2.0.0
+Internal Port:       3000
+Reverse Proxy Route: https://192.168.1.4:8444/*
+First Load JS:       355 kB (Optimized; dynamic xlsx import saved 94 kB)
+Checks Completed:    - npx tsc --noEmit: PASS (0 TypeScript errors)
+                     - npm run build: PASS (Compiled in ~3.5s; all 5 static/dynamic routes generated)
+                     - Browser routing: PASS (Login, Dashboard, Customer Master, Tickets)
+                     - Compression: Gzip / Brotli enabled
+
+4. DEPLOYMENT & CHECKLIST DOCUMENTS
+--------------------------------------------------------------------------------
+- release-predeploy/PREDEPLOYMENT_REPORT.md
+  Size: 8094 bytes | SHA-256: ce8ae22701d764d7e8149aa68fe957af23f6bf7313c551170672f2b7addd547e
+- release-predeploy/SERVER_DEPLOYMENT_CHECKLIST.md
+  Size: 6421 bytes | SHA-256: 16c56557393598beb5077b0660f59c5077abca399abffd0d96f2d72e09de54d4
+- release-predeploy/backend/BUILD_AND_RUNTIME_INSTRUCTIONS.md
+  Size: 1713 bytes | SHA-256: a6e2591d6d9f1b9ee2ce87080705b62344944876e143d014a5c48e790cb2c459
+- release-predeploy/web/BUILD_AND_RUNTIME_INSTRUCTIONS.md
+  Size: 1397 bytes | SHA-256: be0f6139b7eaf811a4a65422b0288954df7d45737bf2e0f6fe30987f821074bc
+- docs/APK_MANUAL_TEST_CHECKLIST.md
+  Size: 7090 bytes | SHA-256: eef772e6e4efb363a6e7dd607bcfdb581f6c23186578e1ed83b2b0169a6553a6
+- docs/PROJECT_STATUS.md
+  Size: 4130 bytes | SHA-256: b1c0390fc815377397d1ed8fce397964a0cc31da3c73e4d93f0bb40e66f2bd75
+- docs/PERFORMANCE_REPORT.md
+  Size: 3478 bytes | SHA-256: dab1a4da5fa4d5a65d0ed518e5d084dac59ac1958c9d63aa13f2750b72bcffdb
+*(Note: ARTIFACT_MANIFEST.txt intentionally excludes a self-referential hash to prevent circular hash invalidation).*
+
+================================================================================
+STATUS: PRE-DEPLOYMENT PACKAGE VERIFIED — AWAITING SERVER INSTRUCTION
+================================================================================

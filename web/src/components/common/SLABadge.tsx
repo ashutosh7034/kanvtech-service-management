@@ -44,11 +44,15 @@ export const SLABadge: React.FC<{
   };
 
   return (
-    <span className={`badge sla-${normalized}`} title={status}>
+    <span
+      className={`badge sla-${normalized}`}
+      title={status}
+      style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap', gap: 5 }}
+    >
       {getIcon()}
       <span>{getLabel()}</span>
       {showCountdown && remainingSeconds !== undefined && status !== 'MET' && (
-        <span style={{ opacity: 0.85, marginLeft: 2, fontWeight: 500 }}>
+        <span style={{ opacity: 0.85, marginLeft: 2, fontWeight: 500, whiteSpace: 'nowrap' }}>
           • {formatRemaining(remainingSeconds)}
         </span>
       )}

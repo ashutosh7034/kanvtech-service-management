@@ -3,6 +3,11 @@ const backendInternalUrl = process.env.BACKEND_INTERNAL_URL || 'http://localhost
 
 const nextConfig = {
   reactStrictMode: true,
+  compress: true,
+  poweredByHeader: false,
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  },
   eslint: {
     ignoreDuringBuilds: true,
   },

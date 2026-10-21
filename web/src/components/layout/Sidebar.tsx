@@ -20,15 +20,18 @@ import {
   MessageSquare,
   Mail,
   Bell,
+  X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
 interface Props {
   currentView: string;
   onNavigate: (view: string) => void;
+  isOpenMobile?: boolean;
+  onCloseMobile?: () => void;
 }
 
-export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
+export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile = false, onCloseMobile }) => {
   const { user } = useAuth();
   const role = user?.role || 'CUSTOMER';
 
@@ -37,14 +40,30 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
     return allowed.includes(role);
   };
 
+  const handleNav = (view: string) => {
+    onNavigate(view);
+    if (onCloseMobile) {
+      onCloseMobile();
+    }
+  };
+
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar ${isOpenMobile ? 'mobile-open' : ''}`}>
       <div className="sidebar-header">
         <div className="sidebar-brand-icon">K</div>
         <div>
           <div>KANVTECH</div>
           <div style={{ fontSize: 10, fontWeight: 500, color: '#94a3b8' }}>SERVICE PLATFORM</div>
         </div>
+        <button
+          type="button"
+          className="sidebar-close-btn"
+          onClick={onCloseMobile}
+          aria-label="Close navigation sidebar"
+          title="Close sidebar"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <div className="sidebar-nav">
@@ -52,7 +71,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
         <button
           className={`nav-item ${currentView === 'dashboard' ? 'active' : ''}`}
-          onClick={() => onNavigate('dashboard')}
+          onClick={() => handleNav('dashboard')}
         >
           <LayoutDashboard size={16} />
           <span>Dashboard</span>
@@ -61,7 +80,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {role !== 'CUSTOMER' && (
           <button
             className={`nav-item ${currentView === 'task_reminders' ? 'active' : ''}`}
-            onClick={() => onNavigate('task_reminders')}
+            onClick={() => handleNav('task_reminders')}
           >
             <Bell size={16} />
             <span>My Tasks & Reminders</span>
@@ -71,7 +90,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {role !== 'CUSTOMER' && (
           <button
             className={`nav-item ${currentView === 'chat' ? 'active' : ''}`}
-            onClick={() => onNavigate('chat')}
+            onClick={() => handleNav('chat')}
           >
             <Mail size={16} />
             <span>Internal Messages</span>
@@ -81,7 +100,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'companies' ? 'active' : ''}`}
-            onClick={() => onNavigate('companies')}
+            onClick={() => handleNav('companies')}
           >
             <Building2 size={16} />
             <span>Customer Master</span>
@@ -91,7 +110,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'prospects' ? 'active' : ''}`}
-            onClick={() => onNavigate('prospects')}
+            onClick={() => handleNav('prospects')}
           >
             <Briefcase size={16} />
             <span>Enquiries</span>
@@ -101,7 +120,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'departments' ? 'active' : ''}`}
-            onClick={() => onNavigate('departments')}
+            onClick={() => handleNav('departments')}
           >
             <Layers size={16} />
             <span>Department Master</span>
@@ -111,7 +130,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'employees' ? 'active' : ''}`}
-            onClick={() => onNavigate('employees')}
+            onClick={() => handleNav('employees')}
           >
             <Users size={16} />
             <span>Employees</span>
@@ -120,7 +139,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
         <button
           className={`nav-item ${currentView === 'tickets' ? 'active' : ''}`}
-          onClick={() => onNavigate('tickets')}
+          onClick={() => handleNav('tickets')}
         >
           <Ticket size={16} />
           <span>Support Tickets</span>
@@ -129,7 +148,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'task_allotment' ? 'active' : ''}`}
-            onClick={() => onNavigate('task_allotment')}
+            onClick={() => handleNav('task_allotment')}
           >
             <UserCheck size={16} />
             <span>Task Allotment</span>
@@ -139,7 +158,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER', 'L2_EMPLOYEE', 'L3_EMPLOYEE']) && (
           <button
             className={`nav-item ${currentView === 'escalations' ? 'active' : ''}`}
-            onClick={() => onNavigate('escalations')}
+            onClick={() => handleNav('escalations')}
           >
             <ArrowUpRight size={16} />
             <span>Escalations Queue</span>
@@ -149,7 +168,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'approvals' ? 'active' : ''}`}
-            onClick={() => onNavigate('approvals')}
+            onClick={() => handleNav('approvals')}
           >
             <CheckSquare size={16} />
             <span>Manager Reviews</span>
@@ -159,7 +178,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
         {isAccessible(['MANAGER']) && (
           <button
             className={`nav-item ${currentView === 'reports' ? 'active' : ''}`}
-            onClick={() => onNavigate('reports')}
+            onClick={() => handleNav('reports')}
           >
             <BarChart3 size={16} />
             <span>Reports & SLA</span>
@@ -172,7 +191,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
             <button
               className={`nav-item ${currentView === 'products' ? 'active' : ''}`}
-              onClick={() => onNavigate('products')}
+              onClick={() => handleNav('products')}
             >
               <Package size={16} />
               <span>Product Master</span>
@@ -180,7 +199,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
             <button
               className={`nav-item ${currentView === 'implementations' ? 'active' : ''}`}
-              onClick={() => onNavigate('implementations')}
+              onClick={() => handleNav('implementations')}
             >
               <Rocket size={16} />
               <span>New Implementations</span>
@@ -188,7 +207,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
             <button
               className={`nav-item ${currentView === 'maintenance' ? 'active' : ''}`}
-              onClick={() => onNavigate('maintenance')}
+              onClick={() => handleNav('maintenance')}
             >
               <ShieldCheck size={16} />
               <span>Annual Maintenance</span>
@@ -202,7 +221,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
             <button
               className={`nav-item ${currentView === 'import' ? 'active' : ''}`}
-              onClick={() => onNavigate('import')}
+              onClick={() => handleNav('import')}
             >
               <FileSpreadsheet size={16} />
               <span>Import & Export Data</span>
@@ -214,7 +233,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
           <>
             <button
               className={`nav-item ${currentView === 'sla_settings' ? 'active' : ''}`}
-              onClick={() => onNavigate('sla_settings')}
+              onClick={() => handleNav('sla_settings')}
             >
               <Settings size={16} />
               <span>System & SLA Settings</span>
@@ -222,7 +241,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
             <button
               className={`nav-item ${currentView === 'audit_logs' ? 'active' : ''}`}
-              onClick={() => onNavigate('audit_logs')}
+              onClick={() => handleNav('audit_logs')}
             >
               <ShieldAlert size={16} />
               <span>Audit Logs</span>
@@ -234,7 +253,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
         <button
           className={`nav-item ${currentView === 'customer_mobile' ? 'active' : ''}`}
-          onClick={() => onNavigate('customer_mobile')}
+          onClick={() => handleNav('customer_mobile')}
         >
           <Smartphone size={16} />
           <span>Customer Mobile App</span>
@@ -242,7 +261,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate }) => {
 
         <button
           className={`nav-item ${currentView === 'employee_mobile' ? 'active' : ''}`}
-          onClick={() => onNavigate('employee_mobile')}
+          onClick={() => handleNav('employee_mobile')}
         >
           <Smartphone size={16} />
           <span>Employee Mobile App</span>

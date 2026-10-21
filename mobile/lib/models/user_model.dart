@@ -19,21 +19,69 @@ class UserModel {
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: json['id'] ?? json['userId'] ?? 0,
-      email: json['email'] ?? '',
-      role: json['role'] ?? 'CUSTOMER',
-      name: json['name'],
-      employeeId: json['employeeId'],
-      companyId: json['companyId'],
-      contactId: json['contactId'],
+      id: json['id'] is int
+          ? json['id']
+          : (json['userId'] is int
+              ? json['userId']
+              : int.tryParse('${json['id'] ?? json['userId'] ?? 0}') ?? 0),
+      email: json['email']?.toString() ?? '',
+      role: json['role']?.toString().toUpperCase() ?? 'CUSTOMER',
+      name: json['name']?.toString(),
+      employeeId: json['employeeId']?.toString(),
+      companyId: json['companyId']?.toString(),
+      contactId: json['contactId'] != null
+          ? int.tryParse('${json['contactId']}')
+          : null,
     );
   }
 
-  bool get isCustomer => role == 'CUSTOMER';
-  bool get isEmployee => ['L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE'].includes(role);
-  bool get isManagerOrAdmin => role == 'MANAGER' || role == 'ADMIN';
-}
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'userId': id,
+        'email': email,
+        'role': role,
+        'name': name,
+        'employeeId': employeeId,
+        'companyId': companyId,
+        'contactId': contactId,
+      };
 
-extension ListExtensions on List<String> {
-  bool includes(String element) => contains(element);
+  bool get isCustomer => role == 'CUSTOMER';
+  bool get isTechnician =>
+      role == 'L1_EMPLOYEE' || role == 'L2_EMPLOYEE' || role == 'L3_EMPLOYEE';
+  bool get isL1 => role == 'L1_EMPLOYEE';
+  bool get isL2 => role == 'L2_EMPLOYEE';
+  bool get isL3 => role == 'L3_EMPLOYEE';
+  bool get isManager => role == 'MANAGER';
+  bool get isAdmin => role == 'ADMIN';
+  bool get isStaff => !isCustomer;
+  bool get isManagerOrAdmin => role == 'MANAGER' || role == 'ADMIN';
+  bool get canAllotTickets => role == 'MANAGER' || role == 'ADMIN';
+  bool get canApproveResolutions => role == 'MANAGER' || role == 'ADMIN';
+
+  String get displayName {
+    if (name != null && name!.trim().isNotEmpty) return name!;
+    if (isAdmin) return 'System Administrator';
+    if (isManager) return 'Service Manager';
+    return email;
+  }
+
+  String get formattedRole {
+    switch (role) {
+      case 'ADMIN':
+        return 'System Administrator';
+      case 'MANAGER':
+        return 'Service Manager';
+      case 'L1_EMPLOYEE':
+        return 'L1 Support Specialist';
+      case 'L2_EMPLOYEE':
+        return 'L2 Senior Specialist';
+      case 'L3_EMPLOYEE':
+        return 'L3 Principal Specialist';
+      case 'CUSTOMER':
+        return 'Customer Representative';
+      default:
+        return role.replaceAll('_', ' ');
+    }
+  }
 }

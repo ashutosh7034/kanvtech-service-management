@@ -51,7 +51,24 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Logout user, clear authentication cookies and invalidate session' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
-  async logout(@Res({ passthrough: true }) res: Response) {
+  async logout(
+    @Request() req: any,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    let token: string | null = null;
+    if (req?.cookies && req.cookies['kanvtech_token']) {
+      token = req.cookies['kanvtech_token'];
+    } else if (req?.headers?.cookie) {
+      const match = req.headers.cookie.match(/(?:^|;\s*)kanvtech_token=([^;]+)/);
+      if (match) token = decodeURIComponent(match[1]);
+    } else if (req?.headers?.authorization) {
+      token = req.headers.authorization.replace(/^Bearer\s+/i, '');
+    }
+
+    if (token) {
+      await this.authService.logoutByToken(token);
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
     res.clearCookie('kanvtech_token', {
       httpOnly: true,

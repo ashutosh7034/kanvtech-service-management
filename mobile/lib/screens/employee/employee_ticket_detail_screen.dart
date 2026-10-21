@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../providers/auth_provider.dart';
 import '../../providers/tickets_provider.dart';
+import '../../models/ticket_model.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/status_badge.dart';
 
@@ -11,11 +11,14 @@ class EmployeeTicketDetailScreen extends StatefulWidget {
   const EmployeeTicketDetailScreen({super.key, required this.ticketId});
 
   @override
-  State<EmployeeTicketDetailScreen> createState() => _EmployeeTicketDetailScreenState();
+  State<EmployeeTicketDetailScreen> createState() =>
+      _EmployeeTicketDetailScreenState();
 }
 
-class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen> {
+class _EmployeeTicketDetailScreenState
+    extends State<EmployeeTicketDetailScreen> {
   final _noteController = TextEditingController();
+  bool _isInternalNote = true;
   bool _isProcessingTimer = false;
   bool _isProcessingAction = false;
 
@@ -33,14 +36,16 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
     super.dispose();
   }
 
-  Future<void> _toggleTimer(bool isCurrentlyRunning) async {
+  Future<void> _handleTimerAction(TicketModel ticket) async {
     setState(() => _isProcessingTimer = true);
+    final provider = context.read<TicketsProvider>();
     try {
-      final ticketsProvider = context.read<TicketsProvider>();
-      if (isCurrentlyRunning) {
-        await ticketsProvider.stopTimer(widget.ticketId);
+      if (ticket.isTimerRunning) {
+        await provider.pauseWork(widget.ticketId);
+      } else if (ticket.isPaused) {
+        await provider.resumeWork(widget.ticketId);
       } else {
-        await ticketsProvider.startTimer(widget.ticketId);
+        await provider.startWork(widget.ticketId);
       }
     } catch (e) {
       if (mounted) {
@@ -68,17 +73,33 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
       context: context,
       builder: (dialogCtx) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text('Escalate Ticket ($currentLevel -> $targetLevel)'),
+          title: Text('Escalate Tier ($currentLevel -> $targetLevel)'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const Text(
-                  'Timer continuity is preserved across all escalation levels.',
+                  'Continuous resolution timer is preserved across tiers.',
                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue: targetLevel,
+                  decoration: const InputDecoration(labelText: 'Target Level'),
+                  items: const [
+                    DropdownMenuItem(
+                        value: 'L2', child: Text('L2 Senior Specialist')),
+                    DropdownMenuItem(
+                        value: 'L3', child: Text('L3 Principal Architect')),
+                    DropdownMenuItem(
+                        value: 'PARENT_COMPANY',
+                        child: Text('Parent Company / Vendor')),
+                  ],
+                  onChanged: (val) =>
+                      setDialogState(() => targetLevel = val ?? 'L2'),
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: reasonController,
                   decoration: const InputDecoration(
@@ -91,8 +112,8 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
                   controller: notesController,
                   maxLines: 3,
                   decoration: const InputDecoration(
-                    labelText: 'Handoff Notes',
-                    hintText: 'Work done so far, diagnostic logs...',
+                    labelText: 'Handoff Technical Notes',
+                    hintText: 'Diagnostic logs, steps performed...',
                   ),
                 ),
               ],
@@ -104,12 +125,14 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
               child: const Text('Cancel'),
             ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning),
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: AppColors.warning),
               onPressed: () async {
                 final reason = reasonController.text.trim();
                 if (reason.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Escalation reason is required.')),
+                    const SnackBar(
+                        content: Text('Escalation reason is required.')),
                   );
                   return;
                 }
@@ -117,23 +140,23 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
                 setState(() => _isProcessingAction = true);
                 try {
                   await context.read<TicketsProvider>().escalateTicket(
-                    widget.ticketId,
-                    toLevel: targetLevel,
-                    reason: reason,
-                    notes: notesController.text.trim(),
-                  );
+                        widget.ticketId,
+                        targetLevel: targetLevel,
+                        reason: reason,
+                        notes: notesController.text.trim(),
+                      );
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Escalated to $targetLevel successfully.')),
+                      SnackBar(
+                          content: Text('Ticket escalated to $targetLevel')),
                     );
                   }
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(e.toString().replaceFirst('Exception: ', '')),
-                        backgroundColor: AppColors.danger,
-                      ),
+                          content: Text(
+                              e.toString().replaceFirst('Exception: ', ''))),
                     );
                   }
                 } finally {
@@ -149,110 +172,27 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
   }
 
   void _showResolveDialog() {
-    final rootCauseController = TextEditingController();
-    final resolutionStepsController = TextEditingController();
+    final resolutionController = TextEditingController();
 
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        title: const Text('Resolve Ticket'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: rootCauseController,
-                decoration: const InputDecoration(
-                  labelText: 'Root Cause *',
-                  hintText: 'e.g. Memory leak in background worker',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: resolutionStepsController,
-                maxLines: 3,
-                decoration: const InputDecoration(
-                  labelText: 'Resolution Steps *',
-                  hintText: 'Patched worker and verified memory stabilization',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
-            onPressed: () async {
-              final rc = rootCauseController.text.trim();
-              final steps = resolutionStepsController.text.trim();
-              if (rc.isEmpty || steps.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Root cause and resolution steps are required.')),
-                );
-                return;
-              }
-              Navigator.pop(dialogCtx);
-              setState(() => _isProcessingAction = true);
-              try {
-                await context.read<TicketsProvider>().resolveTicket(
-                  widget.ticketId,
-                  rootCause: rc,
-                  resolutionSteps: steps,
-                );
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Ticket resolved! Submitted to manager review.'),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(e.toString().replaceFirst('Exception: ', '')),
-                      backgroundColor: AppColors.danger,
-                    ),
-                  );
-                }
-              } finally {
-                if (mounted) setState(() => _isProcessingAction = false);
-              }
-            },
-            child: const Text('Resolve & Submit'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddNoteDialog() {
-    final noteController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Add Internal Work Note'),
+        title: const Text('Complete Technical Resolution'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Internal notes are strictly isolated and NEVER visible to customers.',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+              'Document the technical root cause and applied fix. This will stop the active timer and move the ticket to verification.',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 14),
             TextField(
-              controller: noteController,
+              controller: resolutionController,
               maxLines: 4,
               decoration: const InputDecoration(
-                labelText: 'Internal Note',
-                hintText: 'Investigation findings, internal reproduction notes...',
+                labelText: 'Resolution Summary *',
+                hintText: 'Root cause and fix steps...',
               ),
             ),
           ],
@@ -263,272 +203,463 @@ class _EmployeeTicketDetailScreenState extends State<EmployeeTicketDetailScreen>
             child: const Text('Cancel'),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
             onPressed: () async {
-              final note = noteController.text.trim();
-              if (note.isEmpty) return;
+              final text = resolutionController.text.trim();
+              if (text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Please describe the resolution applied.')),
+                );
+                return;
+              }
               Navigator.pop(dialogCtx);
+              setState(() => _isProcessingAction = true);
               try {
-                await context.read<TicketsProvider>().addInternalNote(widget.ticketId, note);
+                await context.read<TicketsProvider>().resolveTicket(
+                      widget.ticketId,
+                      resolutionNotes: text,
+                    );
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Internal note saved.')),
+                    const SnackBar(
+                      content: Text('Resolution submitted successfully!'),
+                      backgroundColor: AppColors.success,
+                    ),
                   );
                 }
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(e.toString()), backgroundColor: AppColors.danger),
+                    SnackBar(
+                        content:
+                            Text(e.toString().replaceFirst('Exception: ', ''))),
                   );
                 }
+              } finally {
+                if (mounted) setState(() => _isProcessingAction = false);
               }
             },
-            child: const Text('Save Note'),
+            child: const Text('Submit Resolution'),
           ),
         ],
       ),
     );
   }
 
+  Future<void> _handleAddNote() async {
+    final text = _noteController.text.trim();
+    if (text.isEmpty) return;
+
+    setState(() => _isProcessingAction = true);
+    try {
+      await context.read<TicketsProvider>().addComment(
+            widget.ticketId,
+            message: text,
+            isInternal: _isInternalNote,
+          );
+      _noteController.clear();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingAction = false);
+    }
+  }
+
+  String _formatSeconds(int seconds) {
+    final h = seconds ~/ 3600;
+    final m = (seconds % 3600) ~/ 60;
+    final s = seconds % 60;
+    return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final ticketsProvider = context.watch<TicketsProvider>();
-    final details = ticketsProvider.currentTicketDetails;
-    final ticket = details?['ticket'];
-
-    if (ticketsProvider.isLoading && ticket == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(widget.ticketId)),
-        body: const Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (ticket == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(widget.ticketId)),
-        body: const Center(child: Text('Ticket not found')),
-      );
-    }
-
-    final String status = ticket['status'] ?? 'OPEN';
-    final String currentLevel = ticket['assigned_level'] ?? ticket['assignedLevel'] ?? 'L1';
-    final int totalSeconds = ticket['total_resolution_seconds'] ?? ticket['totalResolutionSeconds'] ?? 0;
-    final bool isTimerRunning = ticket['is_timer_running'] == 1 || (ticket['timer'] != null && ticket['timer']['isRunning'] == true);
-    final List notes = details?['notes'] ?? [];
-
-    final minutes = totalSeconds ~/ 60;
-    final seconds = totalSeconds % 60;
+    final ticket = ticketsProvider.currentTicket;
 
     return Scaffold(
       backgroundColor: AppColors.bgApp,
       appBar: AppBar(
-        title: Text('${ticket['id']} ($currentLevel)'),
+        title: Text(ticket?.id ?? widget.ticketId),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () =>
+                ticketsProvider.fetchTicketDetails(widget.ticketId),
+          ),
+        ],
       ),
-      body: RefreshIndicator(
-        onRefresh: () => ticketsProvider.fetchTicketDetails(widget.ticketId),
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // Overview card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          ticket['id'] ?? '',
-                          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: AppColors.brandPrimary),
-                        ),
-                        StatusBadge(status: status),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      ticket['problem_type'] ?? ticket['problemType'] ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: AppColors.textPrimary),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Client: ${ticket['company_id'] ?? ticket['companyId']}',
-                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      ticket['description'] ?? '',
-                      style: const TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Continuous Resolution Timer Card
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Continuous Resolution Timer',
-                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: isTimerRunning ? AppColors.successBg : AppColors.bgSurfaceSubtle,
-                            borderRadius: BorderRadius.circular(4),
+      body: ticketsProvider.isLoading && ticket == null
+          ? const Center(child: CircularProgressIndicator())
+          : ticket == null
+              ? Center(
+                  child: Text(ticketsProvider.errorMessage ??
+                      'Ticket details unavailable'))
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Timer & Workflow Action Card
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'SERVER RESOLUTION TIMER',
+                                        style: TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppColors.textMuted),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _formatSeconds(
+                                            ticket.totalResolutionSeconds),
+                                        style: const TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.bold,
+                                          fontFamily: 'monospace',
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: ticket.isTimerRunning
+                                          ? AppColors.warning
+                                          : (ticket.isPaused
+                                              ? AppColors.brandSecondary
+                                              : AppColors.success),
+                                    ),
+                                    icon: Icon(
+                                      ticket.isTimerRunning
+                                          ? Icons.pause
+                                          : (ticket.isPaused
+                                              ? Icons.play_arrow
+                                              : Icons.play_arrow),
+                                      size: 18,
+                                    ),
+                                    label: Text(
+                                      ticket.isTimerRunning
+                                          ? 'Pause Work'
+                                          : (ticket.isPaused
+                                              ? 'Resume Work'
+                                              : 'Start Work'),
+                                    ),
+                                    onPressed: _isProcessingTimer
+                                        ? null
+                                        : () => _handleTimerAction(ticket),
+                                  ),
+                                ],
+                              ),
+                              if (ticket.status != 'RESOLVED' &&
+                                  ticket.status != 'CLOSED') ...[
+                                const SizedBox(height: 14),
+                                const Divider(),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        icon: const Icon(Icons.arrow_upward,
+                                            size: 16),
+                                        label: const Text('Escalate Tier'),
+                                        onPressed: _isProcessingAction
+                                            ? null
+                                            : () => _showEscalateDialog(
+                                                ticket.assignedLevel),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.success),
+                                        icon: const Icon(Icons.check, size: 16),
+                                        label: const Text('Resolve Ticket'),
+                                        onPressed: _isProcessingAction
+                                            ? null
+                                            : _showResolveDialog,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
-                          child: Text(
-                            isTimerRunning ? 'ACTIVE' : 'PAUSED',
-                            style: TextStyle(
-                              fontSize: 10,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Issue Overview Card
+                      Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    ticket.assignedLevel,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.brandPrimary),
+                                  ),
+                                  StatusBadge(status: ticket.status),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                ticket.problemType,
+                                style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.textPrimary),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                ticket.description,
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.textSecondary,
+                                    height: 1.4),
+                              ),
+                              const SizedBox(height: 14),
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 16,
+                                runSpacing: 8,
+                                children: [
+                                  _metaItem('Client Company',
+                                      ticket.companyName ?? ticket.companyId),
+                                  _metaItem('Contact Person',
+                                      ticket.contactName ?? 'Authorized User'),
+                                  if (ticket.contactPhone != null)
+                                    _metaItem('Phone', ticket.contactPhone!),
+                                  _metaItem('Priority', ticket.priority),
+                                  _metaItem('SLA Status', ticket.slaStatus),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Escalations history if any
+                      if (ticket.escalations.isNotEmpty) ...[
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Tier Escalation History',
+                          style: TextStyle(
+                              fontSize: 14,
                               fontWeight: FontWeight.bold,
-                              color: isTimerRunning ? AppColors.success : AppColors.textMuted,
+                              color: AppColors.textPrimary),
+                        ),
+                        const SizedBox(height: 8),
+                        ...ticket.escalations.map((esc) => Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          '${esc.fromLevel} -> ${esc.toLevel}',
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: AppColors.warning),
+                                        ),
+                                        Text(
+                                          esc.escalatedByName ?? 'Technician',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.textMuted),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text('Reason: ${esc.reason}',
+                                        style: const TextStyle(fontSize: 12)),
+                                    if (esc.notes != null &&
+                                        esc.notes!.isNotEmpty) ...[
+                                      const SizedBox(height: 2),
+                                      Text('Notes: ${esc.notes}',
+                                          style: const TextStyle(
+                                              fontSize: 11,
+                                              color: AppColors.textSecondary)),
+                                    ],
+                                  ],
+                                ),
+                              ),
+                            )),
+                      ],
+
+                      const SizedBox(height: 16),
+                      // Notes & Communication Stream
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Activity & Notes Feed',
+                            style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textPrimary),
+                          ),
+                          Row(
+                            children: [
+                              Text(
+                                _isInternalNote
+                                    ? 'Internal Note'
+                                    : 'Client Message',
+                                style: const TextStyle(
+                                    fontSize: 11, color: AppColors.textMuted),
+                              ),
+                              Switch(
+                                value: _isInternalNote,
+                                onChanged: (val) =>
+                                    setState(() => _isInternalNote = val),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+
+                      if (ticket.comments.isEmpty)
+                        const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Center(
+                            child: Text(
+                                'No notes or messages on this ticket yet.',
+                                style: TextStyle(
+                                    color: AppColors.textMuted, fontSize: 12)),
+                          ),
+                        )
+                      else
+                        ...ticket.comments.map((c) => _buildCommentTile(c)),
+
+                      const SizedBox(height: 8),
+                      // Add note input
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _noteController,
+                              decoration: InputDecoration(
+                                hintText: _isInternalNote
+                                    ? 'Add internal diagnostic note...'
+                                    : 'Send message to customer...',
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Timer continuity preserved across L1 -> L2 -> L3. Zero resets.',
-                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                    ),
-                    const SizedBox(height: 14),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${minutes}m ${seconds}s',
-                          style: TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w700,
-                            color: isTimerRunning ? AppColors.success : AppColors.textPrimary,
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            icon: const Icon(Icons.send),
+                            onPressed:
+                                _isProcessingAction ? null : _handleAddNote,
                           ),
-                        ),
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: isTimerRunning ? AppColors.warning : AppColors.brandPrimary,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _isProcessingTimer ? null : () => _toggleTimer(isTimerRunning),
-                          icon: Icon(isTimerRunning ? Icons.pause : Icons.play_arrow, size: 18),
-                          label: Text(isTimerRunning ? 'Pause Session' : 'Start Session'),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Technician Action Bar
-            if (!['RESOLVED', 'CLOSED'].contains(status))
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: _showAddNoteDialog,
-                          icon: const Icon(Icons.note_add_outlined, size: 16),
-                          label: const Text('Internal Note'),
-                        ),
+                        ],
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.warning,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _isProcessingAction ? null : () => _showEscalateDialog(currentLevel),
-                          icon: const Icon(Icons.arrow_upward, size: 16),
-                          label: const Text('Escalate'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.success,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: _isProcessingAction ? null : _showResolveDialog,
-                          icon: const Icon(Icons.check_circle_outline, size: 16),
-                          label: const Text('Resolve'),
-                        ),
-                      ),
+                      const SizedBox(height: 40),
                     ],
                   ),
                 ),
-              ),
-            const SizedBox(height: 12),
+    );
+  }
 
-            // Internal Work Notes Section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _metaItem(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+        const SizedBox(height: 2),
+        Text(value,
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary)),
+      ],
+    );
+  }
+
+  Widget _buildCommentTile(TicketCommentModel c) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: c.isInternal ? const Color(0xFFFFFBEB) : AppColors.bgSurface,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Internal Notes (Technician Only)',
-                          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: AppColors.textPrimary),
-                        ),
-                        Text(
-                          '${notes.length} notes',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                        ),
-                      ],
+                    Text(
+                      c.authorName ?? 'Technician',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          color: AppColors.textPrimary),
                     ),
-                    const SizedBox(height: 10),
-                    if (notes.isEmpty)
-                      const Text(
-                        'No internal notes logged yet.',
-                        style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: AppColors.textMuted),
-                      )
-                    else
-                      ...notes.map((n) => Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: AppColors.bgSurfaceSubtle,
-                              borderRadius: BorderRadius.circular(6),
-                              border: const Border(left: BorderSide(color: AppColors.brandPrimary, width: 3)),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  n['note_text'] ?? n['noteText'] ?? '',
-                                  style: const TextStyle(fontSize: 12, color: AppColors.textPrimary),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'By: ${n['created_by'] ?? n['createdBy'] ?? "Technician"}',
-                                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
-                                ),
-                              ],
-                            ),
-                          )),
+                    const SizedBox(width: 6),
+                    if (c.isInternal)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: const Text('INTERNAL',
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFFB45309))),
+                      ),
                   ],
                 ),
-              ),
+                Text(
+                  c.createdAt != null
+                      ? '${c.createdAt!.hour.toString().padLeft(2, '0')}:${c.createdAt!.minute.toString().padLeft(2, '0')}'
+                      : '',
+                  style:
+                      const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                ),
+              ],
             ),
+            const SizedBox(height: 6),
+            Text(c.message,
+                style: const TextStyle(
+                    fontSize: 12, color: AppColors.textSecondary)),
           ],
         ),
       ),

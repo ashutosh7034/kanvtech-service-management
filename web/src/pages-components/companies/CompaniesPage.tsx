@@ -709,10 +709,10 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
               <th>Purchased Products</th>
               <th>Branches</th>
               <th>Primary Contact</th>
-              <th>Phone</th>
-              <th>Active Tickets</th>
+              <th style={{ whiteSpace: 'nowrap' }}>Phone</th>
+              <th style={{ whiteSpace: 'nowrap' }}>Active Tickets</th>
               <th>Status</th>
-              <th>Actions</th>
+              <th style={{ minWidth: 230, whiteSpace: 'nowrap' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -731,10 +731,10 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
             ) : (
               companies.map((c) => (
                 <tr key={c.id}>
-                  <td style={{ fontWeight: 600, color: 'var(--brand-primary)' }}>{c.id}</td>
+                  <td style={{ fontWeight: 600, color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>{c.id}</td>
                   <td>
                     <div style={{ fontWeight: 600 }}>{c.company_name}</div>
-                    {c.gstn && <div style={{ fontSize: 11, color: '#64748b' }}>GSTN: {c.gstn}</div>}
+                    {c.gstn && <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>GSTN: {c.gstn}</div>}
                   </td>
                   <td>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 220 }}>
@@ -750,6 +750,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                               fontSize: 11,
                               fontWeight: 600,
                               border: '1px solid #bfdbfe',
+                              whiteSpace: 'nowrap',
                             }}
                           >
                             {/* Fix: use p.name (list API) or p.product_name (detail API) */}
@@ -761,7 +762,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       )}
                     </div>
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     <span
                       style={{
                         padding: '2px 8px',
@@ -771,13 +772,14 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                         fontWeight: 600,
                         fontSize: 12,
                         border: '1px solid #e2e8f0',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {c.branches?.length || 0} Branches
                     </span>
                   </td>
                   <td>{c.contact_person}</td>
-                  <td>{c.contact_phone}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{c.contact_phone}</td>
                   <td>
                     <span
                       style={{
@@ -787,6 +789,7 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                         borderRadius: 10,
                         fontWeight: 600,
                         fontSize: 12,
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       {c.open_ticket_count || 0} Active
@@ -799,8 +802,8 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                       <span className="badge badge-closed">Inactive</span>
                     )}
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: 6 }}>
+                  <td style={{ minWidth: 230, whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap' }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => handleOpenDetail(c.id)}>
                         <Eye size={13} /> View
                       </button>

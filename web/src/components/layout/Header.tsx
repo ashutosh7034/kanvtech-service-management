@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCircle2, LogOut, ChevronDown, KeyRound, User as UserIcon } from 'lucide-react';
+import { Bell, CheckCircle2, LogOut, ChevronDown, KeyRound, User as UserIcon, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { api } from '../../api/client';
@@ -9,9 +9,10 @@ import { ChangePasswordModal } from '../auth/ChangePasswordModal';
 interface Props {
   pageTitle: string;
   onNavigate?: (view: string, id?: string) => void;
+  onToggleMobileSidebar?: () => void;
 }
 
-export const Header: React.FC<Props> = ({ pageTitle, onNavigate }) => {
+export const Header: React.FC<Props> = ({ pageTitle, onNavigate, onToggleMobileSidebar }) => {
   const { user, logout } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead, showToast } = useNotifications();
   const [showNotifMenu, setShowNotifMenu] = useState(false);
@@ -111,8 +112,17 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate }) => {
 
   return (
     <header className="top-header">
-      <div className="header-left">
-        <h1 style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{pageTitle}</h1>
+      <div className="header-left" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          type="button"
+          className="mobile-menu-btn"
+          onClick={onToggleMobileSidebar}
+          aria-label="Open navigation menu"
+          title="Open menu"
+        >
+          <Menu size={18} />
+        </button>
+        <h1 className="header-title" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{pageTitle}</h1>
       </div>
 
       <div className="header-right">

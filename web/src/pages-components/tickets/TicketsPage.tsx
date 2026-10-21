@@ -4,6 +4,8 @@ import { Ticket, Company, Product, Branch } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { SLABadge } from '../../components/common/SLABadge';
+import { LoadingSpinner } from '../../components/common/LoadingSpinner';
+import { EmptyState } from '../../components/common/EmptyState';
 import {
   Search,
   Plus,
@@ -614,20 +616,39 @@ export const TicketsPage: React.FC<Props> = ({ onNavigateDetail, openCreateImmed
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: 28, color: '#94a3b8' }}>
-                  Loading support tickets...
+                <td colSpan={10}>
+                  <LoadingSpinner message="Retrieving enterprise support tickets..." size="md" />
                 </td>
               </tr>
             ) : tickets.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: 'center', padding: 32, color: '#94a3b8' }}>
-                  No tickets found matching your filter parameters.
+                <td colSpan={10} style={{ padding: '16px' }}>
+                  <EmptyState
+                    title="No tickets found"
+                    description={search || statusFilter || priorityFilter || levelFilter || slaFilter
+                      ? "No support tickets match the active search criteria or filters."
+                      : "There are currently no tickets logged in this queue."}
+                    actionLabel={search || statusFilter || priorityFilter || levelFilter || slaFilter ? "Clear Filters" : "Log New Support Ticket"}
+                    onAction={() => {
+                      if (search || statusFilter || priorityFilter || levelFilter || slaFilter) {
+                        setStatusFilter('');
+                        setPriorityFilter('');
+                        setLevelFilter('');
+                        setSlaFilter('');
+                        setSearch('');
+                        setPage(1);
+                      } else {
+                        setShowCreateModal(true);
+                        if (!selectedCompany) setShowCustomerDropdown(true);
+                      }
+                    }}
+                  />
                 </td>
               </tr>
             ) : (
               tickets.map((t) => (
                 <tr key={t.id}>
-                  <td style={{ fontWeight: 700, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>
+                  <td style={{ fontWeight: 700, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)', whiteSpace: 'nowrap', minWidth: 140 }}>
                     {t.id}
                   </td>
                   <td>

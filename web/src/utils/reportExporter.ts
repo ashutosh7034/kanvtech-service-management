@@ -1,4 +1,3 @@
-import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -61,6 +60,7 @@ export function getFormattedDateTime(): string {
  * Exports actual report metrics into a formatted multi-sheet Excel (.xlsx) file.
  */
 export async function exportReportToExcel(data: ReportExportData): Promise<void> {
+  const XLSX = await import('xlsx');
   const wb = XLSX.utils.book_new();
   const timestamp = getFormattedDateTime();
 

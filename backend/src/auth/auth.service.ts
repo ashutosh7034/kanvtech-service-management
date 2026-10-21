@@ -62,10 +62,16 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    // Update last login
+    // Generate cryptographically random active session ID
+    const sessionId = crypto.randomUUID();
+
+    // Atomically update last login and activeSessionId, replacing any prior session
     await this.prisma.user.update({
       where: { id: user.id },
-      data: { lastLoginAt: new Date() },
+      data: {
+        lastLoginAt: new Date(),
+        activeSessionId: sessionId,
+      },
     });
 
     let employeeId: string | null = null;
@@ -123,6 +129,7 @@ export class AuthService {
       employeeId,
       companyId,
       contactId,
+      sessionId,
     };
 
     const expiresIn = rememberMe
@@ -144,6 +151,37 @@ export class AuthService {
         name: employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
       },
     };
+  }
+
+  /**
+   * Invalidate session on explicit logout.
+   * Only clears activeSessionId if the requesting session is still the active one.
+   * Logout from an old/superseded session will not kill the active session on another device.
+   */
+  async logout(userId?: number, sessionId?: string): Promise<void> {
+    if (!userId || !sessionId) return;
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, activeSessionId: true },
+      });
+      if (user && user.activeSessionId === sessionId) {
+        await this.prisma.user.update({
+          where: { id: userId },
+          data: { activeSessionId: null },
+        });
+      }
+    } catch {}
+  }
+
+  async logoutByToken(token?: string): Promise<void> {
+    if (!token) return;
+    try {
+      const decoded = this.jwtService.decode(token) as any;
+      if (decoded && decoded.userId && decoded.sessionId) {
+        await this.logout(decoded.userId, decoded.sessionId);
+      }
+    } catch {}
   }
 
   async validateUserById(userId: number) {

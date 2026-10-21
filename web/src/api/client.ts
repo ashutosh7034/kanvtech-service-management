@@ -35,11 +35,40 @@ export async function request<T = any>(
   });
 
   if (response.status === 401 && typeof window !== 'undefined') {
+    let errorData: any = {};
+    try {
+      errorData = await response.clone().json();
+    } catch {}
+
+    const isSessionTerminated =
+      errorData?.code === 'SESSION_TERMINATED' ||
+      (typeof errorData?.message === 'string' &&
+        errorData.message.includes('logged in on another device'));
+
     localStorage.removeItem('kanvtech_token');
     sessionStorage.removeItem('kanvtech_token');
     localStorage.removeItem('kanvtech_user');
     sessionStorage.removeItem('kanvtech_user');
-    window.dispatchEvent(new Event('auth_unauthorized'));
+
+    if (isSessionTerminated) {
+      sessionStorage.setItem(
+        'kanvtech_session_notice',
+        'Your account has been logged in on another device. You have been logged out for security reasons.'
+      );
+      window.dispatchEvent(
+        new CustomEvent('auth_session_terminated', {
+          detail: {
+            message:
+              'Your account has been logged in on another device. You have been logged out for security reasons.',
+          },
+        })
+      );
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
+    } else {
+      window.dispatchEvent(new Event('auth_unauthorized'));
+    }
   }
 
   const contentType = response.headers.get('content-type');

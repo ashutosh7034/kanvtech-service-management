@@ -5,26 +5,41 @@ import '../services/api_service.dart';
 class TicketsProvider with ChangeNotifier {
   final ApiService _api = ApiService();
   List<TicketModel> _tickets = [];
-  Map<String, dynamic>? _currentTicketDetails;
+  TicketModel? _currentTicket;
   bool _isLoading = false;
   String? _errorMessage;
 
   List<TicketModel> get tickets => _tickets;
-  Map<String, dynamic>? get currentTicketDetails => _currentTicketDetails;
+  TicketModel? get currentTicket => _currentTicket;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
   // Active tickets for two-ticket rule checking
-  int get activeTicketsCount => _tickets.where((t) => !['RESOLVED', 'CLOSED'].contains(t.status)).length;
+  int get activeTicketsCount =>
+      _tickets.where((t) => !['RESOLVED', 'CLOSED'].contains(t.status)).length;
   bool get canCustomerCreateTicket => activeTicketsCount < 2;
 
-  Future<void> fetchTickets({String? status, String? priority}) async {
+  Future<void> fetchTickets({
+    String? status,
+    String? priority,
+    String? level,
+    String? employeeId,
+    String? companyId,
+    String? search,
+  }) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _tickets = await _api.getTickets(status: status, priority: priority);
+      _tickets = await _api.getTickets(
+        status: status,
+        priority: priority,
+        level: level,
+        employeeId: employeeId,
+        companyId: companyId,
+        search: search,
+      );
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -40,7 +55,7 @@ class TicketsProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      _currentTicketDetails = await _api.getTicketDetails(id);
+      _currentTicket = await _api.getTicketDetails(id);
       _isLoading = false;
       notifyListeners();
     } catch (e) {
@@ -57,6 +72,9 @@ class TicketsProvider with ChangeNotifier {
     required String description,
     String? companyId,
     int? customerContactId,
+    String? productId,
+    String? branchId,
+    String? assignedEmployeeId,
   }) async {
     final ticket = await _api.createTicket(
       problemType: problemType,
@@ -65,49 +83,101 @@ class TicketsProvider with ChangeNotifier {
       description: description,
       companyId: companyId,
       customerContactId: customerContactId,
+      productId: productId,
+      branchId: branchId,
+      assignedEmployeeId: assignedEmployeeId,
     );
     await fetchTickets();
     return ticket;
   }
 
-  Future<void> startTimer(String ticketId) async {
-    await _api.startTimer(ticketId);
+  Future<void> startWork(String ticketId) async {
+    await _api.startWork(ticketId);
     await fetchTicketDetails(ticketId);
     await fetchTickets();
   }
 
-  Future<void> stopTimer(String ticketId) async {
-    await _api.stopTimer(ticketId);
+  Future<void> pauseWork(String ticketId) async {
+    await _api.pauseWork(ticketId);
     await fetchTicketDetails(ticketId);
     await fetchTickets();
   }
 
-  Future<void> escalateTicket(String ticketId, {required String toLevel, required String reason, String? notes}) async {
-    await _api.escalateTicket(ticketId, toLevel: toLevel, reason: reason, notes: notes);
+  Future<void> resumeWork(String ticketId) async {
+    await _api.resumeWork(ticketId);
     await fetchTicketDetails(ticketId);
     await fetchTickets();
   }
 
-  Future<void> resolveTicket(String ticketId, {required String rootCause, required String resolutionSteps}) async {
-    await _api.resolveTicket(ticketId, rootCause: rootCause, resolutionSteps: resolutionSteps);
+  Future<void> escalateTicket(
+    String ticketId, {
+    required String targetLevel,
+    required String reason,
+    String? notes,
+    String? assignedToEmployeeId,
+  }) async {
+    await _api.escalateTicket(
+      ticketId,
+      targetLevel: targetLevel,
+      reason: reason,
+      notes: notes,
+      assignedToEmployeeId: assignedToEmployeeId,
+    );
     await fetchTicketDetails(ticketId);
     await fetchTickets();
   }
 
-  Future<void> submitFeedback(String ticketId, {required int rating, String? comments}) async {
-    await _api.submitFeedback(ticketId, rating: rating, comments: comments);
+  Future<void> resolveTicket(String ticketId,
+      {required String resolutionNotes}) async {
+    await _api.resolveTicket(ticketId, resolutionNotes: resolutionNotes);
     await fetchTicketDetails(ticketId);
     await fetchTickets();
   }
 
-  Future<void> closeTicket(String ticketId) async {
-    await _api.closeTicket(ticketId);
+  Future<void> approveResolution(String ticketId, {String? notes}) async {
+    await _api.approveResolution(ticketId, notes: notes);
     await fetchTicketDetails(ticketId);
     await fetchTickets();
   }
 
-  Future<void> addInternalNote(String ticketId, String noteText) async {
-    await _api.addInternalNote(ticketId, noteText);
+  Future<void> reopenTicket(String ticketId, {required String reason}) async {
+    await _api.reopenTicket(ticketId, reason: reason);
     await fetchTicketDetails(ticketId);
+    await fetchTickets();
+  }
+
+  Future<void> submitFeedback(String ticketId,
+      {required int rating, String? remarks}) async {
+    await _api.submitFeedback(ticketId, rating: rating, remarks: remarks);
+    await fetchTicketDetails(ticketId);
+    await fetchTickets();
+  }
+
+  Future<void> closeTicket(String ticketId, {String? closureReason}) async {
+    await _api.closeTicket(ticketId, closureReason: closureReason);
+    await fetchTicketDetails(ticketId);
+    await fetchTickets();
+  }
+
+  Future<void> addComment(String ticketId,
+      {required String message, bool isInternal = false}) async {
+    await _api.addComment(ticketId, message: message, isInternal: isInternal);
+    await fetchTicketDetails(ticketId);
+  }
+
+  Future<void> assignTicket({
+    required String ticketId,
+    required String employeeId,
+    String level = 'L1',
+    String? notes,
+  }) async {
+    await _api.assignTicket(
+      ticketId: ticketId,
+      employeeId: employeeId,
+      level: level,
+      notes: notes,
+    );
+    await fetchTicketDetails(ticketId);
+    await fetchTickets();
   }
 }
