@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { SLABadge } from '../../components/common/SLABadge';
+import { BrandLogo } from '../../components/common/BrandLogo';
 import {
   Ticket as TicketIcon,
   PlusCircle,
@@ -178,9 +179,8 @@ export const CustomerMobileView: React.FC = () => {
             justifyContent: 'space-between',
           }}
         >
-          <div>
-            <div style={{ fontWeight: 700, fontSize: 14 }}>KANVTECH SERVICE</div>
-            <div style={{ fontSize: 10, color: '#94a3b8' }}>Client Self-Service Portal</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <BrandLogo variant="horizontal" height={26} />
           </div>
           <div style={{ fontSize: 11, background: '#0284c7', padding: '2px 8px', borderRadius: 10 }}>
             {user?.displayName || 'Customer'}

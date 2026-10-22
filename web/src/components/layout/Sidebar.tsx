@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { BrandLogo } from '../common/BrandLogo';
 
 interface Props {
   currentView: string;
@@ -49,12 +50,13 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
 
   return (
     <aside className={`sidebar ${isOpenMobile ? 'mobile-open' : ''}`}>
-      <div className="sidebar-header">
-        <div className="sidebar-brand-icon">K</div>
-        <div>
-          <div>KANVTECH</div>
-          <div style={{ fontSize: 10, fontWeight: 500, color: '#94a3b8' }}>SERVICE PLATFORM</div>
-        </div>
+      <div className="sidebar-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 14px' }}>
+        <BrandLogo
+          variant="horizontal"
+          height={30}
+          style={{ cursor: 'pointer' }}
+          onClick={() => handleNav('dashboard')}
+        />
         <button
           type="button"
           className="sidebar-close-btn"

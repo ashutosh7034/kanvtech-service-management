@@ -55,21 +55,14 @@ class AppDrawer extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: AppColors.brandAccent,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Text(
-                          'K',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.asset(
+                          'assets/images/kanvtech-app-icon.png',
+                          width: 36,
+                          height: 36,
+                          fit: BoxFit.cover,
+                          semanticLabel: 'KANVTECH official logo',
                         ),
                       ),
                       const SizedBox(width: 12),

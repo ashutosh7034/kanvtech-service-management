@@ -22,29 +22,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   const initAuth = async () => {
+    const isRemembered = typeof window !== 'undefined' && localStorage.getItem('kanvtech_remember_me') === 'true';
     const savedToken =
       typeof window !== 'undefined'
-        ? localStorage.getItem('kanvtech_token') || sessionStorage.getItem('kanvtech_token')
+        ? (isRemembered ? localStorage.getItem('kanvtech_token') : sessionStorage.getItem('kanvtech_token')) ||
+          localStorage.getItem('kanvtech_token') ||
+          sessionStorage.getItem('kanvtech_token')
         : null;
 
     if (savedToken) {
       setToken(savedToken);
     }
 
+    // Restore cached user from storage for instant offline/reconnect resiliency
+    if (typeof window !== 'undefined') {
+      const cachedUserStr = isRemembered
+        ? localStorage.getItem('kanvtech_user') || sessionStorage.getItem('kanvtech_user')
+        : sessionStorage.getItem('kanvtech_user');
+      if (cachedUserStr) {
+        try {
+          const parsed = JSON.parse(cachedUserStr);
+          if (parsed && (parsed.email || parsed.id)) {
+            setUser(parsed);
+          }
+        } catch {}
+      }
+    }
+
     try {
       // api.me() sends credentials: 'include' (cookies) and Bearer header (if savedToken exists)
       const res = await api.me();
       if (res && res.user) {
-        if (res.token && !savedToken) {
-          setToken(res.token);
+        const validatedToken = res.token || savedToken;
+        if (validatedToken) {
+          setToken(validatedToken);
           if (typeof window !== 'undefined') {
-            const isRemembered = localStorage.getItem('kanvtech_remember_me') === 'true';
             if (isRemembered) {
-              localStorage.setItem('kanvtech_token', res.token);
+              localStorage.setItem('kanvtech_token', validatedToken);
+            } else {
+              sessionStorage.setItem('kanvtech_token', validatedToken);
             }
           }
         }
-        setUser({
+        const userData: User = {
           id: res.user.id || res.user.userId,
           email: res.user.email,
           role: res.user.role,
@@ -57,21 +77,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           employeeId: res.user.employeeId || res.user.employee?.id,
           companyId: res.user.companyId || res.user.companyContact?.companyId,
           contactId: res.user.contactId || res.user.companyContact?.id,
-        });
+        };
+        setUser(userData);
+        if (typeof window !== 'undefined') {
+          if (isRemembered) {
+            localStorage.setItem('kanvtech_user', JSON.stringify(userData));
+          } else {
+            sessionStorage.setItem('kanvtech_user', JSON.stringify(userData));
+          }
+        }
       } else {
         setUser(null);
         setToken(null);
       }
-    } catch {
-      // Session invalid, expired, or unauthenticated
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('kanvtech_token');
-        sessionStorage.removeItem('kanvtech_token');
-        localStorage.removeItem('kanvtech_user');
-        sessionStorage.removeItem('kanvtech_user');
+    } catch (err: any) {
+      const isAuthError =
+        err?.status === 401 ||
+        err?.status === 403 ||
+        err?.message?.includes('401') ||
+        err?.message?.includes('Unauthorized') ||
+        err?.message?.includes('SESSION_TERMINATED');
+
+      if (isAuthError) {
+        // Session definitively invalid, expired, or terminated
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('kanvtech_token');
+          sessionStorage.removeItem('kanvtech_token');
+          localStorage.removeItem('kanvtech_user');
+          sessionStorage.removeItem('kanvtech_user');
+        }
+        setUser(null);
+        setToken(null);
+      } else {
+        // Transient network error or server offline: DO NOT wipe saved token or cached user!
+        // Preserves session so user is not logged out while offline.
       }
-      setUser(null);
-      setToken(null);
     } finally {
       setLoading(false);
     }
@@ -130,17 +170,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, passwordPlain: string, rememberMe = false) => {
     const res = await api.login({ email, password: passwordPlain, rememberMe });
     if (res.token && res.user) {
-      if (typeof window !== 'undefined') {
-        if (rememberMe) {
-          localStorage.setItem('kanvtech_token', res.token);
-          sessionStorage.removeItem('kanvtech_token');
-        } else {
-          sessionStorage.setItem('kanvtech_token', res.token);
-          localStorage.removeItem('kanvtech_token');
-        }
-      }
-      setToken(res.token);
-      setUser({
+      const userData: User = {
         id: res.user.id || res.user.userId,
         email: res.user.email,
         role: res.user.role,
@@ -153,7 +183,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         employeeId: res.user.employeeId,
         companyId: res.user.companyId,
         contactId: res.user.contactId,
-      });
+      };
+
+      if (typeof window !== 'undefined') {
+        if (rememberMe) {
+          localStorage.setItem('kanvtech_token', res.token);
+          localStorage.setItem('kanvtech_remember_me', 'true');
+          localStorage.setItem('kanvtech_user', JSON.stringify(userData));
+          sessionStorage.removeItem('kanvtech_token');
+          sessionStorage.removeItem('kanvtech_user');
+        } else {
+          sessionStorage.setItem('kanvtech_token', res.token);
+          sessionStorage.setItem('kanvtech_user', JSON.stringify(userData));
+          localStorage.removeItem('kanvtech_token');
+          localStorage.removeItem('kanvtech_remember_me');
+          localStorage.removeItem('kanvtech_user');
+        }
+      }
+      setToken(res.token);
+      setUser(userData);
     }
   };
 

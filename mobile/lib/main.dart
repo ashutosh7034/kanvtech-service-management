@@ -56,6 +56,17 @@ class AuthGate extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.asset(
+                    'assets/images/kanvtech-app-icon.png',
+                    width: 72,
+                    height: 72,
+                    fit: BoxFit.contain,
+                    semanticLabel: 'KANVTECH official logo',
+                  ),
+                ),
+                const SizedBox(height: 24),
                 const CircularProgressIndicator(),
                 const SizedBox(height: 16),
                 const Text(

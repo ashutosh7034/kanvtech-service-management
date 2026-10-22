@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kanvtech_mobile/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -8,7 +9,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
 
     await tester.pumpWidget(const KanvtechMobileApp());
-    // Wait for asynchronous SharedPreferences session check to settle
+    // Allow initial secure storage timeout (100ms) and SharedPreferences to settle
+    await tester.pump(const Duration(milliseconds: 150));
     await tester.pumpAndSettle();
 
     // Verify title and brand elements are present on LoginScreen
@@ -17,6 +19,10 @@ void main() {
     expect(find.text('Sign In'), findsOneWidget);
     expect(find.text('Work Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);
+
+    // Verify Remember Me checkbox and label are present
+    expect(find.text('Remember Me (30-day session)'), findsOneWidget);
+    expect(find.byType(Checkbox), findsOneWidget);
 
     // Verify demo chips exist for all roles
     expect(find.text('Customer'), findsOneWidget);

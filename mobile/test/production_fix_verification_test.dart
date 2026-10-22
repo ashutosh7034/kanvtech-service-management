@@ -4,7 +4,6 @@ import 'package:kanvtech_mobile/services/api_service.dart';
 import 'package:kanvtech_mobile/services/http_overrides.dart';
 import 'package:kanvtech_mobile/providers/auth_provider.dart';
 import 'package:kanvtech_mobile/providers/tickets_provider.dart';
-import 'package:kanvtech_mobile/providers/operations_provider.dart';
 import 'package:kanvtech_mobile/models/master_models.dart';
 
 void main() {
@@ -198,6 +197,7 @@ void main() {
         'AuthProvider resets isLoading to false and populates errorMessage on failure',
         () async {
       final auth = AuthProvider();
+      auth.cancelOrSkipInitialization();
       final success = await auth.login('nonexistent@kanvtech.com', 'WrongPass');
       expect(success, isFalse);
       expect(auth.isLoading, isFalse);
@@ -236,6 +236,117 @@ void main() {
       expect(auth.isSubmittingLogin, isFalse);
       expect(auth.isInitializingSession, isFalse);
       expect(auth.isLoading, isFalse);
+    });
+  });
+
+  group('6. Fast-Track Credentials and Role Mapping Tests', () {
+    test('getDemoCredentials provides valid authorized accounts for all 6 roles',
+        () {
+      final auth = AuthProvider();
+      final roles = [
+        'ADMIN',
+        'MANAGER',
+        'L1_EMPLOYEE',
+        'L2_EMPLOYEE',
+        'L3_EMPLOYEE',
+        'CUSTOMER'
+      ];
+
+      for (final role in roles) {
+        final creds = auth.getDemoCredentials(role);
+        expect(creds, isNotNull, reason: 'Credentials must exist for $role');
+        expect(creds!['email'], isNotEmpty,
+            reason: 'Email must be non-empty for $role');
+        expect(creds['password'], isNotEmpty,
+            reason: 'Password must be non-empty for $role');
+        expect(creds['email']!.contains('@'), isTrue,
+            reason: 'Email must be valid format for $role');
+      }
+    });
+
+    test('getDemoCredentials returns null for unauthorized or unknown roles',
+        () {
+      final auth = AuthProvider();
+      expect(auth.getDemoCredentials('SUPERUSER'), isNull);
+      expect(auth.getDemoCredentials('HACKER'), isNull);
+      expect(auth.getDemoCredentials(''), isNull);
+    });
+  });
+
+  group('7. Remember Me Session Persistence and Lifecycle Tests', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test(
+        'Cold boot with remember_me="false" enforces nonpersistent session policy and skips session restoration',
+        () async {
+      // Simulate existing token in storage but remember_me flag is false
+      SharedPreferences.setMockInitialValues({
+        'kanvtech_mobile_token': 'test-session-token',
+        'kanvtech_mobile_remember_me': 'false',
+        'kanvtech_mobile_user':
+            '{"id":"1","email":"admin@kanvtech.com","name":"Admin User","role":"ADMIN"}',
+      });
+
+      final auth = AuthProvider();
+      // Allow async initialization to complete
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // With remember_me == false, session restoration is suppressed
+      expect(auth.isAuthenticated, isFalse);
+      expect(auth.token, isNull);
+      expect(auth.user, isNull);
+      expect(auth.isInitializingSession, isFalse);
+    });
+
+    test(
+        'Cold boot with remember_me="true" restores cached token and user profile gracefully',
+        () async {
+      // Simulate existing token in storage with remember_me enabled
+      SharedPreferences.setMockInitialValues({
+        'kanvtech_mobile_token': 'valid-remembered-token',
+        'kanvtech_mobile_remember_me': 'true',
+        'kanvtech_mobile_user':
+            '{"id":"u1","email":"manager@kanvtech.com","name":"Manager Test","role":"MANAGER"}',
+      });
+
+      final auth = AuthProvider();
+      // Allow async initialization to complete
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      // Token and cached user are immediately loaded for instant offline/transient readiness
+      expect(auth.token, 'valid-remembered-token');
+      expect(auth.user, isNotNull);
+      expect(auth.user!.email, 'manager@kanvtech.com');
+      expect(auth.user!.role, 'MANAGER');
+      expect(auth.isAuthenticated, isTrue);
+      expect(auth.isInitializingSession, isFalse);
+    });
+
+    test(
+        'Logout clears token, user, and remember_me preference completely',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'kanvtech_mobile_token': 'active-token',
+        'kanvtech_mobile_remember_me': 'true',
+        'kanvtech_mobile_user':
+            '{"id":"u1","email":"admin@kanvtech.com","name":"Admin","role":"ADMIN"}',
+      });
+
+      final auth = AuthProvider();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(auth.isAuthenticated, isTrue);
+
+      await auth.logout();
+      expect(auth.isAuthenticated, isFalse);
+      expect(auth.token, isNull);
+      expect(auth.user, isNull);
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('kanvtech_mobile_token'), isNull);
+      expect(prefs.getString('kanvtech_mobile_user'), isNull);
+      expect(prefs.getString('kanvtech_mobile_remember_me'), isNull);
     });
   });
 }

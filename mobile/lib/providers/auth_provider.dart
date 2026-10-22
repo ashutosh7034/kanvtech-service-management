@@ -1,12 +1,16 @@
 import 'dart:convert';
 import 'dart:io' show SocketException, HandshakeException;
 import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
 
 class AuthProvider with ChangeNotifier {
   final ApiService _api = ApiService();
+  final FlutterSecureStorage _secureStorage = const FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   UserModel? _user;
   String? _token;
   bool _isInitializingSession = true;
@@ -34,10 +38,14 @@ class AuthProvider with ChangeNotifier {
     _token = null;
     _user = null;
     _sessionTerminatedMessage = message;
+    _secureStorage
+        .delete(key: 'kanvtech_mobile_token')
+        .timeout(const Duration(milliseconds: 200), onTimeout: () {})
+        .catchError((_) {});
     SharedPreferences.getInstance().then((prefs) {
       prefs.remove('kanvtech_mobile_token');
       prefs.remove('kanvtech_mobile_user');
-    });
+    }).catchError((_) {});
     notifyListeners();
   }
 
@@ -60,7 +68,25 @@ class AuthProvider with ChangeNotifier {
         _api.setCustomBaseUrl(savedUrl);
       }
 
-      final savedToken = prefs.getString('kanvtech_mobile_token');
+      // Check Remember Me persistence preference
+      final isRemembered =
+          prefs.getString('kanvtech_mobile_remember_me') != 'false';
+      if (!isRemembered) {
+        // Nonpersistent session policy: Do not restore session on app cold launch
+        _token = null;
+        _user = null;
+        return;
+      }
+
+      String? savedToken;
+      try {
+        savedToken = await _secureStorage
+            .read(key: 'kanvtech_mobile_token')
+            .timeout(const Duration(milliseconds: 100), onTimeout: () => null)
+            .catchError((_) => null);
+      } catch (_) {}
+      savedToken ??= prefs.getString('kanvtech_mobile_token');
+
       if (savedToken != null && savedToken.isNotEmpty) {
         _token = savedToken;
         _api.setToken(savedToken);
@@ -83,12 +109,20 @@ class AuthProvider with ChangeNotifier {
           _token = null;
           _user = null;
           _api.setToken(null);
+          await _secureStorage
+              .delete(key: 'kanvtech_mobile_token')
+              .timeout(const Duration(milliseconds: 200), onTimeout: () {})
+              .catchError((_) {});
           await prefs.remove('kanvtech_mobile_token');
           await prefs.remove('kanvtech_mobile_user');
         } on SessionTerminatedException catch (e) {
           _token = null;
           _user = null;
           _api.setToken(null);
+          await _secureStorage
+              .delete(key: 'kanvtech_mobile_token')
+              .timeout(const Duration(milliseconds: 200), onTimeout: () {})
+              .catchError((_) {});
           await prefs.remove('kanvtech_mobile_token');
           await prefs.remove('kanvtech_mobile_user');
           _sessionTerminatedMessage = e.message;
@@ -137,10 +171,29 @@ class AuthProvider with ChangeNotifier {
       final user = UserModel.fromJson(res['user']);
 
       final prefs = await SharedPreferences.getInstance();
-      if (token != null) {
-        await prefs.setString('kanvtech_mobile_token', token);
+      if (rememberMe) {
+        if (token != null) {
+          await _secureStorage
+              .write(key: 'kanvtech_mobile_token', value: token)
+              .timeout(const Duration(milliseconds: 500), onTimeout: () {})
+              .catchError((_) {});
+          await prefs.setString('kanvtech_mobile_token', token);
+        }
+        await prefs.setString('kanvtech_mobile_remember_me', 'true');
+        await prefs.setString('kanvtech_remembered_email', email.trim());
+        await prefs.setString(
+            'kanvtech_mobile_user', jsonEncode(user.toJson()));
+      } else {
+        // Nonpersistent session policy: clean up persistent storage so cold restart requires reauthentication
+        await _secureStorage
+            .delete(key: 'kanvtech_mobile_token')
+            .timeout(const Duration(milliseconds: 500), onTimeout: () {})
+            .catchError((_) {});
+        await prefs.remove('kanvtech_mobile_token');
+        await prefs.remove('kanvtech_mobile_user');
+        await prefs.remove('kanvtech_remembered_email');
+        await prefs.setString('kanvtech_mobile_remember_me', 'false');
       }
-      await prefs.setString('kanvtech_mobile_user', jsonEncode(user.toJson()));
 
       _token = token;
       _user = user;
@@ -197,16 +250,34 @@ class AuthProvider with ChangeNotifier {
     _api.setToken(null);
     try {
       final prefs = await SharedPreferences.getInstance();
+      await _secureStorage
+          .delete(key: 'kanvtech_mobile_token')
+          .timeout(const Duration(milliseconds: 500), onTimeout: () {})
+          .catchError((_) {});
       await prefs.remove('kanvtech_mobile_token');
       await prefs.remove('kanvtech_mobile_user');
+      await prefs.remove('kanvtech_mobile_remember_me');
     } catch (_) {}
     notifyListeners();
   }
 
-  Future<bool> switchDemoRole(String role) async {
+  Future<bool> switchDemoRole(String role, {bool rememberMe = true}) async {
     if (_isSubmittingLogin) return false;
-    // Official evaluation and demo credentials matching active database accounts
-    final credentials = {
+    final creds = getDemoCredentials(role);
+    if (creds != null) {
+      final success = await login(creds['email']!, creds['password']!,
+          rememberMe: rememberMe);
+      if (!success && creds['fallbackPassword'] != null) {
+        return await login(creds['email']!, creds['fallbackPassword']!,
+            rememberMe: rememberMe);
+      }
+      return success;
+    }
+    return false;
+  }
+
+  Map<String, String>? getDemoCredentials(String role) {
+    const credentials = {
       'ADMIN': {
         'email': 'admin@kanvtech.com',
         'password': 'Password@123',
@@ -238,15 +309,6 @@ class AuthProvider with ChangeNotifier {
         'fallbackPassword': 'cust123',
       },
     };
-
-    final creds = credentials[role];
-    if (creds != null) {
-      final success = await login(creds['email']!, creds['password']!);
-      if (!success && creds['fallbackPassword'] != null) {
-        return await login(creds['email']!, creds['fallbackPassword']!);
-      }
-      return success;
-    }
-    return false;
+    return credentials[role];
   }
 }

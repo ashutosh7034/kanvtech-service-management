@@ -1,17 +1,42 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { ArrowRight, Lock, Mail, Eye, EyeOff } from 'lucide-react';
+import { BrandLogo } from '../../components/common/BrandLogo';
+
+interface DemoRole {
+  label: string;
+  role: string;
+  email: string;
+  password: string;
+}
+
+const DEMO_ROLES: DemoRole[] = [
+  { label: 'Customer', role: 'CUSTOMER', email: 'rajesh@acme.com', password: 'Password@123' },
+  { label: 'L1 Specialist', role: 'L1_EMPLOYEE', email: 'l1.amit@kanvtech.com', password: 'Password@123' },
+  { label: 'L2 Specialist', role: 'L2_EMPLOYEE', email: 'l2.vikram@kanvtech.com', password: 'Password@123' },
+  { label: 'L3 Specialist', role: 'L3_EMPLOYEE', email: 'l3.priya@kanvtech.com', password: 'Password@123' },
+  { label: 'Manager', role: 'MANAGER', email: 'manager@kanvtech.com', password: 'Password@123' },
+  { label: 'Admin', role: 'ADMIN', email: 'admin@kanvtech.com', password: 'Password@123' },
+];
 
 export const LoginPage: React.FC = () => {
-  const { login } = useAuth();
+  const { user, login } = useAuth();
   const [email, setEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeFastTrackRole, setActiveFastTrackRole] = useState<string | null>(null);
 
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
+
+  // If already authenticated, redirect directly to dashboard
+  useEffect(() => {
+    if (user && typeof window !== 'undefined') {
+      window.location.href = '/dashboard';
+    }
+  }, [user]);
 
   useEffect(() => {
     try {
@@ -44,6 +69,53 @@ export const LoginPage: React.FC = () => {
       clearTimeout(t2);
     };
   }, []);
+
+  const handleFastTrack = async (item: DemoRole) => {
+    if (loading) return;
+    setError(null);
+    setActiveFastTrackRole(item.role);
+
+    // 1. Populate the form fields so the user sees the account and inputs are synchronized
+    setEmail(item.email);
+    if (emailInputRef.current) {
+      emailInputRef.current.value = item.email;
+    }
+    if (passwordInputRef.current) {
+      passwordInputRef.current.value = item.password;
+    }
+
+    // 2. Perform authentication with current rememberMe setting
+    setLoading(true);
+    try {
+      if (rememberMe) {
+        localStorage.setItem('kanvtech_remember_me', 'true');
+        localStorage.setItem('kanvtech_remembered_email', item.email);
+      } else {
+        localStorage.removeItem('kanvtech_remember_me');
+        localStorage.removeItem('kanvtech_remembered_email');
+      }
+
+      await login(item.email, item.password, rememberMe);
+
+      if (typeof window !== 'undefined') {
+        window.location.href = '/dashboard';
+      }
+    } catch (err: any) {
+      const msg = err.message || '';
+      if (msg === 'Failed to fetch' || msg.includes('Network Error') || !window.navigator.onLine || msg === 'Server request failed') {
+        setError('Unable to connect to the server. Please try again.');
+      } else if (msg.includes('User does not exist') || msg.includes('contact admin')) {
+        setError('User does not exist. Please contact admin.');
+      } else if (msg.includes('Invalid email or password') || msg.includes('Incorrect password')) {
+        setError('Incorrect password. Please try again.');
+      } else {
+        setError(msg || 'Authentication failed. Please check credentials.');
+      }
+    } finally {
+      setLoading(false);
+      setActiveFastTrackRole(null);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -151,30 +223,27 @@ export const LoginPage: React.FC = () => {
           overflow: 'hidden',
         }}
       >
-        {/* Header */}
-        <div style={{ background: '#0b3b60', color: 'white', padding: '24px 28px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
+        {/* Header with Official Logo */}
+        <div style={{ background: '#0b3b60', color: 'white', padding: '20px 28px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+            <BrandLogo
+              variant="horizontal"
+              height={42}
               style={{
-                width: 34,
-                height: 34,
                 borderRadius: 6,
-                background: '#0284c7',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: 16,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.25)',
               }}
-            >
-              K
-            </div>
-            <div>
-              <div style={{ fontWeight: 700, fontSize: 17, letterSpacing: '-0.02em' }}>KANVTECH</div>
-              <div style={{ fontSize: 11, color: '#94a3b8' }}>SERVICE MANAGEMENT PLATFORM</div>
+            />
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', color: '#38bdf8' }}>
+                SERVICE MANAGEMENT
+              </div>
+              <div style={{ fontSize: 10, color: '#94a3b8' }}>
+                ENTERPRISE DESK
+              </div>
             </div>
           </div>
-          <div style={{ fontSize: 13, color: '#cbd5e1', marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: '#cbd5e1', marginTop: 12, lineHeight: 1.4 }}>
             Enterprise service desk, SLA tracking & ticket escalation
           </div>
         </div>
@@ -292,10 +361,66 @@ export const LoginPage: React.FC = () => {
                 opacity: loading ? 0.75 : 1,
               }}
             >
-              {loading ? 'Authenticating...' : 'Sign In to Portal'}
-              {!loading && <ArrowRight size={15} />}
+              {loading && !activeFastTrackRole ? 'Authenticating...' : 'Sign In to Portal'}
+              {(!loading || !!activeFastTrackRole) && <ArrowRight size={15} />}
             </button>
           </form>
+
+          {/* Fast-Track Quick-Role Login Section */}
+          <div style={{ marginTop: 24, paddingTop: 18, borderTop: '1px solid #f1f5f9', textAlign: 'center' }}>
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                color: '#64748b',
+                marginBottom: 12,
+                textTransform: 'uppercase',
+              }}
+            >
+              Fast-Track Quick-Role Login (One-Touch)
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: 8,
+              }}
+            >
+              {DEMO_ROLES.map((item) => (
+                <button
+                  key={item.role}
+                  id={`fast-track-${item.role.toLowerCase()}`}
+                  type="button"
+                  disabled={loading}
+                  onClick={() => handleFastTrack(item)}
+                  style={{
+                    background: activeFastTrackRole === item.role ? '#e0f2fe' : '#f8fafc',
+                    border: activeFastTrackRole === item.role ? '1px solid #0284c7' : '1px solid #e2e8f0',
+                    borderRadius: 6,
+                    padding: '8px 4px',
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: activeFastTrackRole === item.role ? '#0369a1' : '#334155',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    transition: 'all 0.15s ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 2,
+                    opacity: loading && activeFastTrackRole !== item.role ? 0.6 : 1,
+                  }}
+                  title={`Sign in as ${item.label} (${item.email})`}
+                >
+                  <span>{item.label}</span>
+                  <span style={{ fontSize: 9, color: '#94a3b8', fontWeight: 400 }}>
+                    {activeFastTrackRole === item.role ? 'Connecting...' : item.role.replace('_EMPLOYEE', '')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>

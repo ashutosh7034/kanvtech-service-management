@@ -89,3 +89,5 @@ Thumbs.db
 admin_token.txt
 **/admin_token.txt
 test_timer.ts
+.wifi-server.pids.json
+.cleanup_quarantine/

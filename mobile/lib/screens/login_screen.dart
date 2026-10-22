@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/auth_provider.dart';
 import '../theme/app_colors.dart';
 
@@ -14,6 +15,32 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _rememberMe = true;
+  String? _activeDemoRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRememberedState();
+  }
+
+  Future<void> _loadRememberedState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rememberedEmail = prefs.getString('kanvtech_remembered_email');
+      final rememberMePref = prefs.getString('kanvtech_mobile_remember_me');
+      if (mounted) {
+        setState(() {
+          if (rememberedEmail != null && rememberedEmail.isNotEmpty) {
+            _emailController.text = rememberedEmail;
+          }
+          if (rememberMePref != null) {
+            _rememberMe = rememberMePref != 'false';
+          }
+        });
+      }
+    } catch (_) {}
+  }
 
   @override
   void dispose() {
@@ -36,7 +63,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    final success = await auth.login(email, password);
+    final success = await auth.login(email, password, rememberMe: _rememberMe);
     if (!success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -207,52 +234,47 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 32,
-                                  height: 32,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brandAccent,
-                                    borderRadius: BorderRadius.circular(6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Colors.black12,
+                                    blurRadius: 4,
+                                    offset: Offset(0, 2),
                                   ),
-                                  alignment: Alignment.center,
-                                  child: const Text(
-                                    'K',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                const Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'KANVTECH',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 16,
-                                        letterSpacing: -0.3,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Service Management Platform',
-                                      style: TextStyle(
-                                        color: Color(0xFF94A3B8),
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
+                                ],
+                              ),
+                              child: Image.asset(
+                                'assets/images/kanvtech-logo.jpeg',
+                                height: 38,
+                                fit: BoxFit.contain,
+                                semanticLabel: 'KANVTECH official logo',
+                              ),
                             ),
-                            const SizedBox(height: 10),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'KANVTECH',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                            const Text(
+                              'Service Management Platform',
+                              style: TextStyle(
+                                color: Color(0xFF94A3B8),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
                             const Text(
                               'Enterprise service desk, SLA tracking & ticket escalation',
                               style: TextStyle(
@@ -311,10 +333,47 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                SizedBox(
+                                  height: 24,
+                                  width: 24,
+                                  child: Checkbox(
+                                    value: _rememberMe,
+                                    activeColor: AppColors.brandPrimary,
+                                    onChanged: auth.isLoading
+                                        ? null
+                                        : (val) {
+                                            setState(() {
+                                              _rememberMe = val ?? false;
+                                            });
+                                          },
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                GestureDetector(
+                                  onTap: auth.isLoading
+                                      ? null
+                                      : () {
+                                          setState(() {
+                                            _rememberMe = !_rememberMe;
+                                          });
+                                        },
+                                  child: const Text(
+                                    'Remember Me (30-day session)',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
                             ElevatedButton(
                               onPressed: auth.isLoading ? null : _handleLogin,
-                              child: auth.isLoading
+                              child: auth.isLoading && _activeDemoRole == null
                                   ? const SizedBox(
                                       width: 20,
                                       height: 20,
@@ -341,7 +400,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 24),
                 // Demo accounts quick switch
                 const Text(
-                  'DEMO ACCOUNTS (ONE-TOUCH)',
+                  'DEMO ACCOUNTS (ONE-TOUCH FAST-TRACK)',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 11,
@@ -373,34 +432,80 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _demoChip(BuildContext context, String label, String role) {
+    final auth = context.watch<AuthProvider>();
+    final isThisActive = _activeDemoRole == role && auth.isLoading;
+
     return ActionChip(
-      backgroundColor: AppColors.bgSurface,
+      backgroundColor: isThisActive
+          ? AppColors.brandPrimaryLight
+          : AppColors.bgSurface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(6),
-        side: const BorderSide(color: AppColors.borderMedium),
+        side: BorderSide(
+          color: isThisActive
+              ? AppColors.brandPrimary
+              : AppColors.borderMedium,
+        ),
       ),
+      avatar: isThisActive
+          ? const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppColors.brandPrimary,
+              ),
+            )
+          : null,
       label: Text(
         label,
-        style: const TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: AppColors.textPrimary),
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: isThisActive ? FontWeight.w600 : FontWeight.w500,
+          color: isThisActive
+              ? AppColors.brandPrimary
+              : AppColors.textPrimary,
+        ),
       ),
-      onPressed: () async {
-        final auth = context.read<AuthProvider>();
-        if (auth.isLoading) return;
-        auth.clearSessionTerminatedMessage();
-        final success = await auth.switchDemoRole(role);
-        if (!success && context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(auth.errorMessage ??
-                  'Login failed. Check server connectivity.'),
-              backgroundColor: AppColors.danger,
-            ),
-          );
-        }
-      },
+      onPressed: auth.isLoading
+          ? null
+          : () async {
+              if (auth.isLoading) return;
+              auth.clearSessionTerminatedMessage();
+
+              // Synchronize fields so user sees credentials and can review
+              final creds = auth.getDemoCredentials(role);
+              if (creds != null) {
+                _emailController.text = creds['email'] ?? '';
+                _passwordController.text = creds['password'] ?? '';
+              }
+
+              setState(() {
+                _activeDemoRole = role;
+              });
+
+              try {
+                final success = await auth.switchDemoRole(
+                  role,
+                  rememberMe: _rememberMe,
+                );
+                if (!success && mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(auth.errorMessage ??
+                          'Login failed. Check server connectivity.'),
+                      backgroundColor: AppColors.danger,
+                    ),
+                  );
+                }
+              } finally {
+                if (mounted) {
+                  setState(() {
+                    _activeDemoRole = null;
+                  });
+                }
+              }
+            },
     );
   }
 }
