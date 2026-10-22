@@ -62,7 +62,8 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Department', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text('Add Department',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         content: Form(
           key: formKey,
           child: Column(
@@ -70,24 +71,29 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
             children: [
               TextFormField(
                 controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Department Name *', isDense: true),
-                validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                decoration: const InputDecoration(
+                    labelText: 'Department Name *', isDense: true),
+                validator: (v) =>
+                    v == null || v.trim().isEmpty ? 'Required' : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: codeCtrl,
-                decoration: const InputDecoration(labelText: 'Code (e.g. CORE, SEC, INFRA)', isDense: true),
+                decoration: const InputDecoration(
+                    labelText: 'Code (e.g. CORE, SEC, INFRA)', isDense: true),
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: descCtrl,
-                decoration: const InputDecoration(labelText: 'Description', isDense: true),
+                decoration: const InputDecoration(
+                    labelText: 'Description', isDense: true),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
@@ -99,12 +105,16 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                   description: descCtrl.text.trim(),
                 );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Department created successfully!'), backgroundColor: AppColors.success),
+                  const SnackBar(
+                      content: Text('Department created successfully!'),
+                      backgroundColor: AppColors.success),
                 );
                 _loadDepartments();
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                  SnackBar(
+                      content: Text('Failed: $e'),
+                      backgroundColor: AppColors.danger),
                 );
               }
             },
@@ -122,14 +132,16 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
       appBar: AppBar(
         title: const Text('Department Master'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadDepartments),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadDepartments),
         ],
       ),
       drawer: const AppDrawer(),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brandPrimary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Department', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('New Department',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: _showAddDepartmentDialog,
       ),
       body: Column(
@@ -144,7 +156,9 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                 isDense: true,
                 filled: true,
                 fillColor: AppColors.bgApp,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none),
               ),
               onChanged: (val) => setState(() => _search = val),
             ),
@@ -157,9 +171,13 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadDepartments, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadDepartments,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
@@ -177,58 +195,103 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(14),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
                                           children: [
                                             CircleAvatar(
                                               radius: 18,
-                                              backgroundColor: AppColors.brandSecondary.withValues(alpha: 0.12),
-                                              child: const Icon(Icons.apartment, size: 20, color: AppColors.brandSecondary),
+                                              backgroundColor: AppColors
+                                                  .brandSecondary
+                                                  .withValues(alpha: 0.12),
+                                              child: const Icon(Icons.apartment,
+                                                  size: 20,
+                                                  color:
+                                                      AppColors.brandSecondary),
                                             ),
                                             const SizedBox(width: 12),
                                             Expanded(
                                               child: Column(
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
                                                 children: [
                                                   Row(
                                                     children: [
                                                       Flexible(
                                                         child: Text(
                                                           d.name,
-                                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                                                          overflow: TextOverflow.ellipsis,
+                                                          style:
+                                                              const TextStyle(
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold,
+                                                                  fontSize: 15),
+                                                          overflow: TextOverflow
+                                                              .ellipsis,
                                                         ),
                                                       ),
-                                                      if (d.code != null && d.code!.isNotEmpty) ...[
-                                                        const SizedBox(width: 8),
+                                                      if (d.code != null &&
+                                                          d.code!
+                                                              .isNotEmpty) ...[
+                                                        const SizedBox(
+                                                            width: 8),
                                                         Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                          decoration: BoxDecoration(
-                                                            color: AppColors.bgApp,
-                                                            borderRadius: BorderRadius.circular(4),
-                                                            border: Border.all(color: AppColors.borderLight),
+                                                          padding:
+                                                              const EdgeInsets
+                                                                  .symmetric(
+                                                                  horizontal: 6,
+                                                                  vertical: 2),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color:
+                                                                AppColors.bgApp,
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        4),
+                                                            border: Border.all(
+                                                                color: AppColors
+                                                                    .borderLight),
                                                           ),
-                                                          child: Text(d.code!, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                                          child: Text(d.code!,
+                                                              style: const TextStyle(
+                                                                  fontSize: 10,
+                                                                  fontWeight:
+                                                                      FontWeight
+                                                                          .bold)),
                                                         ),
                                                       ],
                                                     ],
                                                   ),
-                                                  if (d.description != null && d.description!.isNotEmpty)
-                                                    Text(d.description!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                                  if (d.description != null &&
+                                                      d.description!.isNotEmpty)
+                                                    Text(d.description!,
+                                                        style: const TextStyle(
+                                                            fontSize: 12,
+                                                            color: AppColors
+                                                                .textSecondary)),
                                                 ],
                                               ),
                                             ),
                                             Switch(
                                               value: d.isActive,
-                                              activeThumbColor: AppColors.success,
+                                              activeThumbColor:
+                                                  AppColors.success,
                                               onChanged: (val) async {
                                                 try {
-                                                  await _api.toggleDepartmentStatus(d.id, val);
+                                                  await _api
+                                                      .toggleDepartmentStatus(
+                                                          d.id, val);
                                                   _loadDepartments();
                                                 } catch (e) {
-                                                  ScaffoldMessenger.of(context).showSnackBar(
-                                                    SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                                                  ScaffoldMessenger.of(context)
+                                                      .showSnackBar(
+                                                    SnackBar(
+                                                        content:
+                                                            Text('Failed: $e'),
+                                                        backgroundColor:
+                                                            AppColors.danger),
                                                   );
                                                 }
                                               },
@@ -238,14 +301,27 @@ class _DepartmentsScreenState extends State<DepartmentsScreen> {
                                         const SizedBox(height: 10),
                                         Row(
                                           children: [
-                                            const Icon(Icons.group, size: 16, color: AppColors.textMuted),
+                                            const Icon(Icons.group,
+                                                size: 16,
+                                                color: AppColors.textMuted),
                                             const SizedBox(width: 6),
-                                            Text('${d.employeeCount} Specialists Assigned', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                            Text(
+                                                '${d.employeeCount} Specialists Assigned',
+                                                style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: AppColors
+                                                        .textSecondary)),
                                             if (d.managerName != null) ...[
                                               const SizedBox(width: 14),
-                                              const Icon(Icons.person, size: 16, color: AppColors.textMuted),
+                                              const Icon(Icons.person,
+                                                  size: 16,
+                                                  color: AppColors.textMuted),
                                               const SizedBox(width: 4),
-                                              Text('Lead: ${d.managerName}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                              Text('Lead: ${d.managerName}',
+                                                  style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: AppColors
+                                                          .textSecondary)),
                                             ],
                                           ],
                                         ),

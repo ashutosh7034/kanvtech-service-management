@@ -9,14 +9,17 @@ class AuthProvider with ChangeNotifier {
   final ApiService _api = ApiService();
   UserModel? _user;
   String? _token;
-  bool _isLoading = true;
+  bool _isInitializingSession = true;
+  bool _isSubmittingLogin = false;
   String? _errorMessage;
   String? _sessionTerminatedMessage;
   String? _serverUrl;
 
   UserModel? get user => _user;
   String? get token => _token;
-  bool get isLoading => _isLoading;
+  bool get isInitializingSession => _isInitializingSession;
+  bool get isSubmittingLogin => _isSubmittingLogin;
+  bool get isLoading => _isInitializingSession || _isSubmittingLogin;
   String? get errorMessage => _errorMessage;
   String? get sessionTerminatedMessage => _sessionTerminatedMessage;
   String get serverUrl => _serverUrl ?? _api.baseUrl;
@@ -44,7 +47,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<void> _loadSession() async {
-    _isLoading = true;
+    _isInitializingSession = true;
     notifyListeners();
 
     try {
@@ -73,7 +76,8 @@ class AuthProvider with ChangeNotifier {
         try {
           final refreshedUser = await _api.getMe();
           _user = refreshedUser;
-          await prefs.setString('kanvtech_mobile_user', jsonEncode(refreshedUser.toJson()));
+          await prefs.setString(
+              'kanvtech_mobile_user', jsonEncode(refreshedUser.toJson()));
         } on UnauthorizedException {
           // Token expired or invalid on the server
           _token = null;
@@ -96,9 +100,14 @@ class AuthProvider with ChangeNotifier {
     } catch (_) {
       // SharedPreferences access failure
     } finally {
-      _isLoading = false;
+      _isInitializingSession = false;
       notifyListeners();
     }
+  }
+
+  void cancelOrSkipInitialization() {
+    _isInitializingSession = false;
+    notifyListeners();
   }
 
   Future<void> setServerUrl(String? url) async {
@@ -117,28 +126,30 @@ class AuthProvider with ChangeNotifier {
 
   Future<bool> login(String email, String password,
       {bool rememberMe = true}) async {
-    _isLoading = true;
+    if (_isSubmittingLogin) return false;
+    _isSubmittingLogin = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
       final res = await _api.login(email, password, rememberMe: rememberMe);
-      _token = res['token'];
-      _user = UserModel.fromJson(res['user']);
+      final token = res['token']?.toString();
+      final user = UserModel.fromJson(res['user']);
 
       final prefs = await SharedPreferences.getInstance();
-      if (_token != null) {
-        await prefs.setString('kanvtech_mobile_token', _token!);
+      if (token != null) {
+        await prefs.setString('kanvtech_mobile_token', token);
       }
-      if (_user != null) {
-        await prefs.setString('kanvtech_mobile_user', jsonEncode(_user!.toJson()));
-      }
-      _isLoading = false;
+      await prefs.setString('kanvtech_mobile_user', jsonEncode(user.toJson()));
+
+      _token = token;
+      _user = user;
+      _isSubmittingLogin = false;
       notifyListeners();
       return true;
     } catch (e) {
       _errorMessage = _formatErrorMessage(e);
-      _isLoading = false;
+      _isSubmittingLogin = false;
       notifyListeners();
       return false;
     }
@@ -162,7 +173,9 @@ class AuthProvider with ChangeNotifier {
       return 'Connection to $serverUrl timed out. Please check your Wi-Fi signal and server status.';
     }
     if (e is UnauthorizedException || str.contains('UnauthorizedException')) {
-      return str.replaceFirst('UnauthorizedException: ', '').replaceFirst('Exception: ', '');
+      return str
+          .replaceFirst('UnauthorizedException: ', '')
+          .replaceFirst('Exception: ', '');
     }
     return str.replaceFirst('Exception: ', '');
   }
@@ -191,6 +204,7 @@ class AuthProvider with ChangeNotifier {
   }
 
   Future<bool> switchDemoRole(String role) async {
+    if (_isSubmittingLogin) return false;
     // Official evaluation and demo credentials matching active database accounts
     final credentials = {
       'ADMIN': {

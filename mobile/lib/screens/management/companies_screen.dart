@@ -65,7 +65,8 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Client Company', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text('Add Client Company',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         content: SingleChildScrollView(
           child: Form(
             key: formKey,
@@ -74,40 +75,50 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
               children: [
                 TextFormField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Company Name *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Company Name *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: emailCtrl,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Primary Email *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Primary Email *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: personCtrl,
-                  decoration: const InputDecoration(labelText: 'Contact Person *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Contact Person *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Contact Phone *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Contact Phone *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: addrCtrl,
-                  decoration: const InputDecoration(labelText: 'HQ Address', isDense: true),
+                  decoration: const InputDecoration(
+                      labelText: 'HQ Address', isDense: true),
                 ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
@@ -121,12 +132,16 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                   address: addrCtrl.text.trim(),
                 );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Company added successfully!'), backgroundColor: AppColors.success),
+                  const SnackBar(
+                      content: Text('Company added successfully!'),
+                      backgroundColor: AppColors.success),
                 );
                 _loadCompanies();
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed to add company: $e'), backgroundColor: AppColors.danger),
+                  SnackBar(
+                      content: Text('Failed to add company: $e'),
+                      backgroundColor: AppColors.danger),
                 );
               }
             },
@@ -174,22 +189,36 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                     Expanded(
                       child: Text(
                         company.companyName,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: AppColors.brandPrimary),
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                            color: AppColors.brandPrimary),
                       ),
                     ),
-                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    IconButton(
+                        icon: const Icon(Icons.close),
+                        onPressed: () => Navigator.pop(ctx)),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('Contact: ${company.contactPerson} • ${company.contactPhone}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                Text('Email: ${company.primaryEmail}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                Text(
+                    'Contact: ${company.contactPerson} • ${company.contactPhone}',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary)),
+                Text('Email: ${company.primaryEmail}',
+                    style: const TextStyle(
+                        fontSize: 13, color: AppColors.textSecondary)),
                 if (company.address != null && company.address!.isNotEmpty)
-                  Text('Address: ${company.address}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                  Text('Address: ${company.address}',
+                      style: const TextStyle(
+                          fontSize: 13, color: AppColors.textSecondary)),
                 const Divider(height: 24),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text('Registered Branches', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const Text('Registered Branches',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
                     TextButton.icon(
                       icon: const Icon(Icons.add, size: 16),
                       label: const Text('Add Branch'),
@@ -203,7 +232,9 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                   child: loadingBranches
                       ? const Center(child: CircularProgressIndicator())
                       : branches.isEmpty
-                          ? const Center(child: Text('No branches registered yet.', style: TextStyle(color: AppColors.textMuted)))
+                          ? const Center(
+                              child: Text('No branches registered yet.',
+                                  style: TextStyle(color: AppColors.textMuted)))
                           : ListView.builder(
                               itemCount: branches.length,
                               itemBuilder: (ctx, i) {
@@ -211,9 +242,15 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 8),
                                   child: ListTile(
-                                    leading: const Icon(Icons.location_on, color: AppColors.brandSecondary),
-                                    title: Text(b.branchName, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                                    subtitle: Text('${b.city ?? ''} ${b.state != null ? "• ${b.state}" : ""}\n${b.contactPerson ?? ''} ${b.contactPhone ?? ''}', style: const TextStyle(fontSize: 12)),
+                                    leading: const Icon(Icons.location_on,
+                                        color: AppColors.brandSecondary),
+                                    title: Text(b.branchName,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            fontSize: 14)),
+                                    subtitle: Text(
+                                        '${b.city ?? ''} ${b.state != null ? "• ${b.state}" : ""}\n${b.contactPerson ?? ''} ${b.contactPhone ?? ''}',
+                                        style: const TextStyle(fontSize: 12)),
                                   ),
                                 );
                               },
@@ -237,25 +274,43 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Add Branch Location', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+        title: const Text('Add Branch Location',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              TextField(controller: branchNameCtrl, decoration: const InputDecoration(labelText: 'Branch Name *', isDense: true)),
+              TextField(
+                  controller: branchNameCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Branch Name *', isDense: true)),
               const SizedBox(height: 8),
-              TextField(controller: cityCtrl, decoration: const InputDecoration(labelText: 'City', isDense: true)),
+              TextField(
+                  controller: cityCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'City', isDense: true)),
               const SizedBox(height: 8),
-              TextField(controller: stateCtrl, decoration: const InputDecoration(labelText: 'State', isDense: true)),
+              TextField(
+                  controller: stateCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'State', isDense: true)),
               const SizedBox(height: 8),
-              TextField(controller: personCtrl, decoration: const InputDecoration(labelText: 'Contact Person', isDense: true)),
+              TextField(
+                  controller: personCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Contact Person', isDense: true)),
               const SizedBox(height: 8),
-              TextField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Contact Phone', isDense: true)),
+              TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                      labelText: 'Contact Phone', isDense: true)),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               if (branchNameCtrl.text.trim().isEmpty) return;
@@ -272,7 +327,9 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                 onAdded();
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                  SnackBar(
+                      content: Text('Failed: $e'),
+                      backgroundColor: AppColors.danger),
                 );
               }
             },
@@ -300,7 +357,8 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brandPrimary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Company', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('New Company',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: _showAddCompanyDialog,
       ),
       body: Column(
@@ -315,7 +373,9 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                 isDense: true,
                 filled: true,
                 fillColor: AppColors.bgApp,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none),
               ),
               onChanged: (val) => setState(() => _searchQuery = val),
             ),
@@ -328,14 +388,19 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadCompanies, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadCompanies,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
                     : _filteredCompanies.isEmpty
-                        ? const Center(child: Text('No client companies found.'))
+                        ? const Center(
+                            child: Text('No client companies found.'))
                         : RefreshIndicator(
                             onRefresh: _loadCompanies,
                             child: ListView.builder(
@@ -346,21 +411,33 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 8),
                                     leading: CircleAvatar(
-                                      backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.1),
-                                      child: const Icon(Icons.business, color: AppColors.brandPrimary),
+                                      backgroundColor: AppColors.brandPrimary
+                                          .withValues(alpha: 0.1),
+                                      child: const Icon(Icons.business,
+                                          color: AppColors.brandPrimary),
                                     ),
                                     title: Text(
                                       c.companyName,
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15),
                                     ),
                                     subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const SizedBox(height: 4),
-                                        Text('${c.contactPerson} • ${c.contactPhone}', style: const TextStyle(fontSize: 12)),
-                                        Text(c.primaryEmail, style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                        Text(
+                                            '${c.contactPerson} • ${c.contactPhone}',
+                                            style:
+                                                const TextStyle(fontSize: 12)),
+                                        Text(c.primaryEmail,
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppColors.textMuted)),
                                       ],
                                     ),
                                     trailing: Row(
@@ -371,11 +448,16 @@ class _CompaniesScreenState extends State<CompaniesScreen> {
                                           activeThumbColor: AppColors.success,
                                           onChanged: (val) async {
                                             try {
-                                              await _api.toggleCompanyStatus(c.id, val);
+                                              await _api.toggleCompanyStatus(
+                                                  c.id, val);
                                               _loadCompanies();
                                             } catch (e) {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                                              ScaffoldMessenger.of(context)
+                                                  .showSnackBar(
+                                                SnackBar(
+                                                    content: Text('Failed: $e'),
+                                                    backgroundColor:
+                                                        AppColors.danger),
                                               );
                                             }
                                           },

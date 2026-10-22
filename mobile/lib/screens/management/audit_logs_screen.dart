@@ -77,7 +77,9 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                 isDense: true,
                 filled: true,
                 fillColor: AppColors.bgApp,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none),
               ),
               onChanged: (val) => setState(() => _search = val),
             ),
@@ -90,9 +92,13 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadLogs, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadLogs,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
@@ -110,35 +116,60 @@ class _AuditLogsScreenState extends State<AuditLogsScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(12),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
                                               log.action,
-                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.brandPrimary),
+                                              style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 13,
+                                                  color:
+                                                      AppColors.brandPrimary),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 6,
+                                                      vertical: 2),
                                               decoration: BoxDecoration(
                                                 color: AppColors.bgApp,
-                                                borderRadius: BorderRadius.circular(4),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
                                               ),
                                               child: Text(
                                                 log.actorRole,
-                                                style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
+                                                style: const TextStyle(
+                                                    fontSize: 10,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors
+                                                        .textSecondary),
                                               ),
                                             ),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
-                                        Text('Actor: ${log.actorEmail} • IP: ${log.ipAddress ?? "local"}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                                        Text('Entity: ${log.entityType} ${log.entityId != null ? "#${log.entityId}" : ""}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                        Text(
+                                            'Actor: ${log.actorEmail} • IP: ${log.ipAddress ?? "local"}',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    AppColors.textSecondary)),
+                                        Text(
+                                            'Entity: ${log.entityType} ${log.entityId != null ? "#${log.entityId}" : ""}',
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: AppColors.textMuted)),
                                         const SizedBox(height: 4),
                                         Text(
                                           '${log.createdAt.day}/${log.createdAt.month}/${log.createdAt.year} ${log.createdAt.hour.toString().padLeft(2, '0')}:${log.createdAt.minute.toString().padLeft(2, '0')}:${log.createdAt.second.toString().padLeft(2, '0')}',
-                                          style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                          style: const TextStyle(
+                                              fontSize: 10,
+                                              color: AppColors.textMuted),
                                         ),
                                       ],
                                     ),

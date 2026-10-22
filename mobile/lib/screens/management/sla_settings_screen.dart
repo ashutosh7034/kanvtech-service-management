@@ -44,8 +44,10 @@ class _SlaSettingsScreenState extends State<SlaSettingsScreen> {
 
   void _showEditSlaDialog(SlaConfigModel config) {
     final respCtrl = TextEditingController(text: '${config.responseTimeHours}');
-    final resCtrl = TextEditingController(text: '${config.resolutionTimeHours}');
-    final warnCtrl = TextEditingController(text: '${config.warningThresholdPercent}');
+    final resCtrl =
+        TextEditingController(text: '${config.resolutionTimeHours}');
+    final warnCtrl =
+        TextEditingController(text: '${config.warningThresholdPercent}');
     final formKey = GlobalKey<FormState>();
 
     showDialog(
@@ -60,28 +62,39 @@ class _SlaSettingsScreenState extends State<SlaSettingsScreen> {
               TextFormField(
                 controller: respCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'First Response SLA (Hours) *', isDense: true),
-                validator: (v) => v == null || int.tryParse(v) == null ? 'Must be a valid integer' : null,
+                decoration: const InputDecoration(
+                    labelText: 'First Response SLA (Hours) *', isDense: true),
+                validator: (v) => v == null || int.tryParse(v) == null
+                    ? 'Must be a valid integer'
+                    : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: resCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Complete Resolution SLA (Hours) *', isDense: true),
-                validator: (v) => v == null || int.tryParse(v) == null ? 'Must be a valid integer' : null,
+                decoration: const InputDecoration(
+                    labelText: 'Complete Resolution SLA (Hours) *',
+                    isDense: true),
+                validator: (v) => v == null || int.tryParse(v) == null
+                    ? 'Must be a valid integer'
+                    : null,
               ),
               const SizedBox(height: 10),
               TextFormField(
                 controller: warnCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Warning Threshold (%) *', isDense: true),
-                validator: (v) => v == null || int.tryParse(v) == null ? 'Must be a valid percentage' : null,
+                decoration: const InputDecoration(
+                    labelText: 'Warning Threshold (%) *', isDense: true),
+                validator: (v) => v == null || int.tryParse(v) == null
+                    ? 'Must be a valid percentage'
+                    : null,
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
@@ -94,12 +107,16 @@ class _SlaSettingsScreenState extends State<SlaSettingsScreen> {
                   warningThresholdPercent: int.parse(warnCtrl.text.trim()),
                 );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${config.priority} SLA targets updated!'), backgroundColor: AppColors.success),
+                  SnackBar(
+                      content: Text('${config.priority} SLA targets updated!'),
+                      backgroundColor: AppColors.success),
                 );
                 _loadSla();
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                  SnackBar(
+                      content: Text('Failed: $e'),
+                      backgroundColor: AppColors.danger),
                 );
               }
             },
@@ -142,9 +159,11 @@ class _SlaSettingsScreenState extends State<SlaSettingsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                      Text(_error!,
+                          style: const TextStyle(color: AppColors.danger)),
                       const SizedBox(height: 8),
-                      ElevatedButton(onPressed: _loadSla, child: const Text('Retry')),
+                      ElevatedButton(
+                          onPressed: _loadSla, child: const Text('Retry')),
                     ],
                   ),
                 )
@@ -165,14 +184,20 @@ class _SlaSettingsScreenState extends State<SlaSettingsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Text(
                                         '${c.priority} Priority SLA',
-                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: _priorityColor(c.priority)),
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 16,
+                                            color: _priorityColor(c.priority)),
                                       ),
                                       IconButton(
-                                        icon: const Icon(Icons.edit, size: 18, color: AppColors.brandPrimary),
+                                        icon: const Icon(Icons.edit,
+                                            size: 18,
+                                            color: AppColors.brandPrimary),
                                         onPressed: () => _showEditSlaDialog(c),
                                       ),
                                     ],
@@ -182,28 +207,54 @@ class _SlaSettingsScreenState extends State<SlaSettingsScreen> {
                                     children: [
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            const Text('First Response Target', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                            Text('${c.responseTimeHours} Hours', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                            const Text('First Response Target',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        AppColors.textMuted)),
+                                            Text('${c.responseTimeHours} Hours',
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15)),
                                           ],
                                         ),
                                       ),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            const Text('Resolution Target', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                            Text('${c.resolutionTimeHours} Hours', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                            const Text('Resolution Target',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        AppColors.textMuted)),
+                                            Text(
+                                                '${c.resolutionTimeHours} Hours',
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15)),
                                           ],
                                         ),
                                       ),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            const Text('Warning Alert', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
-                                            Text('${c.warningThresholdPercent}% Elapsed', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                            const Text('Warning Alert',
+                                                style: TextStyle(
+                                                    fontSize: 11,
+                                                    color:
+                                                        AppColors.textMuted)),
+                                            Text(
+                                                '${c.warningThresholdPercent}% Elapsed',
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 15)),
                                           ],
                                         ),
                                       ),

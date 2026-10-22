@@ -62,7 +62,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       appBar: AppBar(
         title: const Text('Operational Analytics & Reports'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllReports),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadAllReports),
         ],
       ),
       drawer: const AppDrawer(),
@@ -73,9 +74,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                      Text(_error!,
+                          style: const TextStyle(color: AppColors.danger)),
                       const SizedBox(height: 8),
-                      ElevatedButton(onPressed: _loadAllReports, child: const Text('Retry')),
+                      ElevatedButton(
+                          onPressed: _loadAllReports,
+                          child: const Text('Retry')),
                     ],
                   ),
                 )
@@ -85,38 +89,78 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     padding: const EdgeInsets.all(16),
                     children: [
                       // Overview KPIs
-                      const Text('Executive Platform KPIs', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      const Text('Executive Platform KPIs',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary)),
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(child: _kpiCard('Total Tickets', '${_stats?.totalTickets ?? 0}', Icons.analytics, AppColors.brandPrimary)),
+                          Expanded(
+                              child: _kpiCard(
+                                  'Total Tickets',
+                                  '${_stats?.totalTickets ?? 0}',
+                                  Icons.analytics,
+                                  AppColors.brandPrimary)),
                           const SizedBox(width: 10),
-                          Expanded(child: _kpiCard('Resolved', '${_stats?.resolvedTickets ?? 0}', Icons.check_circle_outline, AppColors.success)),
+                          Expanded(
+                              child: _kpiCard(
+                                  'Resolved',
+                                  '${_stats?.resolvedTickets ?? 0}',
+                                  Icons.check_circle_outline,
+                                  AppColors.success)),
                         ],
                       ),
                       const SizedBox(height: 10),
                       Row(
                         children: [
-                          Expanded(child: _kpiCard('Active Open', '${_stats?.openTickets ?? 0}', Icons.lock_open, AppColors.brandSecondary)),
+                          Expanded(
+                              child: _kpiCard(
+                                  'Active Open',
+                                  '${_stats?.openTickets ?? 0}',
+                                  Icons.lock_open,
+                                  AppColors.brandSecondary)),
                           const SizedBox(width: 10),
-                          Expanded(child: _kpiCard('SLA Breached', '${_stats?.breachedSlaTickets ?? 0}', Icons.alarm_off, AppColors.danger)),
+                          Expanded(
+                              child: _kpiCard(
+                                  'SLA Breached',
+                                  '${_stats?.breachedSlaTickets ?? 0}',
+                                  Icons.alarm_off,
+                                  AppColors.danger)),
                         ],
                       ),
                       const SizedBox(height: 24),
 
                       // Resolution by Support Tier
-                      const Text('Resolution Time & Performance by Tier', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      const Text('Resolution Time & Performance by Tier',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary)),
                       const SizedBox(height: 10),
                       Card(
                         child: Padding(
                           padding: const EdgeInsets.all(16),
                           child: Column(
                             children: [
-                              _tierMetricRow('L1 Support Specialist', _resolutionByLevel['L1'] ?? '2.4 hrs avg', 0.85, AppColors.brandPrimary),
+                              _tierMetricRow(
+                                  'L1 Support Specialist',
+                                  _resolutionByLevel['L1'] ?? '2.4 hrs avg',
+                                  0.85,
+                                  AppColors.brandPrimary),
                               const Divider(height: 20),
-                              _tierMetricRow('L2 Senior Specialist', _resolutionByLevel['L2'] ?? '6.1 hrs avg', 0.60, AppColors.warning),
+                              _tierMetricRow(
+                                  'L2 Senior Specialist',
+                                  _resolutionByLevel['L2'] ?? '6.1 hrs avg',
+                                  0.60,
+                                  AppColors.warning),
                               const Divider(height: 20),
-                              _tierMetricRow('L3 Principal Architect', _resolutionByLevel['L3'] ?? '14.5 hrs avg', 0.40, AppColors.danger),
+                              _tierMetricRow(
+                                  'L3 Principal Architect',
+                                  _resolutionByLevel['L3'] ?? '14.5 hrs avg',
+                                  0.40,
+                                  AppColors.danger),
                             ],
                           ),
                         ),
@@ -124,7 +168,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       const SizedBox(height: 24),
 
                       // Specialist Workload Distribution
-                      const Text('Specialist Workload Distribution', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      const Text('Specialist Workload Distribution',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary)),
                       const SizedBox(height: 10),
                       Card(
                         child: Padding(
@@ -132,28 +180,48 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('Active Specialists Queue Health', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                              const Text('Active Specialists Queue Health',
+                                  style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold)),
                               const SizedBox(height: 6),
                               Text(
                                 'Engine actively monitors ticket quotas per engineer. Escalations trigger automatic load rebalancing.',
-                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary),
                               ),
                               const SizedBox(height: 12),
                               if (_workload['employees'] is List)
-                                ...((_workload['employees'] as List).take(5).map((e) {
+                                ...((_workload['employees'] as List)
+                                    .take(5)
+                                    .map((e) {
                                   return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    padding:
+                                        const EdgeInsets.symmetric(vertical: 4),
                                     child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Text('${e['name'] ?? 'Engineer'} (${e['level'] ?? 'L1'})', style: const TextStyle(fontSize: 13)),
-                                        Text('${e['openTickets'] ?? 0} tickets', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppColors.brandPrimary)),
+                                        Text(
+                                            '${e['name'] ?? 'Engineer'} (${e['level'] ?? 'L1'})',
+                                            style:
+                                                const TextStyle(fontSize: 13)),
+                                        Text('${e['openTickets'] ?? 0} tickets',
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.bold,
+                                                color: AppColors.brandPrimary)),
                                       ],
                                     ),
                                   );
                                 }))
                               else
-                                const Text('Workload balanced across all active specialist queues.', style: TextStyle(fontSize: 12, color: AppColors.success)),
+                                const Text(
+                                    'Workload balanced across all active specialist queues.',
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        color: AppColors.success)),
                             ],
                           ),
                         ),
@@ -161,7 +229,11 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       const SizedBox(height: 24),
 
                       // Escalations & Approvals Insights
-                      const Text('Senior Tier Escalation Analysis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
+                      const Text('Senior Tier Escalation Analysis',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary)),
                       const SizedBox(height: 10),
                       Card(
                         child: Padding(
@@ -171,17 +243,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             children: [
                               Row(
                                 children: [
-                                  const Icon(Icons.trending_up, color: AppColors.danger, size: 20),
+                                  const Icon(Icons.trending_up,
+                                      color: AppColors.danger, size: 20),
                                   const SizedBox(width: 8),
-                                  Text('Top Escalation Triggers (${_escalations["totalEscalations"] ?? _escalations["count"] ?? "Active"})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                  Text(
+                                      'Top Escalation Triggers (${_escalations["totalEscalations"] ?? _escalations["count"] ?? "Active"})',
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13)),
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              const Text('1. Core architecture bug requiring engineering patch', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                              const Text(
+                                  '1. Core architecture bug requiring engineering patch',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary)),
                               const SizedBox(height: 4),
-                              const Text('2. Client SLA threshold < 2 hours with complex root cause', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                              const Text(
+                                  '2. Client SLA threshold < 2 hours with complex root cause',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary)),
                               const SizedBox(height: 4),
-                              const Text('3. Integration gateway timeout requiring database diagnosis', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                              const Text(
+                                  '3. Integration gateway timeout requiring database diagnosis',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textSecondary)),
                             ],
                           ),
                         ),
@@ -203,27 +292,38 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
+                Text(label,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted)),
                 Icon(icon, size: 18, color: color),
               ],
             ),
             const SizedBox(height: 8),
-            Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color)),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 22, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
       ),
     );
   }
 
-  Widget _tierMetricRow(String tier, dynamic avgTime, double progress, Color color) {
+  Widget _tierMetricRow(
+      String tier, dynamic avgTime, double progress, Color color) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(tier, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-            Text('$avgTime', style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
+            Text(tier,
+                style:
+                    const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            Text('$avgTime',
+                style: TextStyle(
+                    color: color, fontWeight: FontWeight.bold, fontSize: 13)),
           ],
         ),
         const SizedBox(height: 6),

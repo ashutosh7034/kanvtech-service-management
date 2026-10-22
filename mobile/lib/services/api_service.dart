@@ -8,7 +8,9 @@ import '../models/master_models.dart';
 
 class SessionTerminatedException implements Exception {
   final String message;
-  const SessionTerminatedException([this.message = 'Your account has been logged in on another device. You have been logged out for security reasons.']);
+  const SessionTerminatedException(
+      [this.message =
+          'Your account has been logged in on another device. You have been logged out for security reasons.']);
 
   @override
   String toString() => message;
@@ -16,7 +18,8 @@ class SessionTerminatedException implements Exception {
 
 class UnauthorizedException implements Exception {
   final String message;
-  const UnauthorizedException([this.message = 'Session expired or unauthorized']);
+  const UnauthorizedException(
+      [this.message = 'Session expired or unauthorized']);
 
   @override
   String toString() => message;
@@ -33,13 +36,26 @@ class ApiService {
   String? _customBaseUrl;
   void Function(String message)? onSessionTerminated;
 
+  static String normalizeApiUrl(String input) {
+    var trimmed = input.trim();
+    if (trimmed.isEmpty) return 'https://192.168.1.4:8444/api';
+
+    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+      trimmed = 'https://$trimmed';
+    }
+
+    trimmed = trimmed.replaceAll(RegExp(r'/+$'), '');
+
+    if (trimmed.endsWith('/api')) {
+      return trimmed;
+    }
+
+    return '$trimmed/api';
+  }
+
   void setCustomBaseUrl(String? url) {
     if (url != null && url.trim().isNotEmpty) {
-      var normalized = url.trim().replaceAll(RegExp(r'/+$'), '');
-      if (!normalized.endsWith('/api')) {
-        normalized = '$normalized/api';
-      }
-      _customBaseUrl = normalized;
+      _customBaseUrl = normalizeApiUrl(url);
     } else {
       _customBaseUrl = null;
     }
@@ -51,11 +67,7 @@ class ApiService {
     }
     const configuredUrl = String.fromEnvironment('API_URL');
     if (configuredUrl.isNotEmpty) {
-      var normalized = configuredUrl.replaceAll(RegExp(r'/+$'), '');
-      if (!normalized.endsWith('/api')) {
-        normalized = '$normalized/api';
-      }
-      return normalized;
+      return normalizeApiUrl(configuredUrl);
     }
     if (kIsWeb) return 'http://localhost:5000/api';
     return 'https://192.168.1.4:8444/api';
@@ -77,15 +89,76 @@ class ApiService {
     return headers;
   }
 
+  Future<http.Response> _get(Uri uri, {Map<String, String>? headers}) async {
+    try {
+      return await http.get(uri, headers: headers ?? _headers()).timeout(
+            requestTimeout,
+            onTimeout: () => throw const SocketException(
+                'Connection timed out. Please check your network connection and server status.'),
+          );
+    } on http.ClientException catch (e) {
+      throw SocketException(e.message);
+    }
+  }
+
+  Future<http.Response> _post(Uri uri,
+      {Object? body, Map<String, String>? headers}) async {
+    try {
+      return await http
+          .post(uri, headers: headers ?? _headers(), body: body)
+          .timeout(
+            requestTimeout,
+            onTimeout: () => throw const SocketException(
+                'Connection timed out. Please check your network connection and server status.'),
+          );
+    } on http.ClientException catch (e) {
+      throw SocketException(e.message);
+    }
+  }
+
+  Future<http.Response> _put(Uri uri,
+      {Object? body, Map<String, String>? headers}) async {
+    try {
+      return await http
+          .put(uri, headers: headers ?? _headers(), body: body)
+          .timeout(
+            requestTimeout,
+            onTimeout: () => throw const SocketException(
+                'Connection timed out. Please check your network connection and server status.'),
+          );
+    } on http.ClientException catch (e) {
+      throw SocketException(e.message);
+    }
+  }
+
+  Future<http.Response> _patch(Uri uri,
+      {Object? body, Map<String, String>? headers}) async {
+    try {
+      return await http
+          .patch(uri, headers: headers ?? _headers(), body: body)
+          .timeout(
+            requestTimeout,
+            onTimeout: () => throw const SocketException(
+                'Connection timed out. Please check your network connection and server status.'),
+          );
+    } on http.ClientException catch (e) {
+      throw SocketException(e.message);
+    }
+  }
+
   dynamic _processResponse(http.Response res) {
     dynamic data;
     try {
       data = jsonDecode(res.body);
     } catch (_) {
+      final isHtml =
+          res.body.contains('<html') || res.body.contains('<!DOCTYPE');
       data = {
-        'error': res.body.isNotEmpty
-            ? res.body
-            : 'Server responded with HTTP ${res.statusCode}'
+        'error': isHtml
+            ? 'Server returned an HTML response instead of JSON (HTTP ${res.statusCode}). Please verify the backend service is running.'
+            : (res.body.isNotEmpty
+                ? res.body
+                : 'Server responded with HTTP ${res.statusCode}')
       };
     }
 
@@ -99,7 +172,10 @@ class ApiService {
     if (res.statusCode == 401) {
       final isTerminated = data is Map &&
           (data['code'] == 'SESSION_TERMINATED' ||
-              (data['message']?.toString().contains('logged in on another device') ?? false));
+              (data['message']
+                      ?.toString()
+                      .contains('logged in on another device') ??
+                  false));
 
       if (isTerminated) {
         const msg =
@@ -108,21 +184,25 @@ class ApiService {
         onSessionTerminated?.call(msg);
         throw const SessionTerminatedException(msg);
       }
-      final msg = (data is Map ? data['message'] ?? data['error'] : null) ?? 'Invalid email or password';
+      final msg = (data is Map ? data['message'] ?? data['error'] : null) ??
+          'Invalid email or password';
       throw UnauthorizedException(msg.toString());
     }
 
     if (res.statusCode == 403) {
-      final msg = (data is Map ? data['message'] ?? data['error'] : null) ?? 'Access denied';
+      final msg = (data is Map ? data['message'] ?? data['error'] : null) ??
+          'Access denied';
       throw Exception(msg.toString());
     }
 
     if (res.statusCode == 404) {
-      throw Exception('Endpoint not found (HTTP 404): ${res.request?.url.path ?? ''}');
+      throw Exception(
+          'Endpoint not found (HTTP 404): ${res.request?.url.path ?? ''}');
     }
 
     if (res.statusCode == 429) {
-      throw Exception('Too many login attempts. Please wait a moment and try again.');
+      throw Exception(
+          'Too many login attempts. Please wait a moment and try again.');
     }
 
     if (data is Map) {
@@ -143,7 +223,7 @@ class ApiService {
 
   Future<Map<String, dynamic>> login(String email, String password,
       {bool rememberMe = true}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/auth/login'),
       headers: _headers(),
       body: jsonEncode({
@@ -151,9 +231,7 @@ class ApiService {
         'password': password,
         'rememberMe': rememberMe,
       }),
-    ).timeout(requestTimeout, onTimeout: () {
-      throw const SocketException('Connection timed out. Please check your network connection and server status.');
-    });
+    );
     final data = _processResponse(res);
     if (data is Map<String, dynamic> && data['token'] != null) {
       _token = data['token'];
@@ -163,12 +241,10 @@ class ApiService {
   }
 
   Future<UserModel> getMe() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/auth/me'),
       headers: _headers(),
-    ).timeout(requestTimeout, onTimeout: () {
-      throw const SocketException('Connection timed out. Please check your network connection and server status.');
-    });
+    );
     final data = _processResponse(res);
     if (data is Map && data['user'] != null) {
       return UserModel.fromJson(data['user']);
@@ -181,7 +257,7 @@ class ApiService {
     required String newPassword,
     String? confirmPassword,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/auth/change-password'),
       headers: _headers(),
       body: jsonEncode({
@@ -196,7 +272,7 @@ class ApiService {
   Future<void> logout() async {
     try {
       if (_token != null) {
-        await http.post(
+        await _post(
           Uri.parse('$baseUrl/auth/logout'),
           headers: _headers(),
         );
@@ -234,20 +310,27 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/tickets').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
 
-    final rawList = data['tickets'] ?? data['data'];
-    if (rawList is List) {
+    List? rawList;
+    if (data is Map) {
+      rawList = (data['tickets'] ?? data['data']) as List?;
+    } else if (data is List) {
+      rawList = data;
+    }
+
+    if (rawList != null) {
       return rawList
-          .map((t) => TicketModel.fromJson(t as Map<String, dynamic>))
+          .whereType<Map<String, dynamic>>()
+          .map((t) => TicketModel.fromJson(t))
           .toList();
     }
     return [];
   }
 
   Future<TicketModel> getTicketDetails(String id) async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/tickets/$id'),
       headers: _headers(),
     );
@@ -292,7 +375,7 @@ class ApiService {
     if (assignedEmployeeId != null && assignedEmployeeId.isNotEmpty)
       payload['assigned_employee_id'] = assignedEmployeeId;
 
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets'),
       headers: _headers(),
       body: jsonEncode(payload),
@@ -306,7 +389,7 @@ class ApiService {
 
   // Timer Controls
   Future<void> startWork(String ticketId) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/start'),
       headers: _headers(),
       body: jsonEncode({}),
@@ -315,7 +398,7 @@ class ApiService {
   }
 
   Future<void> pauseWork(String ticketId) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/pause'),
       headers: _headers(),
       body: jsonEncode({}),
@@ -324,7 +407,7 @@ class ApiService {
   }
 
   Future<void> resumeWork(String ticketId) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/resume'),
       headers: _headers(),
       body: jsonEncode({}),
@@ -349,7 +432,7 @@ class ApiService {
     if (assignedToEmployeeId != null)
       payload['assignedToEmployeeId'] = assignedToEmployeeId;
 
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/escalate'),
       headers: _headers(),
       body: jsonEncode(payload),
@@ -359,7 +442,7 @@ class ApiService {
 
   Future<void> resolveTicket(String ticketId,
       {required String resolutionNotes}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/resolve'),
       headers: _headers(),
       body: jsonEncode({
@@ -371,7 +454,7 @@ class ApiService {
   }
 
   Future<void> approveResolution(String ticketId, {String? notes}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/approve'),
       headers: _headers(),
       body: jsonEncode({'notes': notes ?? 'Approved by Service Manager'}),
@@ -380,7 +463,7 @@ class ApiService {
   }
 
   Future<void> reopenTicket(String ticketId, {required String reason}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/reopen'),
       headers: _headers(),
       body: jsonEncode({
@@ -393,7 +476,7 @@ class ApiService {
 
   Future<void> submitFeedback(String ticketId,
       {required int rating, String? remarks}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/feedback'),
       headers: _headers(),
       body: jsonEncode({
@@ -405,7 +488,7 @@ class ApiService {
   }
 
   Future<void> closeTicket(String ticketId, {String? closureReason}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/close'),
       headers: _headers(),
       body: jsonEncode({
@@ -417,7 +500,7 @@ class ApiService {
 
   Future<void> addComment(String ticketId,
       {required String message, bool isInternal = false}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/comments'),
       headers: _headers(),
       body: jsonEncode({
@@ -434,7 +517,7 @@ class ApiService {
     String level = 'L1',
     String? notes,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/$ticketId/assign'),
       headers: _headers(),
       body: jsonEncode({
@@ -459,7 +542,7 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/task-allotment/queue').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
 
     final rawList = data['queue'] ?? data['tickets'] ?? data['data'];
@@ -472,7 +555,7 @@ class ApiService {
   }
 
   Future<List<EmployeeSummaryModel>> getEligibleEmployees() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/task-allotment/eligible-employees'),
       headers: _headers(),
     );
@@ -491,7 +574,7 @@ class ApiService {
   // ===========================================================================
 
   Future<List<CompanyModel>> getCompanies() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/companies'),
       headers: _headers(),
     );
@@ -506,7 +589,7 @@ class ApiService {
   }
 
   Future<List<BranchModel>> getCompanyBranches(String companyId) async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/companies/$companyId/branches'),
       headers: _headers(),
     );
@@ -521,12 +604,14 @@ class ApiService {
   }
 
   Future<List<ProductModel>> getProducts() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/products'),
       headers: _headers(),
     );
     final data = _processResponse(res);
-    final rawList = data is Map ? (data['products'] ?? data['data']) : (data is List ? data : null);
+    final rawList = data is Map
+        ? (data['products'] ?? data['data'])
+        : (data is List ? data : null);
     if (rawList is List) {
       return rawList
           .map((p) => ProductModel.fromJson(p as Map<String, dynamic>))
@@ -540,7 +625,7 @@ class ApiService {
   // ===========================================================================
 
   Future<List<EmployeeTaskModel>> getMyTasks() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/employee-tasks'),
       headers: _headers(),
     );
@@ -567,7 +652,7 @@ class ApiService {
     if (description != null) payload['description'] = description;
     if (dueDate != null) payload['dueDate'] = dueDate.toIso8601String();
 
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employee-tasks'),
       headers: _headers(),
       body: jsonEncode(payload),
@@ -576,7 +661,7 @@ class ApiService {
   }
 
   Future<void> completeEmployeeTask(String taskId) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employee-tasks/$taskId/complete'),
       headers: _headers(),
       body: jsonEncode({}),
@@ -589,7 +674,7 @@ class ApiService {
   // ===========================================================================
 
   Future<List<ChatConversationModel>> getConversations() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/chat/conversations'),
       headers: _headers(),
     );
@@ -604,7 +689,7 @@ class ApiService {
   }
 
   Future<List<ChatMessageModel>> getMessages(int conversationId) async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/chat/conversations/$conversationId/messages'),
       headers: _headers(),
     );
@@ -619,7 +704,7 @@ class ApiService {
   }
 
   Future<void> sendChatMessage(int conversationId, String message) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/chat/conversations/$conversationId/messages'),
       headers: _headers(),
       body: jsonEncode({'message': message}),
@@ -632,7 +717,7 @@ class ApiService {
     required String subject,
     required String message,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/chat/compose'),
       headers: _headers(),
       body: jsonEncode({
@@ -655,7 +740,7 @@ class ApiService {
     if (lng != null) payload['locationLng'] = lng;
     if (address != null) payload['locationAddress'] = address;
 
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employees/attendance/check-in'),
       headers: _headers(),
       body: jsonEncode(payload),
@@ -670,7 +755,7 @@ class ApiService {
     if (lng != null) payload['locationLng'] = lng;
     if (address != null) payload['locationAddress'] = address;
 
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employees/attendance/check-out'),
       headers: _headers(),
       body: jsonEncode(payload),
@@ -683,7 +768,7 @@ class ApiService {
   // ===========================================================================
 
   Future<DashboardStatsModel> getDashboardStats() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/reports/dashboard'),
       headers: _headers(),
     );
@@ -693,7 +778,7 @@ class ApiService {
   }
 
   Future<String> getAutoAssignmentLevel() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/tickets/settings/auto-assignment-level'),
       headers: _headers(),
     );
@@ -702,7 +787,7 @@ class ApiService {
   }
 
   Future<void> setAutoAssignmentLevel(String level) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/tickets/settings/auto-assignment-level'),
       headers: _headers(),
       body: jsonEncode({'level': level}),
@@ -721,7 +806,7 @@ class ApiService {
     required String contactPhone,
     String? address,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/companies'),
       headers: _headers(),
       body: jsonEncode({
@@ -736,7 +821,7 @@ class ApiService {
   }
 
   Future<void> updateCompany(String id, Map<String, dynamic> data) async {
-    final res = await http.put(
+    final res = await _put(
       Uri.parse('$baseUrl/companies/$id'),
       headers: _headers(),
       body: jsonEncode(data),
@@ -745,7 +830,7 @@ class ApiService {
   }
 
   Future<void> toggleCompanyStatus(String id, bool isActive) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/companies/$id/status'),
       headers: _headers(),
       body: jsonEncode({'isActive': isActive}),
@@ -761,7 +846,7 @@ class ApiService {
     String? contactPerson,
     String? contactPhone,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/companies/$companyId/branches'),
       headers: _headers(),
       body: jsonEncode({
@@ -788,7 +873,7 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/departments').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
     final rawList =
         data is List ? data : (data['departments'] ?? data['data'] ?? []);
@@ -806,7 +891,7 @@ class ApiService {
     String? description,
     List<String>? specializations,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/departments'),
       headers: _headers(),
       body: jsonEncode({
@@ -820,7 +905,7 @@ class ApiService {
   }
 
   Future<void> updateDepartment(String id, Map<String, dynamic> data) async {
-    final res = await http.put(
+    final res = await _put(
       Uri.parse('$baseUrl/departments/$id'),
       headers: _headers(),
       body: jsonEncode(data),
@@ -829,7 +914,7 @@ class ApiService {
   }
 
   Future<void> toggleDepartmentStatus(String id, bool isActive) async {
-    final res = await http.patch(
+    final res = await _patch(
       Uri.parse('$baseUrl/departments/$id/status'),
       headers: _headers(),
       body: jsonEncode({'isActive': isActive}),
@@ -856,7 +941,7 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/employees').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
     final rawList = data is Map
         ? (data['employees'] ?? data['data'] ?? [])
@@ -878,7 +963,7 @@ class ApiService {
     String level = 'L1',
     String? departmentId,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employees'),
       headers: _headers(),
       body: jsonEncode({
@@ -895,7 +980,7 @@ class ApiService {
   }
 
   Future<void> updateEmployee(String id, Map<String, dynamic> data) async {
-    final res = await http.put(
+    final res = await _put(
       Uri.parse('$baseUrl/employees/$id'),
       headers: _headers(),
       body: jsonEncode(data),
@@ -904,7 +989,7 @@ class ApiService {
   }
 
   Future<void> promoteEmployee(String id, {String? level}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employees/$id/promote'),
       headers: _headers(),
       body: jsonEncode({if (level != null) 'level': level}),
@@ -913,7 +998,7 @@ class ApiService {
   }
 
   Future<void> demoteEmployee(String id, {String? level}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employees/$id/demote'),
       headers: _headers(),
       body: jsonEncode({if (level != null) 'level': level}),
@@ -922,7 +1007,7 @@ class ApiService {
   }
 
   Future<void> toggleEmployeeStatus(String id) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/employees/$id/toggle-status'),
       headers: _headers(),
       body: jsonEncode({}),
@@ -939,7 +1024,7 @@ class ApiService {
     String? description,
     String? category,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/products'),
       headers: _headers(),
       body: jsonEncode({
@@ -952,7 +1037,7 @@ class ApiService {
   }
 
   Future<void> toggleProductStatus(String id, bool isActive) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/products/$id/status'),
       headers: _headers(),
       body: jsonEncode({'isActive': isActive}),
@@ -975,7 +1060,7 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/implementations').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
     final rawList = data['implementations'] ?? data['data'] ?? [];
     if (rawList is List) {
@@ -992,7 +1077,7 @@ class ApiService {
     String? notes,
     DateTime? targetDate,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/implementations'),
       headers: _headers(),
       body: jsonEncode({
@@ -1005,9 +1090,8 @@ class ApiService {
     _processResponse(res);
   }
 
-  Future<void> toggleImplementationTask(
-      String taskId, bool isCompleted) async {
-    final res = await http.post(
+  Future<void> toggleImplementationTask(String taskId, bool isCompleted) async {
+    final res = await _post(
       Uri.parse('$baseUrl/implementations/tasks/$taskId/toggle'),
       headers: _headers(),
       body: jsonEncode({'isCompleted': isCompleted}),
@@ -1030,7 +1114,7 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/prospects').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
     final rawList = data['prospects'] ?? data['data'] ?? [];
     if (rawList is List) {
@@ -1050,7 +1134,7 @@ class ApiService {
     required String enquiry,
     String? source,
   }) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/prospects'),
       headers: _headers(),
       body: jsonEncode({
@@ -1067,7 +1151,7 @@ class ApiService {
   }
 
   Future<void> updateProspect(String id, Map<String, dynamic> data) async {
-    final res = await http.put(
+    final res = await _put(
       Uri.parse('$baseUrl/prospects/$id'),
       headers: _headers(),
       body: jsonEncode(data),
@@ -1076,7 +1160,7 @@ class ApiService {
   }
 
   Future<void> convertProspect(String id, Map<String, dynamic> data) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/prospects/$id/convert'),
       headers: _headers(),
       body: jsonEncode(data),
@@ -1099,7 +1183,7 @@ class ApiService {
     final uri = Uri.parse('$baseUrl/subscriptions').replace(
       queryParameters: queryParams.isEmpty ? null : queryParams,
     );
-    final res = await http.get(uri, headers: _headers());
+    final res = await _get(uri, headers: _headers());
     final data = _processResponse(res);
     final rawList = data['subscriptions'] ?? data['data'] ?? [];
     if (rawList is List) {
@@ -1112,7 +1196,7 @@ class ApiService {
 
   Future<void> renewSubscription(String id,
       {required DateTime newEndDate, double? amount}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/subscriptions/$id/renew'),
       headers: _headers(),
       body: jsonEncode({
@@ -1124,7 +1208,7 @@ class ApiService {
   }
 
   Future<void> sendSubscriptionWarning(String id, {String? message}) async {
-    final res = await http.post(
+    final res = await _post(
       Uri.parse('$baseUrl/subscriptions/$id/warning'),
       headers: _headers(),
       body: jsonEncode({if (message != null) 'message': message}),
@@ -1137,7 +1221,7 @@ class ApiService {
   // ===========================================================================
 
   Future<Map<String, dynamic>> getResolutionByLevel() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/reports/resolution-by-level'),
       headers: _headers(),
     );
@@ -1145,7 +1229,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getWorkloadReport() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/reports/workload'),
       headers: _headers(),
     );
@@ -1153,7 +1237,7 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> getEscalationsReport() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/reports/escalations'),
       headers: _headers(),
     );
@@ -1161,7 +1245,7 @@ class ApiService {
   }
 
   Future<List<SlaConfigModel>> getSlaSettings() async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/reports/sla'),
       headers: _headers(),
     );
@@ -1183,7 +1267,7 @@ class ApiService {
     required int resolutionTimeHours,
     required int warningThresholdPercent,
   }) async {
-    final res = await http.put(
+    final res = await _put(
       Uri.parse('$baseUrl/reports/sla'),
       headers: _headers(),
       body: jsonEncode({
@@ -1197,7 +1281,7 @@ class ApiService {
   }
 
   Future<List<AuditLogModel>> getAuditLogs({int limit = 100}) async {
-    final res = await http.get(
+    final res = await _get(
       Uri.parse('$baseUrl/audit-logs?limit=$limit'),
       headers: _headers(),
     );

@@ -22,7 +22,9 @@ void main() {
       expect(api.baseUrl.contains('localhost'), isFalse);
     });
 
-    test('2. setCustomBaseUrl normalizes URL with and without trailing slash or /api', () {
+    test(
+        '2. setCustomBaseUrl normalizes URL with and without trailing slash or /api',
+        () {
       final api = ApiService();
 
       // Given URL without /api
@@ -45,7 +47,9 @@ void main() {
       expect(api.baseUrl, 'https://192.168.1.4:8444/api');
     });
 
-    test('3. Transient network error does NOT erase valid saved token or user session', () async {
+    test(
+        '3. Transient network error does NOT erase valid saved token or user session',
+        () async {
       final sampleUser = UserModel(
         id: 1,
         email: 'admin@kanvtech.com',
@@ -74,13 +78,17 @@ void main() {
       expect(prefs.getString('kanvtech_mobile_user'), isNotNull);
     });
 
-    test('4. UnauthorizedException (HTTP 401) clears invalid token and cached user', () {
+    test(
+        '4. UnauthorizedException (HTTP 401) clears invalid token and cached user',
+        () {
       final exception = UnauthorizedException('Invalid email or password');
       expect(exception.message, 'Invalid email or password');
       expect(exception.toString(), 'Invalid email or password');
     });
 
-    test('5. Formatted error messages provide user-friendly non-sensitive guidance', () async {
+    test(
+        '5. Formatted error messages provide user-friendly non-sensitive guidance',
+        () async {
       final auth = AuthProvider();
 
       // Test login with invalid credentials or offline network

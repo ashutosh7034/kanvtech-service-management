@@ -47,7 +47,8 @@ class AppDrawer extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               decoration: const BoxDecoration(
                 color: AppColors.brandPrimary,
-                borderRadius: BorderRadius.only(bottomRight: Radius.circular(20)),
+                borderRadius:
+                    BorderRadius.only(bottomRight: Radius.circular(20)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -114,7 +115,8 @@ class AppDrawer extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: AppColors.accentLight.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(6),
@@ -146,7 +148,8 @@ class AppDrawer extends StatelessWidget {
                       Navigator.pop(context);
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (_) => const RoleShellDispatcher()),
+                        MaterialPageRoute(
+                            builder: (_) => const RoleShellDispatcher()),
                         (r) => false,
                       );
                     },
@@ -158,7 +161,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Raise Support Ticket',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateTicketScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CreateTicketScreen()));
                       },
                     ),
                   if (isAdmin || isManager)
@@ -168,7 +174,11 @@ class AppDrawer extends StatelessWidget {
                       title: 'Task Allotment & Workload',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ManagerDashboardScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const ManagerDashboardScreen()));
                       },
                     ),
                   if (isAdmin || isManager || isSeniorTech)
@@ -178,7 +188,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Senior Tier Escalations',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const EscalationsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const EscalationsScreen()));
                       },
                     ),
                   if (isAdmin || isManager)
@@ -188,7 +201,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Resolution Approvals',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ApprovalsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ApprovalsScreen()));
                       },
                     ),
 
@@ -201,7 +217,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Customer Master Directory',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const CompaniesScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const CompaniesScreen()));
                       },
                     ),
                     _navItem(
@@ -210,7 +229,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Department Master',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const DepartmentsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const DepartmentsScreen()));
                       },
                     ),
                     _navItem(
@@ -219,7 +241,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Specialist Employee Directory',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const EmployeesScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const EmployeesScreen()));
                       },
                     ),
                     _navItem(
@@ -228,7 +253,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Product Master Catalog',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ProductsScreen()));
                       },
                     ),
                   ],
@@ -242,7 +270,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Client Implementations',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ImplementationsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ImplementationsScreen()));
                       },
                     ),
                   _navItem(
@@ -251,7 +282,10 @@ class AppDrawer extends StatelessWidget {
                     title: 'Annual Maintenance & AMC',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const MaintenanceScreen()));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const MaintenanceScreen()));
                     },
                   ),
                   if (isAdmin || isManager)
@@ -261,7 +295,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Enquiries & Prospects',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ProspectsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ProspectsScreen()));
                       },
                     ),
 
@@ -274,7 +311,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'My Tasks & Reminders',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const TasksScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const TasksScreen()));
                       },
                     ),
                     _navItem(
@@ -283,7 +323,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Internal Messaging',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ChatScreen()));
                       },
                     ),
                     _navItem(
@@ -292,7 +335,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Employee Attendance',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AttendanceScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const AttendanceScreen()));
                       },
                     ),
                   ],
@@ -306,7 +352,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Operational Analytics & Reports',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ReportsScreen()));
                       },
                     ),
                   ],
@@ -317,7 +366,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'SLA Configuration',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const SlaSettingsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const SlaSettingsScreen()));
                       },
                     ),
                     _navItem(
@@ -326,7 +378,10 @@ class AppDrawer extends StatelessWidget {
                       title: 'Security & Audit Logs',
                       onTap: () {
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditLogsScreen()));
+                        Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const AuditLogsScreen()));
                       },
                     ),
                   ],
@@ -338,7 +393,10 @@ class AppDrawer extends StatelessWidget {
                     title: 'Account Profile & Security',
                     onTap: () {
                       Navigator.pop(context);
-                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()));
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => const ProfileScreen()));
                     },
                   ),
                 ],
@@ -355,11 +413,18 @@ class AppDrawer extends StatelessWidget {
                 children: [
                   const Icon(Icons.circle, size: 8, color: AppColors.success),
                   const SizedBox(width: 8),
-                  const Text('Single Active Session', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  const Text('Single Active Session',
+                      style:
+                          TextStyle(fontSize: 11, color: AppColors.textMuted)),
                   const Spacer(),
                   TextButton.icon(
-                    icon: const Icon(Icons.logout, size: 16, color: AppColors.danger),
-                    label: const Text('Logout', style: TextStyle(color: AppColors.danger, fontSize: 13, fontWeight: FontWeight.w600)),
+                    icon: const Icon(Icons.logout,
+                        size: 16, color: AppColors.danger),
+                    label: const Text('Logout',
+                        style: TextStyle(
+                            color: AppColors.danger,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600)),
                     onPressed: () {
                       Navigator.pop(context);
                       auth.logout();
@@ -400,7 +465,10 @@ class AppDrawer extends StatelessWidget {
       leading: Icon(icon, size: 20, color: AppColors.brandPrimary),
       title: Text(
         title,
-        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+        style: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textPrimary),
       ),
       onTap: onTap,
     );

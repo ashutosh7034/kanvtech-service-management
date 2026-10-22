@@ -48,14 +48,19 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
 
   void _approveTicket(TicketModel t) async {
     try {
-      await _api.approveResolution(t.id, notes: 'Approved via KANVTECH Mobile Management');
+      await _api.approveResolution(t.id,
+          notes: 'Approved via KANVTECH Mobile Management');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ticket #${t.ticketNumber} resolution approved!'), backgroundColor: AppColors.success),
+        SnackBar(
+            content: Text('Ticket #${t.ticketNumber} resolution approved!'),
+            backgroundColor: AppColors.success),
       );
       _loadApprovals();
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Approval failed: $e'), backgroundColor: AppColors.danger),
+        SnackBar(
+            content: Text('Approval failed: $e'),
+            backgroundColor: AppColors.danger),
       );
     }
   }
@@ -67,7 +72,8 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
       appBar: AppBar(
         title: const Text('Resolution Approvals'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadApprovals),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadApprovals),
         ],
       ),
       drawer: const AppDrawer(),
@@ -78,9 +84,12 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                      Text(_error!,
+                          style: const TextStyle(color: AppColors.danger)),
                       const SizedBox(height: 8),
-                      ElevatedButton(onPressed: _loadApprovals, child: const Text('Retry')),
+                      ElevatedButton(
+                          onPressed: _loadApprovals,
+                          child: const Text('Retry')),
                     ],
                   ),
                 )
@@ -89,9 +98,13 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.check_circle_outline, size: 48, color: AppColors.success),
+                          Icon(Icons.check_circle_outline,
+                              size: 48, color: AppColors.success),
                           SizedBox(height: 10),
-                          Text('All resolutions approved! No pending tickets.', style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                          Text('All resolutions approved! No pending tickets.',
+                              style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.bold)),
                         ],
                       ),
                     )
@@ -110,12 +123,15 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       Expanded(
                                         child: Text(
                                           '#${t.ticketNumber} • ${t.problemType}',
-                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                                          style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 15),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
@@ -125,30 +141,44 @@ class _ApprovalsScreenState extends State<ApprovalsScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 6),
-                                  Text('Client: ${t.companyName ?? "Direct Customer"}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
-                                  Text('Assigned Specialist: ${t.assignedEmployeeName ?? "Specialist"} (${t.level})', style: const TextStyle(fontSize: 12, color: AppColors.textMuted)),
+                                  Text(
+                                      'Client: ${t.companyName ?? "Direct Customer"}',
+                                      style: const TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.textSecondary)),
+                                  Text(
+                                      'Assigned Specialist: ${t.assignedEmployeeName ?? "Specialist"} (${t.level})',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppColors.textMuted)),
                                   const SizedBox(height: 6),
-                                  Text(t.description, style: const TextStyle(fontSize: 12)),
+                                  Text(t.description,
+                                      style: const TextStyle(fontSize: 12)),
                                   const Divider(height: 20),
                                   Row(
                                     mainAxisAlignment: MainAxisAlignment.end,
                                     children: [
                                       OutlinedButton(
-                                        child: const Text('View Work Details', style: TextStyle(fontSize: 12)),
+                                        child: const Text('View Work Details',
+                                            style: TextStyle(fontSize: 12)),
                                         onPressed: () {
                                           Navigator.push(
                                             context,
                                             MaterialPageRoute(
-                                              builder: (_) => EmployeeTicketDetailScreen(ticketId: t.id),
+                                              builder: (_) =>
+                                                  EmployeeTicketDetailScreen(
+                                                      ticketId: t.id),
                                             ),
                                           ).then((_) => _loadApprovals());
                                         },
                                       ),
                                       const SizedBox(width: 8),
                                       ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.success),
+                                        style: ElevatedButton.styleFrom(
+                                            backgroundColor: AppColors.success),
                                         icon: const Icon(Icons.check, size: 16),
-                                        label: const Text('Approve', style: TextStyle(fontSize: 12)),
+                                        label: const Text('Approve',
+                                            style: TextStyle(fontSize: 12)),
                                         onPressed: () => _approveTicket(t),
                                       ),
                                     ],

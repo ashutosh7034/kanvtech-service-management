@@ -46,7 +46,8 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
 
   List<ProspectModel> get _filtered {
     return _prospects.where((p) {
-      if (_statusFilter != 'ALL' && p.status.toUpperCase() != _statusFilter) return false;
+      if (_statusFilter != 'ALL' && p.status.toUpperCase() != _statusFilter)
+        return false;
       if (_search.trim().isEmpty) return true;
       final q = _search.toLowerCase();
       return p.companyName.toLowerCase().contains(q) ||
@@ -67,7 +68,8 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('New Enquiry / Prospect', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+        title: const Text('New Enquiry / Prospect',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
         content: SingleChildScrollView(
           child: Form(
             key: formKey,
@@ -76,41 +78,51 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
               children: [
                 TextFormField(
                   controller: companyCtrl,
-                  decoration: const InputDecoration(labelText: 'Company / Lead Name *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Company / Lead Name *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: personCtrl,
-                  decoration: const InputDecoration(labelText: 'Contact Person *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Contact Person *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: phoneCtrl,
                   keyboardType: TextInputType.phone,
-                  decoration: const InputDecoration(labelText: 'Phone Number *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Phone Number *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: emailCtrl,
                   keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(labelText: 'Email Address', isDense: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Email Address', isDense: true),
                 ),
                 const SizedBox(height: 8),
                 TextFormField(
                   controller: enquiryCtrl,
                   maxLines: 3,
-                  decoration: const InputDecoration(labelText: 'Enquiry Requirements *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Enquiry Requirements *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
               ],
             ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () async {
               if (!formKey.currentState!.validate()) return;
@@ -124,12 +136,16 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
                   enquiry: enquiryCtrl.text.trim(),
                 );
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Enquiry registered successfully!'), backgroundColor: AppColors.success),
+                  const SnackBar(
+                      content: Text('Enquiry registered successfully!'),
+                      backgroundColor: AppColors.success),
                 );
                 _loadProspects();
               } catch (e) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                  SnackBar(
+                      content: Text('Failed: $e'),
+                      backgroundColor: AppColors.danger),
                 );
               }
             },
@@ -142,7 +158,14 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
 
   void _showUpdateStatusDialog(ProspectModel p) {
     String selected = p.status;
-    const statuses = ['NEW', 'CONTACTED', 'QUALIFIED', 'PROPOSAL_SENT', 'WON', 'LOST'];
+    const statuses = [
+      'NEW',
+      'CONTACTED',
+      'QUALIFIED',
+      'PROPOSAL_SENT',
+      'WON',
+      'LOST'
+    ];
 
     showDialog(
       context: context,
@@ -156,28 +179,40 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
               return ListTile(
                 dense: true,
                 leading: Icon(
-                  isChecked ? Icons.radio_button_checked : Icons.radio_button_off,
-                  color: isChecked ? AppColors.brandPrimary : AppColors.textMuted,
+                  isChecked
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  color:
+                      isChecked ? AppColors.brandPrimary : AppColors.textMuted,
                 ),
-                title: Text(s, style: TextStyle(fontWeight: isChecked ? FontWeight.bold : FontWeight.normal)),
+                title: Text(s,
+                    style: TextStyle(
+                        fontWeight:
+                            isChecked ? FontWeight.bold : FontWeight.normal)),
                 onTap: () => setDialogState(() => selected = s),
               );
             }).toList(),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(ctx);
                 try {
                   await _api.updateProspect(p.id, {'status': selected});
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Status updated to $selected!'), backgroundColor: AppColors.success),
+                    SnackBar(
+                        content: Text('Status updated to $selected!'),
+                        backgroundColor: AppColors.success),
                   );
                   _loadProspects();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                    SnackBar(
+                        content: Text('Failed: $e'),
+                        backgroundColor: AppColors.danger),
                   );
                 }
               },
@@ -208,21 +243,30 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    const filterOptions = ['ALL', 'NEW', 'CONTACTED', 'QUALIFIED', 'WON', 'LOST'];
+    const filterOptions = [
+      'ALL',
+      'NEW',
+      'CONTACTED',
+      'QUALIFIED',
+      'WON',
+      'LOST'
+    ];
 
     return Scaffold(
       backgroundColor: AppColors.bgApp,
       appBar: AppBar(
         title: const Text('Enquiries & Prospects'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadProspects),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadProspects),
         ],
       ),
       drawer: const AppDrawer(),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brandPrimary,
         icon: const Icon(Icons.add_comment, color: Colors.white),
-        label: const Text('New Enquiry', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('New Enquiry',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: _showAddProspectDialog,
       ),
       body: Column(
@@ -239,7 +283,9 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
                     isDense: true,
                     filled: true,
                     fillColor: AppColors.bgApp,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none),
                   ),
                   onChanged: (val) => setState(() => _search = val),
                 ),
@@ -258,9 +304,11 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
                           labelStyle: TextStyle(
                             color: isSel ? Colors.white : AppColors.textPrimary,
                             fontSize: 12,
-                            fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                            fontWeight:
+                                isSel ? FontWeight.bold : FontWeight.normal,
                           ),
-                          onSelected: (val) => setState(() => _statusFilter = s),
+                          onSelected: (val) =>
+                              setState(() => _statusFilter = s),
                         ),
                       );
                     }).toList(),
@@ -277,9 +325,13 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadProspects, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadProspects,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
@@ -297,22 +349,31 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
                                   child: Padding(
                                     padding: const EdgeInsets.all(14),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: Text(
                                                 p.companyName,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16),
                                               ),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
                                               decoration: BoxDecoration(
-                                                color: _statusColor(p.status).withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(6),
+                                                color: _statusColor(p.status)
+                                                    .withValues(alpha: 0.12),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
                                               child: Text(
                                                 p.status,
@@ -326,38 +387,61 @@ class _ProspectsScreenState extends State<ProspectsScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 4),
-                                        Text('Contact: ${p.contactPerson} • ${p.phone}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                                        if (p.email != null && p.email!.isNotEmpty)
-                                          Text('Email: ${p.email}', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                        Text(
+                                            'Contact: ${p.contactPerson} • ${p.phone}',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                color:
+                                                    AppColors.textSecondary)),
+                                        if (p.email != null &&
+                                            p.email!.isNotEmpty)
+                                          Text('Email: ${p.email}',
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color:
+                                                      AppColors.textSecondary)),
                                         const SizedBox(height: 8),
                                         Container(
                                           width: double.infinity,
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
                                             color: AppColors.bgApp,
-                                            borderRadius: BorderRadius.circular(8),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
                                           ),
                                           child: Text(
                                             p.enquiry,
-                                            style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                color: AppColors.textPrimary),
                                           ),
                                         ),
                                         const SizedBox(height: 10),
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
                                               'Received: ${p.createdAt.day}/${p.createdAt.month}/${p.createdAt.year}',
-                                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                              style: const TextStyle(
+                                                  fontSize: 11,
+                                                  color: AppColors.textMuted),
                                             ),
                                             OutlinedButton.icon(
-                                              icon: const Icon(Icons.edit_note, size: 16),
-                                              label: const Text('Update Status'),
+                                              icon: const Icon(Icons.edit_note,
+                                                  size: 16),
+                                              label:
+                                                  const Text('Update Status'),
                                               style: OutlinedButton.styleFrom(
-                                                visualDensity: VisualDensity.compact,
-                                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                                visualDensity:
+                                                    VisualDensity.compact,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 10,
+                                                        vertical: 4),
                                               ),
-                                              onPressed: () => _showUpdateStatusDialog(p),
+                                              onPressed: () =>
+                                                  _showUpdateStatusDialog(p),
                                             ),
                                           ],
                                         ),

@@ -46,7 +46,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
 
   List<SubscriptionModel> get _filtered {
     return _subscriptions.where((s) {
-      if (_statusFilter != 'ALL' && s.status.toUpperCase() != _statusFilter) return false;
+      if (_statusFilter != 'ALL' && s.status.toUpperCase() != _statusFilter)
+        return false;
       if (_search.trim().isEmpty) return true;
       final q = _search.toLowerCase();
       return s.companyName.toLowerCase().contains(q) ||
@@ -57,7 +58,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
 
   void _showRenewDialog(SubscriptionModel sub) {
     DateTime newDate = sub.endDate.add(const Duration(days: 365));
-    final amountCtrl = TextEditingController(text: sub.annualValue != null ? '${sub.annualValue}' : '');
+    final amountCtrl = TextEditingController(
+        text: sub.annualValue != null ? '${sub.annualValue}' : '');
 
     showDialog(
       context: context,
@@ -73,7 +75,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('New End Date: ${newDate.day}/${newDate.month}/${newDate.year}'),
+                  Text(
+                      'New End Date: ${newDate.day}/${newDate.month}/${newDate.year}'),
                   TextButton(
                     child: const Text('Change'),
                     onPressed: () async {
@@ -81,7 +84,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                         context: context,
                         initialDate: newDate,
                         firstDate: DateTime.now(),
-                        lastDate: DateTime.now().add(const Duration(days: 3650)),
+                        lastDate:
+                            DateTime.now().add(const Duration(days: 3650)),
                       );
                       if (picked != null) {
                         setDialogState(() => newDate = picked);
@@ -94,25 +98,33 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
               TextField(
                 controller: amountCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Renewal Contract Value (₹)', isDense: true),
+                decoration: const InputDecoration(
+                    labelText: 'Renewal Contract Value (₹)', isDense: true),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(ctx);
                 try {
                   final val = double.tryParse(amountCtrl.text.trim());
-                  await _api.renewSubscription(sub.id, newEndDate: newDate, amount: val);
+                  await _api.renewSubscription(sub.id,
+                      newEndDate: newDate, amount: val);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Subscription renewed successfully!'), backgroundColor: AppColors.success),
+                    const SnackBar(
+                        content: Text('Subscription renewed successfully!'),
+                        backgroundColor: AppColors.success),
                   );
                   _loadSubscriptions();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                    SnackBar(
+                        content: Text('Failed: $e'),
+                        backgroundColor: AppColors.danger),
                   );
                 }
               },
@@ -128,11 +140,14 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     try {
       await _api.sendSubscriptionWarning(sub.id);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Renewal expiry warning sent to client!'), backgroundColor: AppColors.success),
+        const SnackBar(
+            content: Text('Renewal expiry warning sent to client!'),
+            backgroundColor: AppColors.success),
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+        SnackBar(
+            content: Text('Failed: $e'), backgroundColor: AppColors.danger),
       );
     }
   }
@@ -146,7 +161,8 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
       appBar: AppBar(
         title: const Text('Annual Maintenance & AMC'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadSubscriptions),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadSubscriptions),
         ],
       ),
       drawer: const AppDrawer(),
@@ -164,7 +180,9 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                     isDense: true,
                     filled: true,
                     fillColor: AppColors.bgApp,
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none),
                   ),
                   onChanged: (val) => setState(() => _search = val),
                 ),
@@ -183,9 +201,11 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                           labelStyle: TextStyle(
                             color: isSel ? Colors.white : AppColors.textPrimary,
                             fontSize: 12,
-                            fontWeight: isSel ? FontWeight.bold : FontWeight.normal,
+                            fontWeight:
+                                isSel ? FontWeight.bold : FontWeight.normal,
                           ),
-                          onSelected: (val) => setState(() => _statusFilter = f),
+                          onSelected: (val) =>
+                              setState(() => _statusFilter = f),
                         ),
                       );
                     }).toList(),
@@ -202,14 +222,20 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadSubscriptions, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadSubscriptions,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
                     : _filtered.isEmpty
-                        ? const Center(child: Text('No subscription or maintenance records.'))
+                        ? const Center(
+                            child:
+                                Text('No subscription or maintenance records.'))
                         : RefreshIndicator(
                             onRefresh: _loadSubscriptions,
                             child: ListView.builder(
@@ -217,41 +243,60 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                               itemCount: _filtered.length,
                               itemBuilder: (ctx, i) {
                                 final s = _filtered[i];
-                                final daysLeft = s.endDate.difference(DateTime.now()).inDays;
+                                final daysLeft =
+                                    s.endDate.difference(DateTime.now()).inDays;
                                 final isExpired = daysLeft < 0;
-                                final isExpiringSoon = daysLeft >= 0 && daysLeft <= 30;
+                                final isExpiringSoon =
+                                    daysLeft >= 0 && daysLeft <= 30;
 
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   child: Padding(
                                     padding: const EdgeInsets.all(16),
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
                                               child: Text(
                                                 s.companyName,
-                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    fontSize: 16),
                                               ),
                                             ),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 8,
+                                                      vertical: 3),
                                               decoration: BoxDecoration(
                                                 color: (isExpired
                                                         ? AppColors.danger
-                                                        : (isExpiringSoon ? AppColors.warning : AppColors.success))
+                                                        : (isExpiringSoon
+                                                            ? AppColors.warning
+                                                            : AppColors
+                                                                .success))
                                                     .withValues(alpha: 0.12),
-                                                borderRadius: BorderRadius.circular(6),
+                                                borderRadius:
+                                                    BorderRadius.circular(6),
                                               ),
                                               child: Text(
-                                                isExpired ? 'EXPIRED' : (isExpiringSoon ? 'EXPIRING SOON' : 'ACTIVE'),
+                                                isExpired
+                                                    ? 'EXPIRED'
+                                                    : (isExpiringSoon
+                                                        ? 'EXPIRING SOON'
+                                                        : 'ACTIVE'),
                                                 style: TextStyle(
                                                   color: isExpired
                                                       ? AppColors.danger
-                                                      : (isExpiringSoon ? AppColors.warning : AppColors.success),
+                                                      : (isExpiringSoon
+                                                          ? AppColors.warning
+                                                          : AppColors.success),
                                                   fontSize: 10,
                                                   fontWeight: FontWeight.bold,
                                                 ),
@@ -260,40 +305,70 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                                           ],
                                         ),
                                         const SizedBox(height: 6),
-                                        Text('Product: ${s.productName} • Plan: ${s.planType}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                                        Text(
+                                            'Product: ${s.productName} • Plan: ${s.planType}',
+                                            style: const TextStyle(
+                                                fontSize: 13,
+                                                color:
+                                                    AppColors.textSecondary)),
                                         const SizedBox(height: 4),
                                         Text(
                                           'Contract Validity: ${s.startDate.day}/${s.startDate.month}/${s.startDate.year} - ${s.endDate.day}/${s.endDate.month}/${s.endDate.year} (${isExpired ? "Expired ${-daysLeft} days ago" : "$daysLeft days remaining"})',
                                           style: TextStyle(
                                             fontSize: 12,
                                             fontWeight: FontWeight.w500,
-                                            color: isExpired ? AppColors.danger : (isExpiringSoon ? AppColors.warning : AppColors.textMuted),
+                                            color: isExpired
+                                                ? AppColors.danger
+                                                : (isExpiringSoon
+                                                    ? AppColors.warning
+                                                    : AppColors.textMuted),
                                           ),
                                         ),
                                         if (s.annualValue != null) ...[
                                           const SizedBox(height: 4),
-                                          Text('Contract Value: ₹${s.annualValue!.toStringAsFixed(0)}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.brandPrimary)),
+                                          Text(
+                                              'Contract Value: ₹${s.annualValue!.toStringAsFixed(0)}',
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      AppColors.brandPrimary)),
                                         ],
                                         const Divider(height: 20),
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.end,
                                           children: [
                                             if (isExpiringSoon || isExpired)
                                               OutlinedButton.icon(
-                                                icon: const Icon(Icons.notifications_active, size: 16),
-                                                label: const Text('Send Warning', style: TextStyle(fontSize: 12)),
-                                                style: OutlinedButton.styleFrom(visualDensity: VisualDensity.compact),
-                                                onPressed: () => _sendWarning(s),
+                                                icon: const Icon(
+                                                    Icons.notifications_active,
+                                                    size: 16),
+                                                label: const Text(
+                                                    'Send Warning',
+                                                    style: TextStyle(
+                                                        fontSize: 12)),
+                                                style: OutlinedButton.styleFrom(
+                                                    visualDensity:
+                                                        VisualDensity.compact),
+                                                onPressed: () =>
+                                                    _sendWarning(s),
                                               ),
                                             const SizedBox(width: 8),
                                             ElevatedButton.icon(
-                                              icon: const Icon(Icons.refresh, size: 16),
-                                              label: const Text('Renew AMC', style: TextStyle(fontSize: 12)),
+                                              icon: const Icon(Icons.refresh,
+                                                  size: 16),
+                                              label: const Text('Renew AMC',
+                                                  style:
+                                                      TextStyle(fontSize: 12)),
                                               style: ElevatedButton.styleFrom(
-                                                backgroundColor: AppColors.brandPrimary,
-                                                visualDensity: VisualDensity.compact,
+                                                backgroundColor:
+                                                    AppColors.brandPrimary,
+                                                visualDensity:
+                                                    VisualDensity.compact,
                                               ),
-                                              onPressed: () => _showRenewDialog(s),
+                                              onPressed: () =>
+                                                  _showRenewDialog(s),
                                             ),
                                           ],
                                         ),

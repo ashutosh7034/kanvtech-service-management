@@ -333,25 +333,61 @@ class DashboardStatsModel {
   });
 
   factory DashboardStatsModel.fromJson(Map<String, dynamic> json) {
+    final Map<dynamic, dynamic> data;
+    if (json['metrics'] is Map) {
+      data = json['metrics'] as Map;
+    } else if (json['data'] is Map) {
+      data = json['data'] as Map;
+    } else {
+      data = json;
+    }
+
+    final Map<dynamic, dynamic> volume =
+        data['volume'] is Map ? data['volume'] as Map : data;
+    final Map<dynamic, dynamic> sla =
+        data['sla'] is Map ? data['sla'] as Map : data;
+
+    int parseInt(dynamic val) {
+      if (val == null) return 0;
+      if (val is int) return val;
+      if (val is num) return val.toInt();
+      return int.tryParse(val.toString()) ?? 0;
+    }
+
+    double parseDouble(dynamic val) {
+      if (val == null) return 0.0;
+      if (val is double) return val;
+      if (val is num) return val.toDouble();
+      return double.tryParse(val.toString()) ?? 0.0;
+    }
+
+    double avgHours = parseDouble(data['avgResolutionHours'] ??
+        data['averageResolutionHours'] ??
+        json['avgResolutionHours'] ??
+        json['averageResolutionHours']);
+
+    if (avgHours == 0.0 && data['avgResolutionSeconds'] != null) {
+      final sec = parseDouble(data['avgResolutionSeconds']);
+      if (sec > 0) {
+        avgHours = double.parse((sec / 3600.0).toStringAsFixed(1));
+      }
+    }
+
     return DashboardStatsModel(
-      totalTickets: json['totalTickets'] is int
-          ? json['totalTickets']
-          : int.tryParse('${json['totalTickets'] ?? 0}') ?? 0,
-      openTickets: json['openTickets'] is int
-          ? json['openTickets']
-          : int.tryParse('${json['openTickets'] ?? 0}') ?? 0,
-      inProgressTickets: json['inProgressTickets'] is int
-          ? json['inProgressTickets']
-          : int.tryParse('${json['inProgressTickets'] ?? 0}') ?? 0,
-      resolvedTickets: json['resolvedTickets'] is int
-          ? json['resolvedTickets']
-          : int.tryParse('${json['resolvedTickets'] ?? 0}') ?? 0,
-      breachedSlaTickets: json['breachedSlaTickets'] is int
-          ? json['breachedSlaTickets']
-          : int.tryParse('${json['breachedSlaTickets'] ?? 0}') ?? 0,
-      averageResolutionHours:
-          (json['avgResolutionHours'] ?? json['averageResolutionHours'] ?? 0.0)
-              .toDouble(),
+      totalTickets: parseInt(
+          volume['total'] ?? data['totalTickets'] ?? json['totalTickets']),
+      openTickets: parseInt(
+          volume['open'] ?? data['openTickets'] ?? json['openTickets']),
+      inProgressTickets: parseInt(volume['inProgress'] ??
+          data['inProgressTickets'] ??
+          json['inProgressTickets']),
+      resolvedTickets: parseInt(volume['resolved'] ??
+          data['resolvedTickets'] ??
+          json['resolvedTickets']),
+      breachedSlaTickets: parseInt(sla['breached'] ??
+          data['breachedSlaTickets'] ??
+          json['breachedSlaTickets']),
+      averageResolutionHours: avgHours,
     );
   }
 }
@@ -400,7 +436,9 @@ class DepartmentModel {
       description: json['description']?.toString(),
       isActive: json['isActive'] != false && json['is_active'] != false,
       employeeCount: count,
-      managerName: json['manager'] is Map ? json['manager']['name']?.toString() : json['manager']?.toString(),
+      managerName: json['manager'] is Map
+          ? json['manager']['name']?.toString()
+          : json['manager']?.toString(),
       specializations: specs,
     );
   }
@@ -439,8 +477,11 @@ class EmployeeDetailModel {
     int ticketCount = 0;
     if (json['assignedTickets'] is List) {
       ticketCount = (json['assignedTickets'] as List).length;
-    } else if (json['openTicketsCount'] != null || json['assignedTicketsCount'] != null) {
-      ticketCount = int.tryParse('${json['openTicketsCount'] ?? json['assignedTicketsCount']}') ?? 0;
+    } else if (json['openTicketsCount'] != null ||
+        json['assignedTicketsCount'] != null) {
+      ticketCount = int.tryParse(
+              '${json['openTicketsCount'] ?? json['assignedTicketsCount']}') ??
+          0;
     }
 
     final userMap = json['user'] is Map ? json['user'] as Map : null;
@@ -457,9 +498,12 @@ class EmployeeDetailModel {
       name: json['name']?.toString() ?? '',
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString(),
-      role: json['role']?.toString() ?? userMap?['role']?.toString() ?? 'EMPLOYEE',
+      role: json['role']?.toString() ??
+          userMap?['role']?.toString() ??
+          'EMPLOYEE',
       level: json['level']?.toString() ?? 'L1',
-      departmentId: json['departmentId']?.toString() ?? json['department_id']?.toString(),
+      departmentId:
+          json['departmentId']?.toString() ?? json['department_id']?.toString(),
       departmentName: deptName,
       status: json['status']?.toString() ?? 'ACTIVE',
       availability: json['availability']?.toString() ?? 'AVAILABLE',
@@ -496,15 +540,23 @@ class ProspectModel {
   factory ProspectModel.fromJson(Map<String, dynamic> json) {
     return ProspectModel(
       id: json['id']?.toString() ?? '',
-      companyName: json['companyName']?.toString() ?? json['company_name']?.toString() ?? '',
-      contactPerson: json['contactPerson']?.toString() ?? json['contact_person']?.toString() ?? '',
+      companyName: json['companyName']?.toString() ??
+          json['company_name']?.toString() ??
+          '',
+      contactPerson: json['contactPerson']?.toString() ??
+          json['contact_person']?.toString() ??
+          '',
       email: json['email']?.toString(),
       phone: json['phone']?.toString() ?? '',
       address: json['address']?.toString(),
-      enquiry: json['enquiry']?.toString() ?? json['description']?.toString() ?? '',
+      enquiry:
+          json['enquiry']?.toString() ?? json['description']?.toString() ?? '',
       status: json['status']?.toString() ?? 'NEW',
       source: json['source']?.toString(),
-      createdAt: DateTime.tryParse(json['createdAt']?.toString() ?? json['created_at']?.toString() ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(json['createdAt']?.toString() ??
+              json['created_at']?.toString() ??
+              '') ??
+          DateTime.now(),
     );
   }
 }
@@ -538,19 +590,30 @@ class ImplementationModel {
     final rawTasks = json['tasks'] as List? ?? [];
     return ImplementationModel(
       id: json['id']?.toString() ?? '',
-      companyId: json['companyId']?.toString() ?? json['company_id']?.toString() ?? '',
-      companyName: json['company']?['companyName']?.toString() ?? json['companyName']?.toString() ?? 'Company',
-      productId: json['productId']?.toString() ?? json['product_id']?.toString() ?? '',
-      productName: json['product']?['name']?.toString() ?? json['productName']?.toString() ?? 'Product',
+      companyId:
+          json['companyId']?.toString() ?? json['company_id']?.toString() ?? '',
+      companyName: json['company']?['companyName']?.toString() ??
+          json['companyName']?.toString() ??
+          'Company',
+      productId:
+          json['productId']?.toString() ?? json['product_id']?.toString() ?? '',
+      productName: json['product']?['name']?.toString() ??
+          json['productName']?.toString() ??
+          'Product',
       stage: json['stage']?.toString() ?? 'PLANNING',
       status: json['status']?.toString() ?? 'IN_PROGRESS',
       progressPercent: json['progressPercent'] is int
           ? json['progressPercent']
-          : int.tryParse('${json['progressPercent'] ?? json['progress'] ?? 0}') ?? 0,
+          : int.tryParse(
+                  '${json['progressPercent'] ?? json['progress'] ?? 0}') ??
+              0,
       targetDate: json['targetDate'] != null
           ? DateTime.tryParse(json['targetDate'].toString())
           : null,
-      tasks: rawTasks.map((t) => ImplementationTaskModel.fromJson(t as Map<String, dynamic>)).toList(),
+      tasks: rawTasks
+          .map((t) =>
+              ImplementationTaskModel.fromJson(t as Map<String, dynamic>))
+          .toList(),
     );
   }
 }
@@ -606,15 +669,31 @@ class SubscriptionModel {
   factory SubscriptionModel.fromJson(Map<String, dynamic> json) {
     return SubscriptionModel(
       id: json['id']?.toString() ?? '',
-      companyId: json['companyId']?.toString() ?? json['company_id']?.toString() ?? '',
-      companyName: json['company']?['companyName']?.toString() ?? json['companyName']?.toString() ?? 'Company',
-      productId: json['productId']?.toString() ?? json['product_id']?.toString() ?? '',
-      productName: json['product']?['name']?.toString() ?? json['productName']?.toString() ?? 'Product',
-      planType: json['planType']?.toString() ?? json['plan_type']?.toString() ?? 'STANDARD',
-      startDate: DateTime.tryParse(json['startDate']?.toString() ?? json['start_date']?.toString() ?? '') ?? DateTime.now(),
-      endDate: DateTime.tryParse(json['endDate']?.toString() ?? json['end_date']?.toString() ?? '') ?? DateTime.now().add(const Duration(days: 365)),
+      companyId:
+          json['companyId']?.toString() ?? json['company_id']?.toString() ?? '',
+      companyName: json['company']?['companyName']?.toString() ??
+          json['companyName']?.toString() ??
+          'Company',
+      productId:
+          json['productId']?.toString() ?? json['product_id']?.toString() ?? '',
+      productName: json['product']?['name']?.toString() ??
+          json['productName']?.toString() ??
+          'Product',
+      planType: json['planType']?.toString() ??
+          json['plan_type']?.toString() ??
+          'STANDARD',
+      startDate: DateTime.tryParse(json['startDate']?.toString() ??
+              json['start_date']?.toString() ??
+              '') ??
+          DateTime.now(),
+      endDate: DateTime.tryParse(json['endDate']?.toString() ??
+              json['end_date']?.toString() ??
+              '') ??
+          DateTime.now().add(const Duration(days: 365)),
       status: json['status']?.toString() ?? 'ACTIVE',
-      annualValue: json['annualValue'] != null ? double.tryParse(json['annualValue'].toString()) : null,
+      annualValue: json['annualValue'] != null
+          ? double.tryParse(json['annualValue'].toString())
+          : null,
     );
   }
 }
@@ -642,14 +721,26 @@ class AuditLogModel {
 
   factory AuditLogModel.fromJson(Map<String, dynamic> json) {
     return AuditLogModel(
-      id: json['id'] is int ? json['id'] : int.tryParse('${json['id'] ?? 0}') ?? 0,
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? json['createdAt']?.toString() ?? '') ?? DateTime.now(),
-      actorEmail: json['actor_email']?.toString() ?? json['actorEmail']?.toString() ?? 'System',
-      actorRole: json['actor_role']?.toString() ?? json['actorRole']?.toString() ?? 'SYSTEM',
+      id: json['id'] is int
+          ? json['id']
+          : int.tryParse('${json['id'] ?? 0}') ?? 0,
+      createdAt: DateTime.tryParse(json['created_at']?.toString() ??
+              json['createdAt']?.toString() ??
+              '') ??
+          DateTime.now(),
+      actorEmail: json['actor_email']?.toString() ??
+          json['actorEmail']?.toString() ??
+          'System',
+      actorRole: json['actor_role']?.toString() ??
+          json['actorRole']?.toString() ??
+          'SYSTEM',
       action: json['action']?.toString() ?? '',
-      entityType: json['entity_type']?.toString() ?? json['entityType']?.toString() ?? '',
+      entityType: json['entity_type']?.toString() ??
+          json['entityType']?.toString() ??
+          '',
       entityId: json['entity_id']?.toString() ?? json['entityId']?.toString(),
-      ipAddress: json['ip_address']?.toString() ?? json['ipAddress']?.toString(),
+      ipAddress:
+          json['ip_address']?.toString() ?? json['ipAddress']?.toString(),
     );
   }
 }
@@ -672,13 +763,19 @@ class SlaConfigModel {
       priority: json['priority']?.toString().toUpperCase() ?? 'MEDIUM',
       responseTimeHours: json['response_time_hours'] is int
           ? json['response_time_hours']
-          : int.tryParse('${json['response_time_hours'] ?? json['responseTimeHours'] ?? 24}') ?? 24,
+          : int.tryParse(
+                  '${json['response_time_hours'] ?? json['responseTimeHours'] ?? 24}') ??
+              24,
       resolutionTimeHours: json['resolution_time_hours'] is int
           ? json['resolution_time_hours']
-          : int.tryParse('${json['resolution_time_hours'] ?? json['resolutionTimeHours'] ?? 72}') ?? 72,
+          : int.tryParse(
+                  '${json['resolution_time_hours'] ?? json['resolutionTimeHours'] ?? 72}') ??
+              72,
       warningThresholdPercent: json['warning_threshold_percent'] is int
           ? json['warning_threshold_percent']
-          : int.tryParse('${json['warning_threshold_percent'] ?? json['warningThresholdPercent'] ?? 75}') ?? 75,
+          : int.tryParse(
+                  '${json['warning_threshold_percent'] ?? json['warningThresholdPercent'] ?? 75}') ??
+              75,
     );
   }
 }

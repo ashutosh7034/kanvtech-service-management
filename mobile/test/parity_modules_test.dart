@@ -69,8 +69,18 @@ void main() {
         'status': 'IN_PROGRESS',
         'progressPercent': 65,
         'tasks': [
-          {'id': 'T1', 'title': 'Database Schema Setup', 'stage': 'PLANNING', 'isCompleted': true},
-          {'id': 'T2', 'title': 'SSO Integration', 'stage': 'DEVELOPMENT', 'isCompleted': false},
+          {
+            'id': 'T1',
+            'title': 'Database Schema Setup',
+            'stage': 'PLANNING',
+            'isCompleted': true
+          },
+          {
+            'id': 'T2',
+            'title': 'SSO Integration',
+            'stage': 'DEVELOPMENT',
+            'isCompleted': false
+          },
         ],
       });
 

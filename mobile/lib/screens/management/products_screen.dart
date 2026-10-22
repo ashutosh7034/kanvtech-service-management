@@ -63,7 +63,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Add Product Master', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          title: const Text('Add Product Master',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           content: Form(
             key: formKey,
             child: Column(
@@ -71,31 +72,43 @@ class _ProductsScreenState extends State<ProductsScreen> {
               children: [
                 TextFormField(
                   controller: nameCtrl,
-                  decoration: const InputDecoration(labelText: 'Product Name *', isDense: true),
-                  validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
+                  decoration: const InputDecoration(
+                      labelText: 'Product Name *', isDense: true),
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   initialValue: category,
-                  decoration: const InputDecoration(labelText: 'Category', isDense: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Category', isDense: true),
                   items: const [
-                    DropdownMenuItem(value: 'SOFTWARE', child: Text('Software Solution')),
-                    DropdownMenuItem(value: 'CLOUD', child: Text('Cloud Infrastructure')),
-                    DropdownMenuItem(value: 'SECURITY', child: Text('Security & Surveillance')),
-                    DropdownMenuItem(value: 'HARDWARE', child: Text('Hardware Appliance')),
+                    DropdownMenuItem(
+                        value: 'SOFTWARE', child: Text('Software Solution')),
+                    DropdownMenuItem(
+                        value: 'CLOUD', child: Text('Cloud Infrastructure')),
+                    DropdownMenuItem(
+                        value: 'SECURITY',
+                        child: Text('Security & Surveillance')),
+                    DropdownMenuItem(
+                        value: 'HARDWARE', child: Text('Hardware Appliance')),
                   ],
-                  onChanged: (v) => setDialogState(() => category = v ?? 'SOFTWARE'),
+                  onChanged: (v) =>
+                      setDialogState(() => category = v ?? 'SOFTWARE'),
                 ),
                 const SizedBox(height: 10),
                 TextFormField(
                   controller: descCtrl,
-                  decoration: const InputDecoration(labelText: 'Description', isDense: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Description', isDense: true),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 if (!formKey.currentState!.validate()) return;
@@ -107,12 +120,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     description: descCtrl.text.trim(),
                   );
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Product created successfully!'), backgroundColor: AppColors.success),
+                    const SnackBar(
+                        content: Text('Product created successfully!'),
+                        backgroundColor: AppColors.success),
                   );
                   _loadProducts();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                    SnackBar(
+                        content: Text('Failed: $e'),
+                        backgroundColor: AppColors.danger),
                   );
                 }
               },
@@ -138,7 +155,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brandPrimary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Product', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('New Product',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: _showAddProductDialog,
       ),
       body: Column(
@@ -153,7 +171,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 isDense: true,
                 filled: true,
                 fillColor: AppColors.bgApp,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none),
               ),
               onChanged: (val) => setState(() => _search = val),
             ),
@@ -166,9 +186,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadProducts, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadProducts,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
@@ -184,30 +208,47 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 10),
                                   child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                        horizontal: 16, vertical: 8),
                                     leading: CircleAvatar(
-                                      backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.12),
-                                      child: const Icon(Icons.inventory_2, color: AppColors.brandPrimary),
+                                      backgroundColor: AppColors.brandPrimary
+                                          .withValues(alpha: 0.12),
+                                      child: const Icon(Icons.inventory_2,
+                                          color: AppColors.brandPrimary),
                                     ),
-                                    title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                                    title: Text(p.name,
+                                        style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 15)),
                                     subtitle: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         const SizedBox(height: 4),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 6, vertical: 2),
                                           decoration: BoxDecoration(
                                             color: AppColors.bgApp,
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
                                           ),
                                           child: Text(
                                             p.category ?? 'SOFTWARE',
-                                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.brandPrimary),
+                                            style: const TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.brandPrimary),
                                           ),
                                         ),
-                                        if (p.description != null && p.description!.isNotEmpty) ...[
+                                        if (p.description != null &&
+                                            p.description!.isNotEmpty) ...[
                                           const SizedBox(height: 4),
-                                          Text(p.description!, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+                                          Text(p.description!,
+                                              style: const TextStyle(
+                                                  fontSize: 12,
+                                                  color:
+                                                      AppColors.textSecondary)),
                                         ],
                                       ],
                                     ),
@@ -216,11 +257,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                       activeThumbColor: AppColors.success,
                                       onChanged: (val) async {
                                         try {
-                                          await _api.toggleProductStatus(p.id, val);
+                                          await _api.toggleProductStatus(
+                                              p.id, val);
                                           _loadProducts();
                                         } catch (e) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                                content: Text('Failed: $e'),
+                                                backgroundColor:
+                                                    AppColors.danger),
                                           );
                                         }
                                       },

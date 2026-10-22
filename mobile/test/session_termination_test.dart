@@ -23,7 +23,9 @@ void main() {
       );
     });
 
-    test('AuthProvider clears credentials and sets message on session termination', () async {
+    test(
+        'AuthProvider clears credentials and sets message on session termination',
+        () async {
       SharedPreferences.setMockInitialValues({
         'kanvtech_mobile_token': 'dummy_invalidated_token',
       });

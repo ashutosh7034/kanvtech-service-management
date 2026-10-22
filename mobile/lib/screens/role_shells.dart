@@ -261,4 +261,3 @@ class RoleShellDispatcher extends StatelessWidget {
     }
   }
 }
-

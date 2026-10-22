@@ -226,86 +226,113 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             _navTile(
               icon: Icons.assignment_ind,
               title: 'Task Allotment & Workload Queue',
-              subtitle: 'Specialist workload distribution and manual ticket assignments',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManagerDashboardScreen())),
+              subtitle:
+                  'Specialist workload distribution and manual ticket assignments',
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ManagerDashboardScreen())),
             ),
             _navTile(
               icon: Icons.priority_high,
               title: 'Senior Tier Escalation Queue',
               subtitle: 'L2 and L3 escalated tickets review and rebalancing',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EscalationsScreen())),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const EscalationsScreen())),
             ),
             _navTile(
               icon: Icons.verified_outlined,
               title: 'Resolution Approvals',
-              subtitle: 'Review resolved tickets and sign off on technical resolutions',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ApprovalsScreen())),
+              subtitle:
+                  'Review resolved tickets and sign off on technical resolutions',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ApprovalsScreen())),
             ),
             _navTile(
               icon: Icons.business_outlined,
               title: 'Customer Master Directory',
-              subtitle: 'Manage client companies, branch locations, and contacts',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CompaniesScreen())),
+              subtitle:
+                  'Manage client companies, branch locations, and contacts',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const CompaniesScreen())),
             ),
             _navTile(
               icon: Icons.apartment_outlined,
               title: 'Department Master',
               subtitle: 'Configure departments, specializations, and leads',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DepartmentsScreen())),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const DepartmentsScreen())),
             ),
             _navTile(
               icon: Icons.people_outline,
               title: 'Specialist Employee Directory',
               subtitle: 'Directory, tier management (L1/L2/L3), and status',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EmployeesScreen())),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const EmployeesScreen())),
             ),
             _navTile(
               icon: Icons.inventory_2_outlined,
               title: 'Product Master Catalog',
               subtitle: 'Enterprise software products, modules, and submodules',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen())),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ProductsScreen())),
             ),
             _navTile(
               icon: Icons.rocket_launch_outlined,
               title: 'Client Implementations',
-              subtitle: 'Track new onboarding projects, milestone stages, and tasks',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ImplementationsScreen())),
+              subtitle:
+                  'Track new onboarding projects, milestone stages, and tasks',
+              onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ImplementationsScreen())),
             ),
             _navTile(
               icon: Icons.handshake_outlined,
               title: 'Annual Maintenance & AMC Subscriptions',
-              subtitle: 'Manage client contracts, renewal dates, and expiry alerts',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MaintenanceScreen())),
+              subtitle:
+                  'Manage client contracts, renewal dates, and expiry alerts',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const MaintenanceScreen())),
             ),
             _navTile(
               icon: Icons.contact_support_outlined,
               title: 'Enquiries & Prospects',
-              subtitle: 'Track incoming client requests and conversion pipeline',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProspectsScreen())),
+              subtitle:
+                  'Track incoming client requests and conversion pipeline',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ProspectsScreen())),
             ),
             _navTile(
               icon: Icons.analytics_outlined,
               title: 'Operational Analytics & Reports',
-              subtitle: 'Resolution by tier, SLA compliance, and workload stats',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportsScreen())),
+              subtitle:
+                  'Resolution by tier, SLA compliance, and workload stats',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const ReportsScreen())),
             ),
             _navTile(
               icon: Icons.tune,
               title: 'SLA Configuration',
               subtitle: 'Response & resolution time limits for priority tiers',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SlaSettingsScreen())),
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const SlaSettingsScreen())),
             ),
             _navTile(
               icon: Icons.security,
               title: 'Security & Audit Logs',
-              subtitle: 'Platform security audit trail, user actions, and timestamps',
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AuditLogsScreen())),
+              subtitle:
+                  'Platform security audit trail, user actions, and timestamps',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const AuditLogsScreen())),
             ),
             _navTile(
               icon: Icons.settings_suggest,
               title: 'Ticket Auto-Assignment Rule',
-              subtitle: 'Currently routed to default tier: ${ops.autoAssignmentLevel}',
-              onTap: () => _showAssignmentSettingDialog(ops.autoAssignmentLevel),
+              subtitle:
+                  'Currently routed to default tier: ${ops.autoAssignmentLevel}',
+              onTap: () =>
+                  _showAssignmentSettingDialog(ops.autoAssignmentLevel),
             ),
             const SizedBox(height: 40),
           ],
@@ -324,8 +351,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         leading: Icon(icon, color: AppColors.brandPrimary),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-        subtitle: Text(subtitle, style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+        title: Text(title,
+            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        subtitle: Text(subtitle,
+            style:
+                const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
         trailing: const Icon(Icons.chevron_right, size: 18),
         onTap: onTap,
       ),

@@ -63,7 +63,9 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
 
     if (companies.isEmpty || products.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Need client companies and products registered first.')),
+        const SnackBar(
+            content:
+                Text('Need client companies and products registered first.')),
       );
       return;
     }
@@ -76,34 +78,49 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('New Implementation Project', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          title: const Text('New Implementation Project',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 DropdownButtonFormField<String>(
                   initialValue: selectedCompany,
-                  decoration: const InputDecoration(labelText: 'Client Company', isDense: true),
-                  items: companies.map((c) => DropdownMenuItem(value: c.id, child: Text(c.companyName, overflow: TextOverflow.ellipsis))).toList(),
+                  decoration: const InputDecoration(
+                      labelText: 'Client Company', isDense: true),
+                  items: companies
+                      .map((c) => DropdownMenuItem(
+                          value: c.id,
+                          child: Text(c.companyName,
+                              overflow: TextOverflow.ellipsis)))
+                      .toList(),
                   onChanged: (v) => setDialogState(() => selectedCompany = v!),
                 ),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
                   initialValue: selectedProduct,
-                  decoration: const InputDecoration(labelText: 'Software Product', isDense: true),
-                  items: products.map((p) => DropdownMenuItem(value: p.id, child: Text(p.name, overflow: TextOverflow.ellipsis))).toList(),
+                  decoration: const InputDecoration(
+                      labelText: 'Software Product', isDense: true),
+                  items: products
+                      .map((p) => DropdownMenuItem(
+                          value: p.id,
+                          child: Text(p.name, overflow: TextOverflow.ellipsis)))
+                      .toList(),
                   onChanged: (v) => setDialogState(() => selectedProduct = v!),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: notesCtrl,
-                  decoration: const InputDecoration(labelText: 'Implementation Scope Notes', isDense: true),
+                  decoration: const InputDecoration(
+                      labelText: 'Implementation Scope Notes', isDense: true),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(ctx);
@@ -114,12 +131,16 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                     notes: notesCtrl.text.trim(),
                   );
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Implementation project created!'), backgroundColor: AppColors.success),
+                    const SnackBar(
+                        content: Text('Implementation project created!'),
+                        backgroundColor: AppColors.success),
                   );
                   _loadImplementations();
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                    SnackBar(
+                        content: Text('Failed: $e'),
+                        backgroundColor: AppColors.danger),
                   );
                 }
               },
@@ -153,19 +174,30 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                   Expanded(
                     child: Text(
                       '${project.companyName} • ${project.productName}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.brandPrimary),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: AppColors.brandPrimary),
                     ),
                   ),
-                  IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                  IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(ctx)),
                 ],
               ),
-              Text('Current Stage: ${project.stage} (${project.progressPercent}% completed)', style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+              Text(
+                  'Current Stage: ${project.stage} (${project.progressPercent}% completed)',
+                  style: const TextStyle(
+                      fontSize: 12, color: AppColors.textSecondary)),
               const Divider(height: 24),
-              const Text('Implementation Milestones', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              const Text('Implementation Milestones',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 8),
               Expanded(
                 child: project.tasks.isEmpty
-                    ? const Center(child: Text('Standard milestones active. Check web portal for granular Gantt schedule.'))
+                    ? const Center(
+                        child: Text(
+                            'Standard milestones active. Check web portal for granular Gantt schedule.'))
                     : ListView.builder(
                         itemCount: project.tasks.length,
                         itemBuilder: (ctx, i) {
@@ -175,21 +207,29 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                             title: Text(
                               t.title,
                               style: TextStyle(
-                                decoration: t.isCompleted ? TextDecoration.lineThrough : null,
-                                color: t.isCompleted ? AppColors.textMuted : AppColors.textPrimary,
+                                decoration: t.isCompleted
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                                color: t.isCompleted
+                                    ? AppColors.textMuted
+                                    : AppColors.textPrimary,
                               ),
                             ),
-                            subtitle: Text('Stage: ${t.stage}', style: const TextStyle(fontSize: 11)),
+                            subtitle: Text('Stage: ${t.stage}',
+                                style: const TextStyle(fontSize: 11)),
                             value: t.isCompleted,
                             activeColor: AppColors.success,
                             onChanged: (val) async {
                               try {
-                                await _api.toggleImplementationTask(t.id, val ?? false);
+                                await _api.toggleImplementationTask(
+                                    t.id, val ?? false);
                                 _loadImplementations();
                                 Navigator.pop(ctx);
                               } catch (e) {
                                 ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Failed: $e'), backgroundColor: AppColors.danger),
+                                  SnackBar(
+                                      content: Text('Failed: $e'),
+                                      backgroundColor: AppColors.danger),
                                 );
                               }
                             },
@@ -228,14 +268,16 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
       appBar: AppBar(
         title: const Text('Client Implementations'),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadImplementations),
+          IconButton(
+              icon: const Icon(Icons.refresh), onPressed: _loadImplementations),
         ],
       ),
       drawer: const AppDrawer(),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.brandPrimary,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('New Project', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('New Project',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         onPressed: _showAddProjectDialog,
       ),
       body: Column(
@@ -250,7 +292,9 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                 isDense: true,
                 filled: true,
                 fillColor: AppColors.bgApp,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide.none),
               ),
               onChanged: (val) => setState(() => _search = val),
             ),
@@ -263,14 +307,19 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(_error!, style: const TextStyle(color: AppColors.danger)),
+                            Text(_error!,
+                                style:
+                                    const TextStyle(color: AppColors.danger)),
                             const SizedBox(height: 8),
-                            ElevatedButton(onPressed: _loadImplementations, child: const Text('Retry')),
+                            ElevatedButton(
+                                onPressed: _loadImplementations,
+                                child: const Text('Retry')),
                           ],
                         ),
                       )
                     : _filtered.isEmpty
-                        ? const Center(child: Text('No active implementation projects.'))
+                        ? const Center(
+                            child: Text('No active implementation projects.'))
                         : RefreshIndicator(
                             onRefresh: _loadImplementations,
                             child: ListView.builder(
@@ -286,22 +335,32 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                                     child: Padding(
                                       padding: const EdgeInsets.all(16),
                                       child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
                                               Expanded(
                                                 child: Text(
                                                   p.companyName,
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 16),
                                                 ),
                                               ),
                                               Container(
-                                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8,
+                                                        vertical: 3),
                                                 decoration: BoxDecoration(
-                                                  color: _stageColor(p.stage).withValues(alpha: 0.12),
-                                                  borderRadius: BorderRadius.circular(6),
+                                                  color: _stageColor(p.stage)
+                                                      .withValues(alpha: 0.12),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
                                                 ),
                                                 child: Text(
                                                   p.stage,
@@ -315,23 +374,42 @@ class _ImplementationsScreenState extends State<ImplementationsScreen> {
                                             ],
                                           ),
                                           const SizedBox(height: 4),
-                                          Text('Product: ${p.productName}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                                          Text('Product: ${p.productName}',
+                                              style: const TextStyle(
+                                                  fontSize: 13,
+                                                  color:
+                                                      AppColors.textSecondary)),
                                           const SizedBox(height: 12),
                                           Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.spaceBetween,
                                             children: [
-                                              Text('Progress: ${p.progressPercent}%', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+                                              Text(
+                                                  'Progress: ${p.progressPercent}%',
+                                                  style: const TextStyle(
+                                                      fontSize: 12,
+                                                      fontWeight:
+                                                          FontWeight.w600)),
                                               if (p.targetDate != null)
-                                                Text('Target: ${p.targetDate!.day}/${p.targetDate!.month}/${p.targetDate!.year}', style: const TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                                                Text(
+                                                    'Target: ${p.targetDate!.day}/${p.targetDate!.month}/${p.targetDate!.year}',
+                                                    style: const TextStyle(
+                                                        fontSize: 11,
+                                                        color: AppColors
+                                                            .textMuted)),
                                             ],
                                           ),
                                           const SizedBox(height: 6),
                                           ClipRRect(
-                                            borderRadius: BorderRadius.circular(4),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
                                             child: LinearProgressIndicator(
-                                              value: (p.progressPercent / 100.0).clamp(0.0, 1.0),
+                                              value: (p.progressPercent / 100.0)
+                                                  .clamp(0.0, 1.0),
                                               backgroundColor: AppColors.bgApp,
-                                              valueColor: AlwaysStoppedAnimation<Color>(_stageColor(p.stage)),
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                      _stageColor(p.stage)),
                                               minHeight: 6,
                                             ),
                                           ),

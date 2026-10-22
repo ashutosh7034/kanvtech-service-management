@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _handleLogin() async {
     final auth = Provider.of<AuthProvider>(context, listen: false);
+    if (auth.isLoading) return;
     auth.clearSessionTerminatedMessage();
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
@@ -117,7 +118,8 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               style: TextButton.styleFrom(
                 backgroundColor: AppColors.brandPrimaryLight,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
@@ -138,7 +140,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (auth.sessionTerminatedMessage != null) ...[
                   Container(
                     margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: AppColors.dangerBg,
                       borderRadius: BorderRadius.circular(8),
@@ -199,7 +202,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       // Corporate Navy Header matching Web LoginPage.tsx
                       Container(
                         color: AppColors.brandPrimary,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 20),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -282,7 +286,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               decoration: const InputDecoration(
                                 labelText: 'Work Email',
                                 hintText: 'Enter corporate email',
-                                prefixIcon: Icon(Icons.email_outlined, size: 18),
+                                prefixIcon:
+                                    Icon(Icons.email_outlined, size: 18),
                               ),
                             ),
                             const SizedBox(height: 14),
@@ -301,8 +306,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                         : Icons.visibility_off_outlined,
                                     size: 18,
                                   ),
-                                  onPressed: () => setState(
-                                      () => _obscurePassword = !_obscurePassword),
+                                  onPressed: () => setState(() =>
+                                      _obscurePassword = !_obscurePassword),
                                 ),
                               ),
                             ),
@@ -317,7 +322,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                           color: Colors.white, strokeWidth: 2),
                                     )
                                   : const Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Text('Sign In to Portal'),
                                         SizedBox(width: 8),
@@ -382,12 +388,14 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       onPressed: () async {
         final auth = context.read<AuthProvider>();
+        if (auth.isLoading) return;
         auth.clearSessionTerminatedMessage();
         final success = await auth.switchDemoRole(role);
         if (!success && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(auth.errorMessage ?? 'Login failed. Check server connectivity.'),
+              content: Text(auth.errorMessage ??
+                  'Login failed. Check server connectivity.'),
               backgroundColor: AppColors.danger,
             ),
           );
