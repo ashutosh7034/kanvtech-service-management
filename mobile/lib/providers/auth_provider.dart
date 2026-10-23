@@ -5,6 +5,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 import '../services/api_service.dart';
+import '../main.dart' show appNavigatorKey;
 
 class AuthProvider with ChangeNotifier {
   final ApiService _api = ApiService();
@@ -158,6 +159,17 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String?> getSavedPassword() async {
+    try {
+      return await _secureStorage
+          .read(key: 'kanvtech_saved_password')
+          .timeout(const Duration(milliseconds: 100), onTimeout: () => null)
+          .catchError((_) => null);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<bool> login(String email, String password,
       {bool rememberMe = true}) async {
     if (_isSubmittingLogin) return false;
@@ -179,6 +191,11 @@ class AuthProvider with ChangeNotifier {
               .catchError((_) {});
           await prefs.setString('kanvtech_mobile_token', token);
         }
+        // Securely store the password in Android Keystore backed storage
+        await _secureStorage
+            .write(key: 'kanvtech_saved_password', value: password)
+            .timeout(const Duration(milliseconds: 500), onTimeout: () {})
+            .catchError((_) {});
         await prefs.setString('kanvtech_mobile_remember_me', 'true');
         await prefs.setString('kanvtech_remembered_email', email.trim());
         await prefs.setString(
@@ -187,6 +204,10 @@ class AuthProvider with ChangeNotifier {
         // Nonpersistent session policy: clean up persistent storage so cold restart requires reauthentication
         await _secureStorage
             .delete(key: 'kanvtech_mobile_token')
+            .timeout(const Duration(milliseconds: 500), onTimeout: () {})
+            .catchError((_) {});
+        await _secureStorage
+            .delete(key: 'kanvtech_saved_password')
             .timeout(const Duration(milliseconds: 500), onTimeout: () {})
             .catchError((_) {});
         await prefs.remove('kanvtech_mobile_token');
@@ -225,10 +246,17 @@ class AuthProvider with ChangeNotifier {
         str.contains('TimeoutException')) {
       return 'Connection to $serverUrl timed out. Please check your Wi-Fi signal and server status.';
     }
+    if (str.contains('User does not exist') || str.contains('contact admin')) {
+      return 'User does not exist. Please contact admin.';
+    }
     if (e is UnauthorizedException || str.contains('UnauthorizedException')) {
-      return str
+      final clean = str
           .replaceFirst('UnauthorizedException: ', '')
           .replaceFirst('Exception: ', '');
+      if (clean.contains('Invalid email or password')) {
+        return 'Invalid email or password. Please verify your credentials or contact your administrator.';
+      }
+      return clean;
     }
     return str.replaceFirst('Exception: ', '');
   }
@@ -256,59 +284,12 @@ class AuthProvider with ChangeNotifier {
           .catchError((_) {});
       await prefs.remove('kanvtech_mobile_token');
       await prefs.remove('kanvtech_mobile_user');
-      await prefs.remove('kanvtech_mobile_remember_me');
+      // Note: kanvtech_mobile_remember_me, kanvtech_remembered_email, and kanvtech_saved_password
+      // are intentionally preserved so returning to LoginScreen restores remembered credentials.
+    } catch (_) {}
+    try {
+      appNavigatorKey.currentState?.popUntil((route) => route.isFirst);
     } catch (_) {}
     notifyListeners();
-  }
-
-  Future<bool> switchDemoRole(String role, {bool rememberMe = true}) async {
-    if (_isSubmittingLogin) return false;
-    final creds = getDemoCredentials(role);
-    if (creds != null) {
-      final success = await login(creds['email']!, creds['password']!,
-          rememberMe: rememberMe);
-      if (!success && creds['fallbackPassword'] != null) {
-        return await login(creds['email']!, creds['fallbackPassword']!,
-            rememberMe: rememberMe);
-      }
-      return success;
-    }
-    return false;
-  }
-
-  Map<String, String>? getDemoCredentials(String role) {
-    const credentials = {
-      'ADMIN': {
-        'email': 'admin@kanvtech.com',
-        'password': 'Password@123',
-        'fallbackPassword': 'admin123',
-      },
-      'MANAGER': {
-        'email': 'manager@kanvtech.com',
-        'password': 'Password@123',
-        'fallbackPassword': 'manager123',
-      },
-      'L1_EMPLOYEE': {
-        'email': 'l1.amit@kanvtech.com',
-        'password': 'Password@123',
-        'fallbackPassword': 'l1pass123',
-      },
-      'L2_EMPLOYEE': {
-        'email': 'l2.vikram@kanvtech.com',
-        'password': 'Password@123',
-        'fallbackPassword': 'l2pass123',
-      },
-      'L3_EMPLOYEE': {
-        'email': 'l3.priya@kanvtech.com',
-        'password': 'Password@123',
-        'fallbackPassword': 'l3pass123',
-      },
-      'CUSTOMER': {
-        'email': 'rajesh@acme.com',
-        'password': 'Password@123',
-        'fallbackPassword': 'cust123',
-      },
-    };
-    return credentials[role];
   }
 }

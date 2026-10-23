@@ -11,6 +11,8 @@ import 'screens/login_screen.dart';
 import 'screens/role_shells.dart';
 import 'theme/app_theme.dart';
 
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   if (!kIsWeb) {
@@ -32,6 +34,7 @@ class KanvtechMobileApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => OperationsProvider()),
       ],
       child: MaterialApp(
+        navigatorKey: appNavigatorKey,
         title: 'Kanvtech Service Management',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,

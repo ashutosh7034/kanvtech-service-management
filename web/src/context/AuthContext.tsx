@@ -25,9 +25,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const isRemembered = typeof window !== 'undefined' && localStorage.getItem('kanvtech_remember_me') === 'true';
     const savedToken =
       typeof window !== 'undefined'
-        ? (isRemembered ? localStorage.getItem('kanvtech_token') : sessionStorage.getItem('kanvtech_token')) ||
-          localStorage.getItem('kanvtech_token') ||
-          sessionStorage.getItem('kanvtech_token')
+        ? isRemembered
+          ? localStorage.getItem('kanvtech_token')
+          : sessionStorage.getItem('kanvtech_token')
         : null;
 
     if (savedToken) {
@@ -189,6 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (rememberMe) {
           localStorage.setItem('kanvtech_token', res.token);
           localStorage.setItem('kanvtech_remember_me', 'true');
+          localStorage.setItem('kanvtech_remembered_email', email.trim());
           localStorage.setItem('kanvtech_user', JSON.stringify(userData));
           sessionStorage.removeItem('kanvtech_token');
           sessionStorage.removeItem('kanvtech_user');
@@ -197,6 +198,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           sessionStorage.setItem('kanvtech_user', JSON.stringify(userData));
           localStorage.removeItem('kanvtech_token');
           localStorage.removeItem('kanvtech_remember_me');
+          localStorage.removeItem('kanvtech_remembered_email');
           localStorage.removeItem('kanvtech_user');
         }
       }

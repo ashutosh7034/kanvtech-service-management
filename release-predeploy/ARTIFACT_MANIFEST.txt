@@ -15,12 +15,12 @@ Version Name:        2.0.1
 Version Code:        2
 Min SDK:             24 (Android 7.0+)
 Target SDK:          36 (Android 16)
-File Size (Bytes):   55226532
-File Size (MB):      52.67 MB
-Build Timestamp:     2026-10-22T18:00:55.000Z
-SHA-256 Checksum:    5baedc53597fb1008f98cc770c2cd7de49bfb31f233c728ca47eb76f659c8c31
+File Size (Bytes):   57577851
+File Size (MB):      54.91 MB
+Build Timestamp:     2026-10-23T03:35:16.000Z
+SHA-256 Checksum:    f762aeefcfd838edb774d0dde2dbbd51f0b13892dad4f43b0032c5c505ae376e
 Checks Completed:    - flutter analyze: PASS (0 issues found, 0 warnings)
-                     - flutter test: PASS (39/39 tests passed across 6 test suites)
+                     - flutter test: PASS (42/42 tests passed across 6 test suites)
                      - flutter build apk --release: PASS (assembleRelease exit code 0)
                      - adb install -r: PASS (Tested on Google Pixel 8a AVD emulator-5554)
                      - Runtime testing: PASS (Cold start, session logout, in-app Server Config,

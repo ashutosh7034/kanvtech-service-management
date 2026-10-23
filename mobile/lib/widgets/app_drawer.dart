@@ -419,7 +419,8 @@ class AppDrawer extends StatelessWidget {
                             fontSize: 13,
                             fontWeight: FontWeight.w600)),
                     onPressed: () {
-                      Navigator.pop(context);
+                      Navigator.of(context, rootNavigator: true)
+                          .popUntil((route) => route.isFirst);
                       auth.logout();
                     },
                   ),

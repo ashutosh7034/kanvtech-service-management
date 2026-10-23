@@ -172,19 +172,6 @@ void main() {
       await future1;
       expect(auth.isSubmittingLogin, isFalse);
     });
-
-    test('Rejects switchDemoRole duplicate clicks while active', () async {
-      final auth = AuthProvider();
-      final future1 = auth.switchDemoRole('ADMIN');
-      expect(auth.isSubmittingLogin, isTrue);
-
-      final future2 = auth.switchDemoRole('MANAGER');
-      final result2 = await future2;
-      expect(result2, isFalse);
-
-      await future1;
-      expect(auth.isSubmittingLogin, isFalse);
-    });
   });
 
   group('5. Loading State Reset and Error Diagnostics Tests', () {
@@ -239,37 +226,23 @@ void main() {
     });
   });
 
-  group('6. Fast-Track Credentials and Role Mapping Tests', () {
-    test('getDemoCredentials provides valid authorized accounts for all 6 roles',
-        () {
+  group('6. Standard Authentication and Manual Credential Enforcement Tests', () {
+    test('Authentication requires explicit email and password submission', () async {
       final auth = AuthProvider();
-      final roles = [
-        'ADMIN',
-        'MANAGER',
-        'L1_EMPLOYEE',
-        'L2_EMPLOYEE',
-        'L3_EMPLOYEE',
-        'CUSTOMER'
-      ];
+      auth.cancelOrSkipInitialization();
 
-      for (final role in roles) {
-        final creds = auth.getDemoCredentials(role);
-        expect(creds, isNotNull, reason: 'Credentials must exist for $role');
-        expect(creds!['email'], isNotEmpty,
-            reason: 'Email must be non-empty for $role');
-        expect(creds['password'], isNotEmpty,
-            reason: 'Password must be non-empty for $role');
-        expect(creds['email']!.contains('@'), isTrue,
-            reason: 'Email must be valid format for $role');
-      }
+      // Attempting login with empty password fails safely
+      final success = await auth.login('admin@kanvtech.com', '');
+      expect(success, isFalse);
+      expect(auth.isAuthenticated, isFalse);
     });
 
-    test('getDemoCredentials returns null for unauthorized or unknown roles',
-        () {
+    test('AuthProvider maintains null token and null user prior to manual sign in', () {
       final auth = AuthProvider();
-      expect(auth.getDemoCredentials('SUPERUSER'), isNull);
-      expect(auth.getDemoCredentials('HACKER'), isNull);
-      expect(auth.getDemoCredentials(''), isNull);
+      auth.cancelOrSkipInitialization();
+      expect(auth.token, isNull);
+      expect(auth.user, isNull);
+      expect(auth.isAuthenticated, isFalse);
     });
   });
 
@@ -325,11 +298,12 @@ void main() {
     });
 
     test(
-        'Logout clears token, user, and remember_me preference completely',
+        'Logout clears token and user session, while preserving remember_me preference for seamless re-login',
         () async {
       SharedPreferences.setMockInitialValues({
         'kanvtech_mobile_token': 'active-token',
         'kanvtech_mobile_remember_me': 'true',
+        'kanvtech_remembered_email': 'admin@kanvtech.com',
         'kanvtech_mobile_user':
             '{"id":"u1","email":"admin@kanvtech.com","name":"Admin","role":"ADMIN"}',
       });
@@ -346,7 +320,9 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       expect(prefs.getString('kanvtech_mobile_token'), isNull);
       expect(prefs.getString('kanvtech_mobile_user'), isNull);
-      expect(prefs.getString('kanvtech_mobile_remember_me'), isNull);
+      // Remember Me preference and remembered email remain intact for the login screen
+      expect(prefs.getString('kanvtech_mobile_remember_me'), 'true');
+      expect(prefs.getString('kanvtech_remembered_email'), 'admin@kanvtech.com');
     });
   });
 }
