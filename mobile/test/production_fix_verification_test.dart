@@ -325,5 +325,61 @@ void main() {
       expect(prefs.getString('kanvtech_remembered_email'), 'admin@kanvtech.com');
     });
   });
+
+  group('8. Password Security and Obsolete Credential Purging Tests', () {
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+    });
+
+    test(
+        'Obsolete saved password key is purged during session initialization and never stored',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'kanvtech_saved_password': 'legacy_plain_password_123',
+        'kanvtech_remembered_email': 'test@kanvtech.com',
+      });
+
+      final auth = AuthProvider();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(auth.isAuthenticated, isFalse);
+
+      // SharedPreferences should not contain the saved password
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('kanvtech_saved_password'), isNull);
+      // Email is preserved
+      expect(prefs.getString('kanvtech_remembered_email'), 'test@kanvtech.com');
+    });
+
+    test('Login attempt unconditionally deletes obsolete saved password key', () async {
+      SharedPreferences.setMockInitialValues({
+        'kanvtech_saved_password': 'stale_pass',
+      });
+
+      final auth = AuthProvider();
+      auth.cancelOrSkipInitialization();
+
+      // Trigger login attempt
+      await auth.login('user@kanvtech.com', 'password123');
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('kanvtech_saved_password'), isNull);
+    });
+
+    test('Logout unconditionally ensures no saved password exists', () async {
+      SharedPreferences.setMockInitialValues({
+        'kanvtech_saved_password': 'stale_pass',
+        'kanvtech_mobile_token': 'active_token',
+      });
+
+      final auth = AuthProvider();
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await auth.logout();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('kanvtech_saved_password'), isNull);
+      expect(prefs.getString('kanvtech_mobile_token'), isNull);
+    });
+  });
 }
 

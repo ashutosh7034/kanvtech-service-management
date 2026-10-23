@@ -62,6 +62,13 @@ class AuthProvider with ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
 
+      // Security hardening: ensure any obsolete saved password from prior versions is deleted unconditionally
+      await prefs.remove('kanvtech_saved_password');
+      _secureStorage
+          .delete(key: 'kanvtech_saved_password')
+          .timeout(const Duration(milliseconds: 200), onTimeout: () {})
+          .catchError((_) {});
+
       // Load custom server URL if previously set
       final savedUrl = prefs.getString('kanvtech_server_url');
       if (savedUrl != null && savedUrl.isNotEmpty) {
@@ -159,17 +166,6 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<String?> getSavedPassword() async {
-    try {
-      return await _secureStorage
-          .read(key: 'kanvtech_saved_password')
-          .timeout(const Duration(milliseconds: 100), onTimeout: () => null)
-          .catchError((_) => null);
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<bool> login(String email, String password,
       {bool rememberMe = true}) async {
     if (_isSubmittingLogin) return false;
@@ -183,6 +179,13 @@ class AuthProvider with ChangeNotifier {
       final user = UserModel.fromJson(res['user']);
 
       final prefs = await SharedPreferences.getInstance();
+      // Ensure password is NEVER persisted in any storage under any circumstance
+      await prefs.remove('kanvtech_saved_password');
+      await _secureStorage
+          .delete(key: 'kanvtech_saved_password')
+          .timeout(const Duration(milliseconds: 300), onTimeout: () {})
+          .catchError((_) {});
+
       if (rememberMe) {
         if (token != null) {
           await _secureStorage
@@ -191,11 +194,6 @@ class AuthProvider with ChangeNotifier {
               .catchError((_) {});
           await prefs.setString('kanvtech_mobile_token', token);
         }
-        // Securely store the password in Android Keystore backed storage
-        await _secureStorage
-            .write(key: 'kanvtech_saved_password', value: password)
-            .timeout(const Duration(milliseconds: 500), onTimeout: () {})
-            .catchError((_) {});
         await prefs.setString('kanvtech_mobile_remember_me', 'true');
         await prefs.setString('kanvtech_remembered_email', email.trim());
         await prefs.setString(
@@ -204,10 +202,6 @@ class AuthProvider with ChangeNotifier {
         // Nonpersistent session policy: clean up persistent storage so cold restart requires reauthentication
         await _secureStorage
             .delete(key: 'kanvtech_mobile_token')
-            .timeout(const Duration(milliseconds: 500), onTimeout: () {})
-            .catchError((_) {});
-        await _secureStorage
-            .delete(key: 'kanvtech_saved_password')
             .timeout(const Duration(milliseconds: 500), onTimeout: () {})
             .catchError((_) {});
         await prefs.remove('kanvtech_mobile_token');
@@ -282,10 +276,16 @@ class AuthProvider with ChangeNotifier {
           .delete(key: 'kanvtech_mobile_token')
           .timeout(const Duration(milliseconds: 500), onTimeout: () {})
           .catchError((_) {});
+      await _secureStorage
+          .delete(key: 'kanvtech_saved_password')
+          .timeout(const Duration(milliseconds: 500), onTimeout: () {})
+          .catchError((_) {});
+      await prefs.remove('kanvtech_saved_password');
       await prefs.remove('kanvtech_mobile_token');
       await prefs.remove('kanvtech_mobile_user');
-      // Note: kanvtech_mobile_remember_me, kanvtech_remembered_email, and kanvtech_saved_password
-      // are intentionally preserved so returning to LoginScreen restores remembered credentials.
+      // Note: kanvtech_mobile_remember_me and kanvtech_remembered_email
+      // are intentionally preserved so returning to LoginScreen restores corporate email.
+      // Passwords are NEVER persisted.
     } catch (_) {}
     try {
       appNavigatorKey.currentState?.popUntil((route) => route.isFirst);

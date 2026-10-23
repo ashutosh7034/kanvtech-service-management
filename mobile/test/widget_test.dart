@@ -115,11 +115,12 @@ void main() {
     final checkbox = tester.widget<Checkbox>(find.byType(Checkbox));
     expect(checkbox.value, isTrue);
 
-    // Verify password field is obscured
+    // Verify password field is obscured and EMPTY (never prefilled)
     final passwordFieldFinder = find.widgetWithText(TextField, 'Password');
     expect(passwordFieldFinder, findsOneWidget);
     final passwordField = tester.widget<TextField>(passwordFieldFinder);
     expect(passwordField.obscureText, isTrue);
+    expect(passwordField.controller?.text.isEmpty ?? true, isTrue);
 
     // Test password show/hide toggle
     final toggleButton = find.byTooltip('Show password');
@@ -129,6 +130,7 @@ void main() {
 
     final toggledPasswordField = tester.widget<TextField>(passwordFieldFinder);
     expect(toggledPasswordField.obscureText, isFalse);
+    expect(toggledPasswordField.controller?.text.isEmpty ?? true, isTrue);
     expect(find.byTooltip('Hide password'), findsOneWidget);
   });
 

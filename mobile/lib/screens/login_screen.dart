@@ -42,16 +42,6 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         });
       }
-
-      if (isRemembered && mounted) {
-        final auth = context.read<AuthProvider>();
-        final savedPassword = await auth.getSavedPassword();
-        if (mounted && _rememberMe && savedPassword != null && savedPassword.isNotEmpty) {
-          setState(() {
-            _passwordController.text = savedPassword;
-          });
-        }
-      }
     } catch (_) {}
   }
 
