@@ -76,11 +76,14 @@ export class EmployeesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new employee profile and credentials' })
   async createEmployee(@Body() body: any, @Request() req: any) {
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException('Authenticated tenant workspace context is required to create employees.');
+    }
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    const tenantId = req.user.tenantId || 'KANVTECH';
     const id = await this.employeesService.createEmployee({ ...body, tenantId }, actor);
     return { success: true, employeeId: id, id, message: 'Employee created successfully' };
   }

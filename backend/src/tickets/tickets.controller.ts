@@ -121,9 +121,12 @@ export class TicketsController {
   @Post()
   @ApiOperation({ summary: 'Open a new support ticket' })
   async createTicket(@Body() body: any, @Request() req: any) {
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException('Authenticated tenant workspace context is required to open tickets.');
+    }
     const companyId = req.user.role === 'CUSTOMER' ? req.user.companyId : (body.companyId || body.company_id);
     const customerContactId = req.user.role === 'CUSTOMER' ? req.user.contactId : (body.customerContactId || body.customer_contact_id);
-    const tenantId = req.user.tenantId || 'KANVTECH';
 
     const ticket = await this.ticketsService.createTicket({
       companyId,

@@ -845,17 +845,21 @@ export class ExportService {
       throw new ForbiddenException('Only Administrators are authorized to perform system data recovery/restore.');
     }
 
+    if (!user.tenantId || user.tenantId.trim() === '') {
+      throw new BadRequestException('A verified tenant workspace context is required for data restoration.');
+    }
+    const tenantId = user.tenantId;
+
     const preview = await this.validateAndPreviewRestore(backupPayload);
     const tables = backupPayload.tables || backupPayload.data || {};
     let restoredCount = 0;
 
     // Execute within Prisma interactive transaction with safe upserts
     await this.prisma.$transaction(async (tx) => {
-      // 1. Restore Products
+      // 1. Restore Products (strictly scoped to caller tenant)
       if (tables['Products'] && Array.isArray(tables['Products'])) {
         for (const item of tables['Products']) {
           if (!item.code || !item.name) continue;
-          const tenantId = user.tenantId || item.tenantId || 'KANVTECH';
           await tx.product.upsert({
             where: { uq_product_tenant_code: { tenantId, code: item.code } },
             update: {
@@ -871,6 +875,7 @@ export class ExportService {
               category: item.category || 'General',
               description: item.description,
               isActive: item.isActive ?? true,
+              tenantId,
             },
           });
           restoredCount++;
@@ -881,7 +886,7 @@ export class ExportService {
       if (tables['Product_Modules'] && Array.isArray(tables['Product_Modules'])) {
         for (const item of tables['Product_Modules']) {
           if (!item.id || !item.productId || !item.name) continue;
-          const parentExists = await tx.product.findUnique({ where: { id: item.productId } });
+          const parentExists = await tx.product.findFirst({ where: { id: item.productId, tenantId } });
           if (!parentExists) continue;
 
           await tx.productModule.upsert({
@@ -903,11 +908,10 @@ export class ExportService {
         }
       }
 
-      // 3. Restore Departments
+      // 3. Restore Departments (strictly scoped to caller tenant)
       if (tables['Departments'] && Array.isArray(tables['Departments'])) {
         for (const item of tables['Departments']) {
           if (!item.code || !item.name) continue;
-          const tenantId = item.tenantId || 'KANVTECH';
           await tx.department.upsert({
             where: { uq_dept_tenant_code: { tenantId, code: item.code } },
             update: {
@@ -921,16 +925,22 @@ export class ExportService {
               name: item.name,
               description: item.description,
               isActive: item.isActive ?? true,
+              tenantId,
             },
           });
           restoredCount++;
         }
       }
 
-      // 4. Restore Companies
+      // 4. Restore Companies (strictly isolated with cross-tenant collision check)
       if (tables['Companies'] && Array.isArray(tables['Companies'])) {
         for (const item of tables['Companies']) {
           if (!item.id || !item.companyName) continue;
+          const existing = await tx.company.findUnique({ where: { id: item.id } });
+          if (existing && existing.tenantId !== tenantId) {
+            // Refuse to overwrite company records belonging to other tenants
+            continue;
+          }
           await tx.company.upsert({
             where: { id: item.id },
             update: {
@@ -951,17 +961,17 @@ export class ExportService {
               contactPerson: item.contactPerson || 'Contact Person',
               contactPhone: item.contactPhone || 'Phone',
               isActive: item.isActive ?? true,
+              tenantId,
             },
           });
           restoredCount++;
         }
       }
 
-      // 5. Restore SLA Configurations
+      // 5. Restore SLA Configurations (strictly scoped to caller tenant)
       if (tables['SLA_Configurations'] && Array.isArray(tables['SLA_Configurations'])) {
         for (const item of tables['SLA_Configurations']) {
           if (!item.priority) continue;
-          const tenantId = item.tenantId || 'KANVTECH';
           await tx.slaConfiguration.upsert({
             where: { uq_sla_tenant_priority: { tenantId, priority: item.priority } },
             update: {
@@ -976,16 +986,21 @@ export class ExportService {
               resolutionTimeHours: Number(item.resolutionTimeHours) || 24,
               warningThresholdPercent: Number(item.warningThresholdPercent) || 75,
               isActive: item.isActive ?? true,
+              tenantId,
             },
           });
           restoredCount++;
         }
       }
 
-      // 6. Restore Prospects
+      // 6. Restore Prospects (strictly isolated with cross-tenant collision check)
       if (tables['Prospects_Enquiries'] && Array.isArray(tables['Prospects_Enquiries'])) {
         for (const item of tables['Prospects_Enquiries']) {
           if (!item.id || !item.companyName || !item.email) continue;
+          const existing = await tx.prospect.findUnique({ where: { id: item.id } });
+          if (existing && existing.tenantId !== tenantId) {
+            continue;
+          }
           await tx.prospect.upsert({
             where: { id: item.id },
             update: {
@@ -1004,6 +1019,7 @@ export class ExportService {
               email: item.email,
               status: item.status || 'ENQUIRY',
               notes: item.notes,
+              tenantId,
             },
           });
           restoredCount++;

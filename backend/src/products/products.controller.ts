@@ -9,6 +9,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
@@ -61,7 +62,10 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new product' })
   async createProduct(@Body() body: any, @Request() req: any) {
-    const tenantId = req.user.tenantId || 'KANVTECH';
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException('Authenticated tenant workspace context is required to create products.');
+    }
     const product = await this.productsService.createProduct({ ...body, tenantId }, req.user.userId);
     return { success: true, id: product.id, productId: product.id, product, message: 'Product created successfully' };
   }

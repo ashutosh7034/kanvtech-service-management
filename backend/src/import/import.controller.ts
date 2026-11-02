@@ -189,10 +189,13 @@ export class ImportController {
       throw new BadRequestException('No rows provided for import commit.');
     }
 
-    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const userTenantId = req.user?.isSuperAdmin ? undefined : req.user?.tenantId;
+    if (!userTenantId && !req.user?.isSuperAdmin) {
+      throw new ForbiddenException('Authenticated tenant workspace context is required for data import.');
+    }
     const rows = body.rows.map((r: any) => ({
       ...r,
-      tenantId: userTenantId || r.tenantId || 'KANVTECH',
+      tenantId: userTenantId,
     }));
 
     let result: { importedCount: number };

@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { CompaniesService } from './companies.service';
@@ -61,7 +62,10 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new customer record' })
   async createCompany(@Body() body: any, @Request() req: any) {
-    const tenantId = req.user.tenantId || 'KANVTECH';
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException('Authenticated tenant workspace context is required to create customers.');
+    }
     const id = await this.companiesService.createCompany({ ...body, tenantId }, req.user?.id || req.user?.userId);
     return { success: true, companyId: id, id, message: 'Customer created successfully' };
   }

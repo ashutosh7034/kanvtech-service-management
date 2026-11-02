@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, Query, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ProspectsService } from './prospects.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -40,7 +40,10 @@ export class ProspectsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Create a new prospect/enquiry' })
   async createProspect(@Body() body: any, @Request() req: any) {
-    const tenantId = req.user.tenantId || 'KANVTECH';
+    const tenantId = req.user.tenantId;
+    if (!tenantId) {
+      throw new ForbiddenException('Authenticated tenant workspace context is required to create prospects.');
+    }
     const prospect = await this.prospectsService.createProspect({
       companyName: body.companyName || body.company_name,
       contactPerson: body.contactPerson || body.contact_person,

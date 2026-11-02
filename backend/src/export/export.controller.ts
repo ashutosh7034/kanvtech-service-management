@@ -111,11 +111,14 @@ export class ExportController {
       throw new BadRequestException('Missing backupPayload for restore.');
     }
 
+    if (!req.user?.tenantId && !req.user?.isSuperAdmin) {
+      throw new BadRequestException('A verified tenant workspace context is required for data restoration.');
+    }
     const user = {
       userId: req.user?.userId || req.user?.id || 1,
       role: req.user?.role || 'ADMIN',
       email: req.user?.email || 'admin@kanvtech.com',
-      tenantId: req.user?.tenantId || 'KANVTECH',
+      tenantId: req.user?.tenantId,
     };
 
     const result = await this.exportService.commitRestore(body.backupPayload, user, ip);
