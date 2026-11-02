@@ -111,12 +111,14 @@ export class ImplementationsService {
     search?: string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    if (params.tenantId) where.tenantId = params.tenantId;
 
     if (params.companyId) where.companyId = params.companyId;
     if (params.productId) where.productId = params.productId;
@@ -186,9 +188,12 @@ export class ImplementationsService {
     };
   }
 
-  async getImplementationById(id: string) {
-    const imp = await this.prisma.implementation.findUnique({
-      where: { id },
+  async getImplementationById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+
+    const imp = await this.prisma.implementation.findFirst({
+      where,
       include: {
         company: true,
         product: true,
@@ -365,17 +370,20 @@ export class ImplementationsService {
       modules?: any[];
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
     const companyId = data.companyId || data.company_id;
     let productId = data.productId || data.product_id;
     if (!productId) {
-      const defaultProd = await this.prisma.product.findFirst({ where: { isActive: true } });
-      productId = defaultProd?.id || (await this.prisma.product.findFirst())?.id;
+      const defaultProd = await this.prisma.product.findFirst({
+        where: { isActive: true, ...(tenantId ? { tenantId } : {}) },
+      });
+      productId = defaultProd?.id || (await this.prisma.product.findFirst({ where: tenantId ? { tenantId } : {} }))?.id;
     }
     const subscriptionId = data.subscriptionId || data.subscription_id || null;
     let ownerEmployeeId = data.ownerEmployeeId || data.owner_employee_id || (data as any).leadSpecialistId || null;
     if (ownerEmployeeId && !String(ownerEmployeeId).startsWith('EMP-')) {
-      const emp = await this.prisma.employee.findFirst({ where: { userId: Number(ownerEmployeeId) } });
+      const emp = await this.prisma.employee.findFirst({ where: { userId: Number(ownerEmployeeId), ...(tenantId ? { tenantId } : {}) } });
       if (emp) ownerEmployeeId = emp.id;
     }
     const rawStartDate = data.startDate || data.start_date || new Date().toISOString();
@@ -383,6 +391,15 @@ export class ImplementationsService {
 
     if (!companyId || !productId || !rawStartDate || !rawTargetDate) {
       throw new BadRequestException('Company, Product, Start Date, and Target Go-Live Date are required');
+    }
+
+    if (tenantId) {
+      const company = await this.prisma.company.findFirst({
+        where: { id: companyId, tenantId },
+      });
+      if (!company) {
+        throw new BadRequestException('Referenced company does not belong to active tenant');
+      }
     }
 
     const startDate = new Date(rawStartDate);
@@ -417,6 +434,7 @@ export class ImplementationsService {
         progressPercentage: Math.min(100, Math.max(0, progress)),
         pendingActivities: data.pendingActivities || data.pending_activities || null,
         notes: data.notes || null,
+        tenantId: tenantId || 'KANVTECH',
       },
       include: {
         company: true,
@@ -514,12 +532,11 @@ export class ImplementationsService {
       action: 'IMPLEMENTATION_CREATED',
       entityType: 'IMPLEMENTATION',
       entityId: imp.id,
-      newValues: { id: imp.id, companyId, productId, status: imp.status },
+      newValues: { id: imp.id, companyId, productId, status: imp.status, tenantId: imp.tenantId },
     });
 
-    return this.getImplementationById(imp.id);
+    return this.getImplementationById(imp.id, tenantId);
   }
-
   async updateImplementation(
     id: string,
     data: {
@@ -541,8 +558,11 @@ export class ImplementationsService {
       notes?: string;
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
-    const existing = await this.prisma.implementation.findUnique({ where: { id } });
+    const existing = await this.prisma.implementation.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+    });
     if (!existing) throw new NotFoundException('Implementation not found');
 
     const updateData: any = {};
@@ -586,7 +606,7 @@ export class ImplementationsService {
     if (data.notes !== undefined) updateData.notes = data.notes;
 
     await this.prisma.implementation.update({
-      where: { id },
+      where: { id: existing.id },
       data: updateData,
     });
 
@@ -599,10 +619,17 @@ export class ImplementationsService {
       newValues: updateData,
     });
 
-    return this.getImplementationById(id);
+    return this.getImplementationById(id, tenantId);
   }
 
-  async getImplementationTasks(implementationId: string) {
+  async getImplementationTasks(implementationId: string, tenantId?: string) {
+    if (tenantId) {
+      const imp = await this.prisma.implementation.findFirst({
+        where: { id: implementationId, tenantId },
+      });
+      if (!imp) throw new NotFoundException('Implementation not found');
+    }
+
     const tasks = await this.prisma.implementationTask.findMany({
       where: { implementationId },
       orderBy: [{ orderIndex: 'asc' }, { createdAt: 'asc' }],
@@ -706,9 +733,10 @@ export class ImplementationsService {
       due_time?: string;
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
-    const imp = await this.prisma.implementation.findUnique({
-      where: { id: implementationId },
+    const imp = await this.prisma.implementation.findFirst({
+      where: { id: implementationId, ...(tenantId ? { tenantId } : {}) },
       include: {
         company: { select: { id: true, companyName: true } },
         product: { select: { id: true, name: true } },
@@ -881,9 +909,10 @@ export class ImplementationsService {
       due_time?: string;
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
-    const existing = await this.prisma.implementationTask.findUnique({
-      where: { id: taskId },
+    const existing = await this.prisma.implementationTask.findFirst({
+      where: { id: taskId, ...(tenantId ? { implementation: { tenantId } } : {}) },
       include: {
         implementation: {
           include: {
@@ -1022,8 +1051,10 @@ export class ImplementationsService {
     return updated;
   }
 
-  async toggleTaskCompletion(taskId: string, isCompleted: boolean, actorUserId: number) {
-    const existing = await this.prisma.implementationTask.findUnique({ where: { id: taskId } });
+  async toggleTaskCompletion(taskId: string, isCompleted: boolean, actorUserId: number, tenantId?: string) {
+    const existing = await this.prisma.implementationTask.findFirst({
+      where: { id: taskId, ...(tenantId ? { implementation: { tenantId } } : {}) },
+    });
     if (!existing) throw new NotFoundException('Task not found');
 
     const updateData: any = {};
@@ -1072,8 +1103,10 @@ export class ImplementationsService {
     };
   }
 
-  async removeTask(taskId: string, actorUserId: number) {
-    const existing = await this.prisma.implementationTask.findUnique({ where: { id: taskId } });
+  async removeTask(taskId: string, actorUserId: number, tenantId?: string) {
+    const existing = await this.prisma.implementationTask.findFirst({
+      where: { id: taskId, ...(tenantId ? { implementation: { tenantId } } : {}) },
+    });
     if (!existing) throw new NotFoundException('Task not found');
 
     const implementationId = existing.implementationId;
@@ -1110,7 +1143,14 @@ export class ImplementationsService {
     };
   }
 
-  async reorderTasks(implementationId: string, taskIds: string[], actorUserId: number) {
+  async reorderTasks(implementationId: string, taskIds: string[], actorUserId: number, tenantId?: string) {
+    if (tenantId) {
+      const imp = await this.prisma.implementation.findFirst({
+        where: { id: implementationId, tenantId },
+      });
+      if (!imp) throw new NotFoundException('Implementation not found');
+    }
+
     for (let i = 0; i < taskIds.length; i++) {
       await this.prisma.implementationTask.updateMany({
         where: { id: taskIds[i], implementationId },
@@ -1126,11 +1166,13 @@ export class ImplementationsService {
       newValues: { taskIds },
     });
 
-    return this.getImplementationTasks(implementationId);
+    return this.getImplementationTasks(implementationId, tenantId);
   }
 
-  async getStats() {
+  async getStats(tenantId?: string) {
+    const where: any = tenantId ? { tenantId } : {};
     const all = await this.prisma.implementation.findMany({
+      where,
       select: { status: true, progressPercentage: true },
     });
 

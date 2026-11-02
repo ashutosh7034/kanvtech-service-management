@@ -19,9 +19,16 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User context is not authenticated');
     }
 
-    const hasRole = requiredRoles.includes(user.role);
+    const userRole = user.role;
+    const effectiveRoles = [userRole];
+    // SUPER_ADMIN is the company workspace super-administrator and inherits tenant ADMIN capabilities
+    if (userRole === 'SUPER_ADMIN') {
+      effectiveRoles.push('ADMIN');
+    }
+
+    const hasRole = requiredRoles.some((r) => effectiveRoles.includes(r));
     if (!hasRole) {
-      throw new ForbiddenException(`User role '${user.role}' is not authorized to access this resource`);
+      throw new ForbiddenException(`User role '${userRole}' is not authorized to access this resource`);
     }
 
     return true;

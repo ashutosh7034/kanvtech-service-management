@@ -10,8 +10,9 @@ export class DepartmentsService {
     private readonly auditService: AuditService,
   ) {}
 
-  async getDepartments(params?: { search?: string; isActive?: string | boolean }) {
+  async getDepartments(params?: { search?: string; isActive?: string | boolean }, tenantId?: string) {
     const where: any = {};
+    if (tenantId) where.tenantId = tenantId;
 
     if (params?.isActive !== undefined && params?.isActive !== '') {
       where.isActive = params.isActive === '1' || params.isActive === true || params.isActive === 'true';
@@ -100,9 +101,12 @@ export class DepartmentsService {
     });
   }
 
-  async getDepartmentById(id: string) {
-    const d = await this.prisma.department.findUnique({
-      where: { id },
+  async getDepartmentById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+
+    const d = await this.prisma.department.findFirst({
+      where,
       include: {
         products: { include: { product: true } },
         manager: true,
@@ -308,6 +312,7 @@ export class DepartmentsService {
       isActive?: boolean;
     },
     actorUserId?: number,
+    tenantId?: string,
   ) {
     const name = (data.name || '').trim();
     const code = (data.code || '').trim().toUpperCase();
@@ -320,14 +325,14 @@ export class DepartmentsService {
     }
 
     const existingName = await this.prisma.department.findFirst({
-      where: { name: { equals: name, mode: 'insensitive' } },
+      where: { name: { equals: name, mode: 'insensitive' }, ...(tenantId ? { tenantId } : {}) },
     });
     if (existingName) {
       throw new BadRequestException(`Department '${name}' already exists.`);
     }
 
     const existingCode = await this.prisma.department.findFirst({
-      where: { code: { equals: code, mode: 'insensitive' } },
+      where: { code: { equals: code, mode: 'insensitive' }, ...(tenantId ? { tenantId } : {}) },
     });
     if (existingCode) {
       throw new BadRequestException(`Department code '${code}' already exists.`);
@@ -339,7 +344,9 @@ export class DepartmentsService {
     );
 
     if (data.managerId) {
-      const mgr = await this.prisma.employee.findUnique({ where: { id: data.managerId } });
+      const mgr = await this.prisma.employee.findFirst({
+        where: { id: data.managerId, ...(tenantId ? { tenantId } : {}) },
+      });
       if (!mgr) throw new BadRequestException(`Manager '${data.managerId}' not found.`);
     }
 
@@ -366,6 +373,7 @@ export class DepartmentsService {
         managerId: data.managerId || null,
         specializationJson: specResult.specializationJson,
         isActive: data.isActive !== undefined ? Boolean(data.isActive) : true,
+        tenantId: tenantId || 'KANVTECH',
         products: {
           create: specResult.productIds.map((pid) => ({ productId: pid })),
         },
@@ -387,6 +395,7 @@ export class DepartmentsService {
         productIds: specResult.productIds,
         specializations: specResult.specializations,
         managerId: data.managerId,
+        tenantId: department.tenantId,
       },
     });
 
@@ -397,9 +406,9 @@ export class DepartmentsService {
     };
   }
 
-  async updateDepartment(id: string, data: any, actorUserId?: number) {
-    const existing = await this.prisma.department.findUnique({
-      where: { id },
+  async updateDepartment(id: string, data: any, actorUserId?: number, tenantId?: string) {
+    const existing = await this.prisma.department.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
       include: { products: true },
     });
     if (!existing) throw new NotFoundException('Department not found');
@@ -413,7 +422,7 @@ export class DepartmentsService {
     if (name !== undefined) {
       if (!name) throw new BadRequestException('Department name is required.');
       const duplicateName = await this.prisma.department.findFirst({
-        where: { name: { equals: name, mode: 'insensitive' }, id: { not: id } },
+        where: { name: { equals: name, mode: 'insensitive' }, id: { not: id }, ...(tenantId ? { tenantId } : {}) },
       });
       if (duplicateName) throw new BadRequestException(`Department '${name}' already exists.`);
     }
@@ -421,13 +430,15 @@ export class DepartmentsService {
     if (code !== undefined) {
       if (!code) throw new BadRequestException('Department code is required.');
       const duplicateCode = await this.prisma.department.findFirst({
-        where: { code: { equals: code, mode: 'insensitive' }, id: { not: id } },
+        where: { code: { equals: code, mode: 'insensitive' }, id: { not: id }, ...(tenantId ? { tenantId } : {}) },
       });
       if (duplicateCode) throw new BadRequestException(`Department code '${code}' already exists.`);
     }
 
     if (managerId) {
-      const mgr = await this.prisma.employee.findUnique({ where: { id: managerId } });
+      const mgr = await this.prisma.employee.findFirst({
+        where: { id: managerId, ...(tenantId ? { tenantId } : {}) },
+      });
       if (!mgr) throw new BadRequestException(`Manager '${managerId}' not found.`);
     }
 
@@ -453,7 +464,7 @@ export class DepartmentsService {
     }
 
     const updated = await this.prisma.department.update({
-      where: { id },
+      where: { id: existing.id },
       data: updateData,
       include: {
         products: { include: { product: true } },
@@ -485,12 +496,14 @@ export class DepartmentsService {
     };
   }
 
-  async toggleDepartmentStatus(id: string, isActive: boolean, actorUserId?: number) {
-    const existing = await this.prisma.department.findUnique({ where: { id } });
+  async toggleDepartmentStatus(id: string, isActive: boolean, actorUserId?: number, tenantId?: string) {
+    const existing = await this.prisma.department.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+    });
     if (!existing) throw new NotFoundException('Department not found');
 
     const updated = await this.prisma.department.update({
-      where: { id },
+      where: { id: existing.id },
       data: { isActive },
     });
 
@@ -504,12 +517,14 @@ export class DepartmentsService {
     return updated;
   }
 
-  async getDepartmentEmployees(departmentId: string) {
-    const dept = await this.prisma.department.findUnique({ where: { id: departmentId } });
+  async getDepartmentEmployees(departmentId: string, tenantId?: string) {
+    const dept = await this.prisma.department.findFirst({
+      where: { id: departmentId, ...(tenantId ? { tenantId } : {}) },
+    });
     if (!dept) throw new NotFoundException('Department not found');
 
     const employees = await this.prisma.employee.findMany({
-      where: { departmentId, status: EmployeeStatus.ACTIVE },
+      where: { departmentId, status: EmployeeStatus.ACTIVE, ...(tenantId ? { tenantId } : {}) },
       include: {
         assignedTickets: {
           where: { status: { in: [TicketStatus.OPEN, TicketStatus.IN_PROGRESS, TicketStatus.REOPENED, TicketStatus.CUSTOMER_FEEDBACK, TicketStatus.MANAGER_REVIEW] } },

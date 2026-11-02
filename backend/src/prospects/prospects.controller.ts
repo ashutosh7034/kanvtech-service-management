@@ -15,12 +15,14 @@ export class ProspectsController {
   @Get()
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'List all prospects with optional search and status filter' })
-  async getProspects(@Query() query: any) {
+  async getProspects(@Query() query: any, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
     const result = await this.prospectsService.getProspects({
       status: query.status,
       search: query.search,
       page: query.page,
       limit: query.limit,
+      tenantId,
     });
     return { success: true, ...result };
   }
@@ -28,8 +30,9 @@ export class ProspectsController {
   @Get(':id')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get prospect by ID' })
-  async getProspect(@Param('id') id: string) {
-    const prospect = await this.prospectsService.getProspectById(id);
+  async getProspect(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const prospect = await this.prospectsService.getProspectById(id, tenantId);
     return { success: true, prospect };
   }
 
@@ -37,6 +40,7 @@ export class ProspectsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Create a new prospect/enquiry' })
   async createProspect(@Body() body: any, @Request() req: any) {
+    const tenantId = req.user.tenantId || 'KANVTECH';
     const prospect = await this.prospectsService.createProspect({
       companyName: body.companyName || body.company_name,
       contactPerson: body.contactPerson || body.contact_person,
@@ -47,6 +51,7 @@ export class ProspectsController {
       source: body.source,
       assignedEmployeeId: body.assignedEmployeeId || body.assigned_employee_id,
       notes: body.notes,
+      tenantId,
     }, req.user?.id || req.user?.userId);
     return { success: true, prospect, message: 'Prospect created successfully' };
   }
@@ -55,6 +60,7 @@ export class ProspectsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Update prospect details or status' })
   async updateProspect(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const prospect = await this.prospectsService.updateProspect(id, {
       companyName: body.companyName || body.company_name,
       contactPerson: body.contactPerson || body.contact_person,
@@ -66,6 +72,7 @@ export class ProspectsController {
       status: body.status,
       assignedEmployeeId: body.assignedEmployeeId || body.assigned_employee_id,
       notes: body.notes,
+      tenantId,
     }, req.user?.id || req.user?.userId);
     return { success: true, prospect, message: 'Prospect updated successfully' };
   }
@@ -74,10 +81,12 @@ export class ProspectsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Convert prospect to full customer (generates CMP-XXXX)' })
   async convertProspect(@Param('id') id: string, @Body() body: any, @Request() req: any) {
+    const tenantId = req.user.tenantId || 'KANVTECH';
     const result = await this.prospectsService.convertProspect(id, {
       address: body.address,
       gstn: body.gstn,
       productIds: body.productIds || body.product_ids || [],
+      tenantId,
     }, req.user?.id || req.user?.userId);
     return {
       success: true,

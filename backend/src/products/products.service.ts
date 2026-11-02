@@ -60,12 +60,17 @@ export class ProductsService {
     isActive?: boolean | string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
     const skip = (page - 1) * limit;
 
     const where: any = {};
+
+    if (params.tenantId) {
+      where.tenantId = params.tenantId;
+    }
 
     if (params.isActive !== undefined && params.isActive !== '') {
       where.isActive = String(params.isActive) === 'true';
@@ -132,9 +137,11 @@ export class ProductsService {
     };
   }
 
-  async getProductById(id: string) {
-    const p = await this.prisma.product.findUnique({
-      where: { id },
+  async getProductById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const p = await this.prisma.product.findFirst({
+      where,
       include: {
         modules: {
           include: {
@@ -194,6 +201,7 @@ export class ProductsService {
       description?: string;
       isActive?: boolean;
       is_active?: boolean;
+      tenantId?: string;
     },
     actorUserId: number,
   ) {
@@ -202,12 +210,13 @@ export class ProductsService {
       throw new BadRequestException('Product name and category are required');
     }
 
+    const tenantId = data.tenantId || 'KANVTECH';
     let code = (data.code || data.productCode || data.product_code)?.trim().toUpperCase();
     if (!code) {
       code = `KT-${name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 8)}-${Date.now().toString().slice(-4)}`;
     }
 
-    const existing = await this.prisma.product.findUnique({ where: { code } });
+    const existing = await this.prisma.product.findFirst({ where: { code, tenantId } });
     if (existing) {
       throw new BadRequestException(`Product with code '${code}' already exists`);
     }
@@ -223,6 +232,7 @@ export class ProductsService {
         category: data.category.trim(),
         description: data.description?.trim() || null,
         isActive,
+        tenantId,
       },
     });
 
@@ -260,8 +270,11 @@ export class ProductsService {
       is_active?: boolean;
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.product.findFirst({ where });
     if (!existing) {
       throw new NotFoundException('Product not found');
     }
@@ -302,8 +315,10 @@ export class ProductsService {
     };
   }
 
-  async toggleProductStatus(id: string, isActive: boolean, actorUserId: number) {
-    const existing = await this.prisma.product.findUnique({ where: { id } });
+  async toggleProductStatus(id: string, isActive: boolean, actorUserId: number, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.product.findFirst({ where });
     if (!existing) {
       throw new NotFoundException('Product not found');
     }
@@ -337,9 +352,11 @@ export class ProductsService {
     };
   }
 
-  async deleteProduct(id: string, actorUserId: number) {
-    const existing = await this.prisma.product.findUnique({
-      where: { id },
+  async deleteProduct(id: string, actorUserId: number, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.product.findFirst({
+      where,
       include: {
         _count: {
           select: {
@@ -377,8 +394,10 @@ export class ProductsService {
 
   // --- Module Management ---
 
-  async createModule(productId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+  async createModule(productId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number, tenantId?: string) {
+    const pWhere: any = { id: productId };
+    if (tenantId) pWhere.tenantId = tenantId;
+    const product = await this.prisma.product.findFirst({ where: pWhere });
     if (!product) throw new NotFoundException('Product not found');
 
     const name = (data.name || '').trim();
@@ -418,9 +437,9 @@ export class ProductsService {
     return module;
   }
 
-  async updateModule(moduleId: string, data: { name?: string; description?: string; isActive?: boolean }, actorUserId: number) {
-    const existing = await this.prisma.productModule.findUnique({ where: { id: moduleId } });
-    if (!existing) throw new NotFoundException('Module not found');
+  async updateModule(moduleId: string, data: { name?: string; description?: string; isActive?: boolean }, actorUserId: number, tenantId?: string) {
+    const existing = await this.prisma.productModule.findUnique({ where: { id: moduleId }, include: { product: true } });
+    if (!existing || (tenantId && existing.product.tenantId !== tenantId)) throw new NotFoundException('Module not found');
 
     const updateData: any = {};
     if (data.name !== undefined) {
@@ -460,9 +479,9 @@ export class ProductsService {
 
   // --- Submodule Management ---
 
-  async createSubmodule(moduleId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number) {
+  async createSubmodule(moduleId: string, data: { name: string; description?: string; isActive?: boolean }, actorUserId: number, tenantId?: string) {
     const mod = await this.prisma.productModule.findUnique({ where: { id: moduleId }, include: { product: true } });
-    if (!mod) throw new NotFoundException('Module not found');
+    if (!mod || (tenantId && mod.product.tenantId !== tenantId)) throw new NotFoundException('Module not found');
 
     const name = (data.name || '').trim();
     if (!name) {
@@ -501,9 +520,12 @@ export class ProductsService {
     return submodule;
   }
 
-  async updateSubmodule(submoduleId: string, data: { name?: string; description?: string; isActive?: boolean }, actorUserId: number) {
-    const existing = await this.prisma.productSubmodule.findUnique({ where: { id: submoduleId } });
-    if (!existing) throw new NotFoundException('Submodule not found');
+  async updateSubmodule(submoduleId: string, data: { name?: string; description?: string; isActive?: boolean }, actorUserId: number, tenantId?: string) {
+    const existing = await this.prisma.productSubmodule.findUnique({
+      where: { id: submoduleId },
+      include: { module: { include: { product: true } } },
+    });
+    if (!existing || (tenantId && existing.module.product.tenantId !== tenantId)) throw new NotFoundException('Submodule not found');
 
     const updateData: any = {};
     if (data.name !== undefined) {
@@ -541,8 +563,10 @@ export class ProductsService {
     return updated;
   }
 
-  async getModules(productId: string) {
-    const product = await this.prisma.product.findUnique({ where: { id: productId } });
+  async getModules(productId: string, tenantId?: string) {
+    const pWhere: any = { id: productId };
+    if (tenantId) pWhere.tenantId = tenantId;
+    const product = await this.prisma.product.findFirst({ where: pWhere });
     if (!product) throw new NotFoundException('Product not found');
 
     const modules = await this.prisma.productModule.findMany({
@@ -558,12 +582,12 @@ export class ProductsService {
     return { modules, product: { id: product.id, code: product.code, name: product.name } };
   }
 
-  async deleteModule(moduleId: string, actorUserId: number) {
+  async deleteModule(moduleId: string, actorUserId: number, tenantId?: string) {
     const existing = await this.prisma.productModule.findUnique({
       where: { id: moduleId },
-      include: { submodules: true },
+      include: { submodules: true, product: true },
     });
-    if (!existing) throw new NotFoundException('Module not found');
+    if (!existing || (tenantId && existing.product.tenantId !== tenantId)) throw new NotFoundException('Module not found');
 
     // Safe deletion checks: prevent deleting if linked to operational records
     const [ticketCount, compProdCount, branchProdCount, taskCount] = await Promise.all([
@@ -594,9 +618,12 @@ export class ProductsService {
     return { success: true, message: `Module '${existing.name}' deleted successfully` };
   }
 
-  async deleteSubmodule(submoduleId: string, actorUserId: number) {
-    const existing = await this.prisma.productSubmodule.findUnique({ where: { id: submoduleId } });
-    if (!existing) throw new NotFoundException('Submodule not found');
+  async deleteSubmodule(submoduleId: string, actorUserId: number, tenantId?: string) {
+    const existing = await this.prisma.productSubmodule.findUnique({
+      where: { id: submoduleId },
+      include: { module: { include: { product: true } } },
+    });
+    if (!existing || (tenantId && existing.module.product.tenantId !== tenantId)) throw new NotFoundException('Submodule not found');
 
     // Safe deletion checks: prevent deleting if linked to tickets
     const ticketCount = await this.prisma.ticket.count({ where: { submoduleId } });
@@ -619,12 +646,14 @@ export class ProductsService {
     return { success: true, message: `Submodule '${existing.name}' deleted successfully` };
   }
 
-  async getStats() {
+  async getStats(tenantId?: string) {
+    const tWhere: any = tenantId ? { tenantId } : {};
     const [total, active, categories] = await Promise.all([
-      this.prisma.product.count(),
-      this.prisma.product.count({ where: { isActive: true } }),
+      this.prisma.product.count({ where: tWhere }),
+      this.prisma.product.count({ where: { ...tWhere, isActive: true } }),
       this.prisma.product.groupBy({
         by: ['category'],
+        where: tWhere,
         _count: { _all: true },
       }),
     ]);

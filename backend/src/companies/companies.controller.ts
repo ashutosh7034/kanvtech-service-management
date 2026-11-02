@@ -31,12 +31,14 @@ export class CompaniesController {
     if (req.user.role === 'CUSTOMER') {
       companyId = req.user.companyId;
     }
+    const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
     const result = await this.companiesService.getCompanies({
       search: query.search,
       isActive: query.isActive,
       companyId,
       page: query.page,
       limit: query.limit,
+      tenantId,
     });
     return { success: true, ...result };
   }
@@ -47,7 +49,8 @@ export class CompaniesController {
     if (req.user.role === 'CUSTOMER' && req.user.companyId !== id) {
       return { success: false, error: 'Unauthorized access to company record' };
     }
-    const company = await this.companiesService.getCompanyById(id);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const company = await this.companiesService.getCompanyById(id, tenantId);
     if (!company) {
       return { success: false, error: 'Company not found' };
     }
@@ -58,7 +61,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new customer record' })
   async createCompany(@Body() body: any, @Request() req: any) {
-    const id = await this.companiesService.createCompany(body, req.user?.id || req.user?.userId);
+    const tenantId = req.user.tenantId || 'KANVTECH';
+    const id = await this.companiesService.createCompany({ ...body, tenantId }, req.user?.id || req.user?.userId);
     return { success: true, companyId: id, id, message: 'Customer created successfully' };
   }
 
@@ -66,7 +70,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update existing customer record' })
   async updateCompany(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    await this.companiesService.updateCompany(id, body, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.updateCompany(id, body, req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Customer updated successfully' };
   }
 
@@ -75,7 +80,8 @@ export class CompaniesController {
   @ApiOperation({ summary: 'Toggle customer active/inactive status' })
   async toggleStatus(@Param('id') id: string, @Body() body: { is_active?: boolean; isActive?: boolean }, @Request() req: any) {
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : Boolean(body.is_active);
-    await this.companiesService.toggleCompanyStatus(id, isActive, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.toggleCompanyStatus(id, isActive, req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Customer status updated successfully' };
   }
 
@@ -85,7 +91,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Add a purchased product to customer' })
   async addProduct(@Param('id') id: string, @Body() body: { productId: string; notes?: string; purchaseType?: string; modules?: any[] }, @Request() req: any) {
-    const result = await this.companiesService.addCompanyProduct(id, body.productId, body.notes, body.purchaseType, body.modules, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const result = await this.companiesService.addCompanyProduct(id, body.productId, body.notes, body.purchaseType, body.modules, req.user?.id || req.user?.userId, tenantId);
     return { success: true, product: result, message: 'Product added to customer successfully' };
   }
 
@@ -98,6 +105,7 @@ export class CompaniesController {
     @Body() body: { notes?: string; purchaseType?: string; modules?: any[] },
     @Request() req: any,
   ) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const result = await this.companiesService.addCompanyProduct(
       id,
       productId,
@@ -105,6 +113,7 @@ export class CompaniesController {
       body.purchaseType,
       body.modules,
       req.user?.id || req.user?.userId,
+      tenantId,
     );
     return { success: true, product: result, message: 'Customer product entitlement updated successfully' };
   }
@@ -113,7 +122,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Remove a purchased product from customer' })
   async removeProduct(@Param('id') id: string, @Param('productId') productId: string, @Request() req: any) {
-    await this.companiesService.removeCompanyProduct(id, productId, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.removeCompanyProduct(id, productId, req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Product removed from customer successfully' };
   }
 
@@ -125,7 +135,8 @@ export class CompaniesController {
     if (req.user.role === 'CUSTOMER' && req.user.companyId !== id) {
       return { success: false, error: 'Unauthorized access' };
     }
-    const branches = await this.companiesService.getCompanyBranches(id);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const branches = await this.companiesService.getCompanyBranches(id, tenantId);
     return { success: true, branches };
   }
 
@@ -133,7 +144,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Add a new branch to customer' })
   async createBranch(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const branchId = await this.companiesService.createCompanyBranch(id, body, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const branchId = await this.companiesService.createCompanyBranch(id, body, req.user?.id || req.user?.userId, tenantId);
     return { success: true, branchId, id: branchId, message: 'Branch created successfully' };
   }
 
@@ -143,7 +155,11 @@ export class CompaniesController {
     if (req.user.role === 'CUSTOMER' && req.user.companyId !== id) {
       return { success: false, error: 'Unauthorized access' };
     }
-    const branch = await this.companiesService.getBranchById(branchId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const branch = await this.companiesService.getBranchById(branchId, tenantId);
+    if (!branch) {
+      return { success: false, error: 'Branch not found' };
+    }
     return { success: true, branch };
   }
 
@@ -151,7 +167,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update branch details' })
   async updateBranch(@Param('id') id: string, @Param('branchId') branchId: string, @Body() body: any, @Request() req: any) {
-    await this.companiesService.updateCompanyBranch(branchId, body, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.updateCompanyBranch(branchId, body, req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Branch updated successfully' };
   }
 
@@ -159,7 +176,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Toggle branch status' })
   async toggleBranchStatus(@Param('id') id: string, @Param('branchId') branchId: string, @Body() body: { status: string }, @Request() req: any) {
-    await this.companiesService.toggleBranchStatus(branchId, body.status, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.toggleBranchStatus(branchId, body.status, req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Branch status updated successfully' };
   }
 
@@ -168,7 +186,8 @@ export class CompaniesController {
   @ApiOperation({ summary: 'Assign products to branch' })
   async assignBranchProducts(@Param('id') id: string, @Param('branchId') branchId: string, @Body() body: any, @Request() req: any) {
     const productsData = body.products !== undefined ? body.products : (body.productIds !== undefined ? body.productIds : body);
-    await this.companiesService.assignBranchProducts(branchId, productsData || [], req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.assignBranchProducts(branchId, productsData || [], req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Branch products assigned successfully' };
   }
 
@@ -176,7 +195,8 @@ export class CompaniesController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Remove a product from branch' })
   async removeBranchProduct(@Param('id') id: string, @Param('branchId') branchId: string, @Param('productId') productId: string, @Request() req: any) {
-    await this.companiesService.removeBranchProduct(branchId, productId, req.user?.id || req.user?.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.companiesService.removeBranchProduct(branchId, productId, req.user?.id || req.user?.userId, tenantId);
     return { success: true, message: 'Product removed from branch' };
   }
 }

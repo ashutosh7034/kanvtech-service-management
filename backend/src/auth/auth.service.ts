@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -39,13 +39,17 @@ export class AuthService {
     }
   }
 
-  async login(email: string, pass: string, rememberMe = false) {
+  async login(email: string, pass: string, rememberMe = false, selectedTenantId?: string) {
     const normalizedEmail = (email || '').trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
       where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
       include: {
         employee: true,
         companyContacts: true,
+        tenantMemberships: {
+          where: { isActive: true },
+          include: { tenant: true },
+        },
       },
     });
 
@@ -82,6 +86,51 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    // Resolve user's authorized tenant memberships on the server
+    const activeMemberships = (user.tenantMemberships || []).filter(
+      (m: any) => m.isActive && m.tenant && m.tenant.status === 'ACTIVE',
+    );
+
+    const isPlatformIncharge = user.role === 'PLATFORM_INCHARGE';
+    const isSuperAdmin = user.role === 'SUPER_ADMIN';
+
+    // PLATFORM_INCHARGE manages the platform layer; tenant roles require active tenant memberships
+    if (activeMemberships.length === 0 && !isPlatformIncharge) {
+      throw new UnauthorizedException('Access denied. No active company workspace found for this user account.');
+    }
+
+    // Requirement 12: Do not implement unrestricted tenant switching.
+    // If a user belongs to multiple tenants, require verified membership and explicit selection.
+    if (activeMemberships.length > 1 && !selectedTenantId) {
+      return {
+        requiresTenantSelection: true,
+        email: user.email,
+        tenants: activeMemberships.map((m: any) => ({
+          id: m.tenant.id,
+          name: m.tenant.name,
+          code: m.tenant.code,
+          role: m.role,
+          isDefault: m.isDefault,
+        })),
+      };
+    }
+
+    let chosenMembership = activeMemberships[0];
+    if (selectedTenantId) {
+      const verified = activeMemberships.find((m: any) => m.tenantId === selectedTenantId);
+      if (!verified && !isPlatformIncharge) {
+        throw new UnauthorizedException('Access denied. User is not authorized for the requested company workspace.');
+      }
+      chosenMembership = verified || chosenMembership;
+    }
+
+    const effectiveTenantId = chosenMembership?.tenantId || user.defaultTenantId || (isPlatformIncharge ? 'KANVTECH' : null);
+    if (!effectiveTenantId) {
+      throw new UnauthorizedException('Access denied. No authorized company workspace resolved.');
+    }
+    const effectiveTenantName = chosenMembership?.tenant?.name || (isPlatformIncharge ? 'Platform Administration' : 'Kanvtech Technologies');
+    const effectiveRole = isPlatformIncharge ? 'PLATFORM_INCHARGE' : (chosenMembership?.role || user.role);
+
     // Generate cryptographically random active session ID
     const sessionId = crypto.randomUUID();
 
@@ -91,6 +140,7 @@ export class AuthService {
       data: {
         lastLoginAt: new Date(),
         activeSessionId: sessionId,
+        defaultTenantId: effectiveTenantId,
       },
     });
 
@@ -145,7 +195,11 @@ export class AuthService {
     const payload = {
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
+      isSuperAdmin: false,
+      isPlatformIncharge,
+      tenantId: effectiveTenantId,
+      tenantName: effectiveTenantName,
       employeeId,
       companyId,
       contactId,
@@ -164,11 +218,22 @@ export class AuthService {
         id: user.id,
         userId: user.id,
         email: user.email,
-        role: user.role,
+        role: effectiveRole,
+        isSuperAdmin: false,
+        isPlatformIncharge,
+        tenantId: effectiveTenantId,
+        tenantName: effectiveTenantName,
+        tenants: activeMemberships.map((m: any) => ({
+          id: m.tenant.id,
+          name: m.tenant.name,
+          code: m.tenant.code,
+          role: m.role,
+          isDefault: m.isDefault,
+        })),
         employeeId,
         companyId,
         contactId,
-        name: employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
+        name: employee?.name || (user.companyContacts?.[0]?.name ?? (isPlatformIncharge ? 'Platform Incharge' : user.role === 'SUPER_ADMIN' ? 'Super Administrator' : user.role === 'ADMIN' ? 'Company Administrator' : user.email)),
       },
     };
   }
@@ -207,7 +272,14 @@ export class AuthService {
   async validateUserById(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      include: { employee: true, companyContacts: true },
+      include: {
+        employee: true,
+        companyContacts: true,
+        tenantMemberships: {
+          where: { isActive: true },
+          include: { tenant: true },
+        },
+      },
     });
     if (!user || !user.isActive) return null;
 
@@ -251,16 +323,143 @@ export class AuthService {
       }
     }
 
+    const activeMemberships = (user.tenantMemberships || []).filter(
+      (m: any) => m.tenant && m.tenant.status === 'ACTIVE',
+    );
+    const defaultMembership = activeMemberships.find((m: any) => m.tenantId === user.defaultTenantId) || activeMemberships[0];
+    const isPlatformIncharge = user.role === 'PLATFORM_INCHARGE';
+    const effectiveRole = isPlatformIncharge ? 'PLATFORM_INCHARGE' : (defaultMembership?.role || user.role);
+
     return {
       id: user.id,
       userId: user.id,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
+      isSuperAdmin: false,
+      isPlatformIncharge,
+      tenantId: defaultMembership?.tenantId || user.defaultTenantId || (isPlatformIncharge ? 'KANVTECH' : 'KANVTECH'),
+      tenantName: defaultMembership?.tenant?.name || (isPlatformIncharge ? 'Platform Administration' : 'Kanvtech Technologies'),
+      tenants: activeMemberships.map((m: any) => ({
+        id: m.tenant.id,
+        name: m.tenant.name,
+        code: m.tenant.code,
+        role: m.role,
+        isDefault: m.isDefault,
+      })),
       employeeId: employee?.id || null,
       companyId,
       contactId,
-      name: employee?.name || (user.companyContacts?.[0]?.name ?? (user.role === 'ADMIN' ? 'System Administrator' : user.email)),
+      name: employee?.name || (user.companyContacts?.[0]?.name ?? (isPlatformIncharge ? 'Platform Incharge' : user.role === 'SUPER_ADMIN' ? 'Super Administrator' : user.role === 'ADMIN' ? 'Company Administrator' : user.email)),
     };
+  }
+
+  /**
+   * Verified server-side tenant switching.
+   * Requirement 12: Do not implement unrestricted tenant switching.
+   * If a user belongs to multiple tenants, require verified membership and explicit selection.
+   */
+  async switchTenant(userId: number, targetTenantId: string) {
+    if (!targetTenantId) {
+      throw new BadRequestException('Target tenant ID is required.');
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        employee: true,
+        companyContacts: true,
+        tenantMemberships: {
+          include: { tenant: true },
+        },
+      },
+    });
+
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('User account is invalid or inactive.');
+    }
+
+    // Verify membership on the server - strictly enforced across all roles
+    const membership = user.tenantMemberships.find(
+      (m: any) => m.tenantId === targetTenantId && m.isActive && m.tenant?.status === 'ACTIVE',
+    );
+
+    if (!membership) {
+      throw new ForbiddenException('Access denied: You do not have verified membership in the specified company workspace.');
+    }
+
+    const tenantObj = membership.tenant;
+    const effectiveRole = membership.role || user.role;
+    const isPlatformIncharge = user.role === 'PLATFORM_INCHARGE';
+
+    const sessionId = crypto.randomUUID();
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        activeSessionId: sessionId,
+        defaultTenantId: targetTenantId,
+      },
+    });
+
+    const payload = {
+      userId: user.id,
+      email: user.email,
+      role: effectiveRole,
+      isSuperAdmin: false,
+      isPlatformIncharge,
+      tenantId: targetTenantId,
+      tenantName: tenantObj?.name || targetTenantId,
+      employeeId: user.employee?.id || null,
+      companyId: user.companyContacts?.[0]?.companyId || null,
+      contactId: user.companyContacts?.[0]?.id || null,
+      sessionId,
+    };
+
+    const token = this.jwtService.sign(payload, {
+      expiresIn: process.env.JWT_EXPIRES_IN || '24h',
+    });
+
+    return {
+      success: true,
+      token,
+      user: {
+        id: user.id,
+        userId: user.id,
+        email: user.email,
+        role: effectiveRole,
+        isSuperAdmin: false,
+        isPlatformIncharge,
+        tenantId: targetTenantId,
+        tenantName: tenantObj?.name || targetTenantId,
+        name: user.employee?.name || (user.companyContacts?.[0]?.name ?? user.email),
+      },
+    };
+  }
+
+  async getMyTenants(userId: number) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: {
+        tenantMemberships: {
+          where: { isActive: true },
+          include: { tenant: true },
+        },
+      },
+    });
+
+    if (!user) throw new NotFoundException('User not found.');
+
+    // Only active verified memberships are returned. Tenant isolation strictly prevents
+    // tenant super admins or users from seeing/switching to other tenants.
+    const activeMemberships = (user.tenantMemberships || []).filter(
+      (m: any) => m.tenant && m.tenant.status === 'ACTIVE',
+    );
+
+    return activeMemberships.map((m: any) => ({
+      id: m.tenant.id,
+      name: m.tenant.name,
+      code: m.tenant.code,
+      role: m.role,
+      isDefault: m.isDefault,
+    }));
   }
 
   /**
@@ -335,19 +534,39 @@ export class AuthService {
    */
   async adminResetPassword(params: {
     adminUserId: number;
+    adminRole?: string;
+    adminTenantId?: string;
     targetUserId: number;
     newPassword?: string;
     ipAddress?: string;
   }) {
-    const { adminUserId, targetUserId, newPassword, ipAddress } = params;
+    const { adminUserId, adminRole, adminTenantId, targetUserId, newPassword, ipAddress } = params;
 
     const targetUser = await this.prisma.user.findUnique({
       where: { id: targetUserId },
-      include: { employee: true, companyContacts: true },
+      include: { employee: true, companyContacts: true, tenantMemberships: true },
     });
 
     if (!targetUser) {
       throw new NotFoundException(`Target user with ID ${targetUserId} not found.`);
+    }
+
+    // Role privilege restriction: disallow resetting PLATFORM_INCHARGE or SUPER_ADMIN
+    if (targetUser.role === 'PLATFORM_INCHARGE' && adminRole !== 'PLATFORM_INCHARGE') {
+      throw new ForbiddenException('Platform Incharge accounts cannot be reset by Tenant Administrators.');
+    }
+    if (targetUser.role === 'SUPER_ADMIN' && adminRole !== 'PLATFORM_INCHARGE' && adminUserId !== targetUserId) {
+      throw new ForbiddenException('Company Super Admin accounts cannot be reset by standard administrators.');
+    }
+
+    // Tenant boundary restriction
+    if (adminRole !== 'PLATFORM_INCHARGE' && adminTenantId) {
+      const isMemberOfAdminTenant = (targetUser.tenantMemberships || []).some(
+        (m: any) => m.tenantId === adminTenantId && m.isActive
+      );
+      if (!isMemberOfAdminTenant && targetUser.defaultTenantId !== adminTenantId) {
+        throw new ForbiddenException('Unauthorized: Target user does not belong to your company workspace.');
+      }
     }
 
     let rawPassword = newPassword;

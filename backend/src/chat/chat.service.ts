@@ -103,8 +103,9 @@ export class ChatService {
     subject: string;
     message: string;
     attachments?: Array<{ fileName: string; filePath: string; fileSize?: number; mimeType?: string }>;
+    tenantId?: string;
   }): Promise<any> {
-    const { senderUserId, toUserIds, ccUserIds = [], subject, message, attachments = [] } = params;
+    const { senderUserId, toUserIds, ccUserIds = [], subject, message, attachments = [], tenantId = 'KANVTECH' } = params;
 
     if (!toUserIds || !Array.isArray(toUserIds) || toUserIds.length === 0) {
       throw new BadRequestException('At least one "To" recipient is mandatory.');
@@ -146,6 +147,7 @@ export class ChatService {
       data: {
         title: subject.trim(),
         isGroup: false,
+        tenantId: tenantId || 'KANVTECH',
         participants: {
           create: allParticipantIds.map((uid) => ({ userId: uid })),
         },
@@ -563,13 +565,17 @@ export class ChatService {
   /**
    * Get active internal employees for recipient selection.
    */
-  async getActiveEmployeesForMessaging(requestingUserId: number) {
+  async getActiveEmployeesForMessaging(requestingUserId: number, tenantId?: string) {
+    const userWhere: any = {
+      id: { not: requestingUserId },
+      role: { in: EMPLOYEE_ROLES },
+      isActive: true,
+    };
+    if (tenantId) {
+      userWhere.employee = { tenantId };
+    }
     const users = await this.prisma.user.findMany({
-      where: {
-        id: { not: requestingUserId },
-        role: { in: EMPLOYEE_ROLES },
-        isActive: true,
-      },
+      where: userWhere,
       include: {
         employee: {
           select: {
@@ -596,17 +602,21 @@ export class ChatService {
   /**
    * Search employees.
    */
-  async searchEmployeesForChat(query: string, requestingUserId: number) {
+  async searchEmployeesForChat(query: string, requestingUserId: number, tenantId?: string) {
+    const userWhere: any = {
+      id: { not: requestingUserId },
+      role: { in: EMPLOYEE_ROLES },
+      isActive: true,
+      OR: [
+        { email: { contains: query, mode: 'insensitive' } },
+        { employee: { name: { contains: query, mode: 'insensitive' } } },
+      ],
+    };
+    if (tenantId) {
+      userWhere.employee = { ...(userWhere.employee || {}), tenantId };
+    }
     const users = await this.prisma.user.findMany({
-      where: {
-        id: { not: requestingUserId },
-        role: { in: EMPLOYEE_ROLES },
-        isActive: true,
-        OR: [
-          { email: { contains: query, mode: 'insensitive' } },
-          { employee: { name: { contains: query, mode: 'insensitive' } } },
-        ],
-      },
+      where: userWhere,
       include: {
         employee: {
           select: {

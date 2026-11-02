@@ -24,7 +24,8 @@ export class AssignmentsController {
   @Get('queue')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Get active ticket queue for task allotment' })
-  async getQueue(@Query() query: any) {
+  async getQueue(@Query() query: any, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
     const result = await this.assignmentsService.getTaskAllotmentQueue({
       status: query.status,
       priority: query.priority,
@@ -32,6 +33,7 @@ export class AssignmentsController {
       search: query.search,
       page: query.page,
       limit: query.limit,
+      tenantId,
     });
     return { success: true, ...result };
   }
@@ -39,16 +41,18 @@ export class AssignmentsController {
   @Get('eligible-employees')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Get active eligible employees with current workload' })
-  async getEligibleEmployees() {
-    const employees = await this.assignmentsService.getEligibleEmployees();
+  async getEligibleEmployees(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const employees = await this.assignmentsService.getEligibleEmployees(undefined, tenantId);
     return { success: true, employees };
   }
 
   @Get('stats')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Get task allotment summary stats' })
-  async getStats() {
-    const stats = await this.assignmentsService.getAllotmentStats();
+  async getStats(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const stats = await this.assignmentsService.getAllotmentStats(tenantId);
     return { success: true, stats };
   }
 
@@ -56,6 +60,7 @@ export class AssignmentsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Direct task allotment or reassignment to employee' })
   async assignTicket(@Body() body: any, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const ticket = await this.assignmentsService.assignTicket({
       ticketId: body.ticketId || body.ticket_id,
       employeeId: body.employeeId || body.employee_id,
@@ -63,6 +68,7 @@ export class AssignmentsController {
       assignedByUserId: req.user.userId,
       assignmentType: 'MANUAL',
       notes: body.notes,
+      tenantId,
     });
     return { success: true, ticket, message: 'Ticket assigned successfully' };
   }

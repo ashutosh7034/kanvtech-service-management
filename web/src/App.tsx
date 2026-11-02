@@ -26,6 +26,7 @@ import { ProspectsPage } from './pages-components/prospects/ProspectsPage';
 import { TaskRemindersPage } from './pages-components/task-reminders/TaskRemindersPage';
 import { ChatPage } from './pages-components/chat/ChatPage';
 import { EmailVerificationPage } from './pages-components/email-verification/EmailVerificationPage';
+import { PlatformAdminPage } from './pages-components/platform/PlatformAdminPage';
 export interface AppProps {
   initialView?: string;
 }
@@ -37,6 +38,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
     if (initialView) return initialView;
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '');
+      if (path === 'platform' || path === 'platform-admin' || path === 'platform_admin') return 'platform_admin';
       if (path === 'companies' || path === 'customers') return 'companies';
       if (path === 'departments') return 'departments';
       if (path === 'employees') return 'employees';
@@ -57,8 +59,9 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       if (path === 'audit_logs' || path === 'audit-logs') return 'audit_logs';
       if (path === 'customer_mobile' || path === 'customer-mobile') return 'customer_mobile';
       if (path === 'employee_mobile' || path === 'employee-mobile') return 'employee_mobile';
+      if (path === '' && (user?.role === 'PLATFORM_INCHARGE' || user?.isPlatformIncharge)) return 'platform_admin';
     }
-    return 'dashboard';
+    return (user?.role === 'PLATFORM_INCHARGE' || user?.isPlatformIncharge) ? 'platform_admin' : 'dashboard';
   };
 
   const [currentView, setCurrentView] = useState<string>(getViewFromPath);
@@ -110,6 +113,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
         audit_logs: '/audit-logs',
         customer_mobile: '/customer-mobile',
         employee_mobile: '/employee-mobile',
+        platform_admin: '/platform',
       };
       const newPath = pathToViewMap[view] || '/dashboard';
       if (window.location.pathname !== newPath) {
@@ -120,6 +124,8 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
 
   const getPageTitle = () => {
     switch (currentView) {
+      case 'platform_admin':
+        return 'Platform Administration • Multi-Tenant Control';
       case 'dashboard':
         return 'Operations Dashboard';
       case 'companies':
@@ -171,7 +177,12 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
   const userRole = user?.role || 'CUSTOMER';
 
   const isViewAuthorized = (view: string): boolean => {
-    if (userRole === 'ADMIN') return true;
+    // Platform Administration is strictly reserved for Platform Incharge.
+    // Tenant Super Admins (SUPER_ADMIN) and Tenant Admins (ADMIN) are forbidden from accessing platform administration.
+    if (view === 'platform_admin') {
+      return user?.role === 'PLATFORM_INCHARGE' || !!user?.isPlatformIncharge;
+    }
+    if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') return true;
     switch (view) {
       case 'dashboard':
       case 'tickets':
@@ -217,7 +228,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
             Access Restricted
           </div>
           <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
-            Your account role ({userRole.replace('_', ' ')}) is not authorized to access this operational view.
+            Your account role ({userRole.replace('_', ' ')}) is not authorized to access this platform administration view.
           </div>
           <button className="btn btn-primary btn-sm" onClick={() => navigateTo('dashboard')}>
             Return to Dashboard
@@ -225,6 +236,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
         </div>
       ) : (
         <>
+          {currentView === 'platform_admin' && <PlatformAdminPage />}
           {currentView === 'dashboard' && <DashboardPage onNavigate={navigateTo} />}
           {currentView === 'companies' && <CompaniesPage onNavigateTicket={(id) => navigateTo('ticket_detail', id)} />}
           {currentView === 'departments' && <DepartmentsPage />}

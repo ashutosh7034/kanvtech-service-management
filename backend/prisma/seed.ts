@@ -35,9 +35,9 @@ export async function seedDatabase() {
 
   for (const s of slas) {
     await prisma.slaConfiguration.upsert({
-      where: { priority: s.priority },
+      where: { uq_sla_tenant_priority: { tenantId: 'KANVTECH', priority: s.priority } },
       update: { responseTimeHours: s.responseTimeHours, resolutionTimeHours: s.resolutionTimeHours, warningThresholdPercent: s.warningThresholdPercent, isActive: true },
-      create: { priority: s.priority, responseTimeHours: s.responseTimeHours, resolutionTimeHours: s.resolutionTimeHours, warningThresholdPercent: s.warningThresholdPercent, isActive: true },
+      create: { tenantId: 'KANVTECH', priority: s.priority, responseTimeHours: s.responseTimeHours, resolutionTimeHours: s.resolutionTimeHours, warningThresholdPercent: s.warningThresholdPercent, isActive: true },
     });
   }
 

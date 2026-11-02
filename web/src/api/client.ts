@@ -115,10 +115,25 @@ export const api = {
   login: (credentials: any) => request('/auth/login', { method: 'POST', body: JSON.stringify(credentials) }),
   logout: () => request('/auth/logout', { method: 'POST' }),
   me: () => request('/auth/me'),
+  switchTenant: (tenantId: string) => request('/auth/switch-tenant', { method: 'POST', body: JSON.stringify({ tenantId }) }),
+  getMyTenants: () => request('/auth/my-tenants'),
   changePassword: (data: { currentPassword: string; newPassword: string; confirmPassword?: string }) =>
     request('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
   adminResetPassword: (data: { userId: number; newPassword?: string }) =>
     request('/auth/admin/reset-password', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Platform Administration (Super Admin only)
+  getPlatformOverview: () => request('/platform/overview'),
+  getPlatformTenants: () => request('/platform/tenants'),
+  getPlatformTenant: (id: string) => request(`/platform/tenants/${id}`),
+  createPlatformTenant: (data: any) => request('/platform/tenants', { method: 'POST', body: JSON.stringify(data) }),
+  updatePlatformTenantStatus: (id: string, status: 'ACTIVE' | 'SUSPENDED' | 'INACTIVE') =>
+    request(`/platform/tenants/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  resetPlatformTenantAdminPassword: (id: string, newPassword?: string) =>
+    request(`/platform/tenants/${id}/reset-admin-password`, {
+      method: 'POST',
+      body: JSON.stringify({ newPassword }),
+    }),
 
   // Notifications
   getNotifications: () => request('/notifications'),
@@ -211,6 +226,21 @@ export const api = {
   commitImport: (type: string, rows: any[]) =>
     request(`/import/commit/${type}`, { method: 'POST', body: JSON.stringify({ rows }) }),
   devReset: () => request('/import/dev-reset', { method: 'POST' }),
+
+  // Mass Update (Mode 2: Update Existing Records & Missing Data Completion)
+  getMassUpdateModules: () => request('/import/mass-update/modules'),
+  downloadMassUpdateTemplate: (type: string) => request(`/import/mass-update/template/${type}`),
+  parseMassUpdateFile: (formData: FormData) =>
+    request('/import/mass-update/parse', { method: 'POST', body: formData }),
+  previewMassUpdate: (type: string, payload: any) =>
+    request(`/import/mass-update/preview/${type}`, { method: 'POST', body: JSON.stringify(payload) }),
+  commitMassUpdate: (type: string, payload: any) =>
+    request(`/import/mass-update/commit/${type}`, { method: 'POST', body: JSON.stringify(payload) }),
+  getMassUpdateHistory: () => request('/import/mass-update/history'),
+  downloadMassUpdateReport: (operationId: string) =>
+    request(`/import/mass-update/report/${operationId}`, {
+      headers: { Accept: 'application/octet-stream' },
+    }),
 
   // Data Export & System Recovery
   getExportModules: () => request('/export/modules'),

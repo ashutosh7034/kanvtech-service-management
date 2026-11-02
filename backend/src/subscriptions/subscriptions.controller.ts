@@ -24,8 +24,8 @@ export class SubscriptionsController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Get summary metrics of maintenance plans and subscriptions' })
-  async getStats() {
-    const stats = await this.subscriptionsService.getStats();
+  async getStats(@Request() req: any) {
+    const stats = await this.subscriptionsService.getStats(req.user?.tenantId);
     return { success: true, stats };
   }
 
@@ -43,6 +43,7 @@ export class SubscriptionsController {
       search: query.search,
       page: query.page,
       limit: query.limit,
+      tenantId: req.user?.tenantId,
     });
     return { success: true, ...result };
   }
@@ -50,7 +51,7 @@ export class SubscriptionsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get single subscription record by ID' })
   async getSubscription(@Param('id') id: string, @Request() req: any) {
-    const sub = await this.subscriptionsService.getSubscriptionById(id);
+    const sub = await this.subscriptionsService.getSubscriptionById(id, req.user?.tenantId);
     if (!sub) {
       return { success: false, error: 'Subscription not found' };
     }
@@ -64,7 +65,7 @@ export class SubscriptionsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new customer subscription or AMC plan' })
   async createSubscription(@Body() body: any, @Request() req: any) {
-    const sub = await this.subscriptionsService.createSubscription(body, req.user.userId);
+    const sub = await this.subscriptionsService.createSubscription(body, req.user.userId, req.user?.tenantId);
     return { success: true, subscription: sub, message: 'Subscription plan created successfully' };
   }
 
@@ -72,7 +73,7 @@ export class SubscriptionsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update subscription details' })
   async updateSubscription(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const sub = await this.subscriptionsService.updateSubscription(id, body, req.user.userId);
+    const sub = await this.subscriptionsService.updateSubscription(id, body, req.user.userId, req.user?.tenantId);
     return { success: true, subscription: sub, message: 'Subscription updated successfully' };
   }
 
@@ -80,7 +81,7 @@ export class SubscriptionsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Send renewal warning notification to customer company contacts' })
   async sendWarning(@Param('id') id: string, @Body() body: { message?: string; notes?: string }, @Request() req: any) {
-    const result = await this.subscriptionsService.sendWarning(id, req.user.userId, body?.message || body?.notes);
+    const result = await this.subscriptionsService.sendWarning(id, req.user.userId, body?.message || body?.notes, req.user?.tenantId);
     return result;
   }
 
@@ -97,6 +98,7 @@ export class SubscriptionsController {
       id,
       { newExpiryDate: newExpiryDate!, planName: body.planName, notes: body.notes },
       req.user.userId,
+      req.user?.tenantId,
     );
     return { success: true, subscription: sub, message: 'Subscription renewed successfully' };
   }

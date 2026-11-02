@@ -19,11 +19,13 @@ export class ReportsController {
   @Get('dashboard')
   @ApiOperation({ summary: 'Get role-scoped executive dashboard and SLA metrics' })
   async getDashboard(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const metrics = await this.reportsService.getDashboardMetrics(
       req.user.role,
       req.user.userId,
       req.user.employeeId,
       req.user.companyId,
+      tenantId,
     );
     return { success: true, metrics };
   }
@@ -31,24 +33,27 @@ export class ReportsController {
   @Get('resolution-by-level')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Get resolution time and session metrics by support level' })
-  async getResolutionByLevel() {
-    const data = await this.reportsService.getResolutionTimeByLevel();
+  async getResolutionByLevel(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const data = await this.reportsService.getResolutionTimeByLevel(tenantId);
     return { success: true, data };
   }
 
   @Get('workload')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Get employee workload and resolution performance' })
-  async getEmployeeWorkload() {
-    const data = await this.reportsService.getEmployeeWorkloadReport();
+  async getEmployeeWorkload(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const data = await this.reportsService.getEmployeeWorkloadReport(tenantId);
     return { success: true, data };
   }
 
   @Get('escalations')
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Get escalation flow matrix and top escalation reasons' })
-  async getEscalationReport() {
-    const data = await this.reportsService.getEscalationReport();
+  async getEscalationReport(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const data = await this.reportsService.getEscalationReport(tenantId);
     return { success: true, data, ...data };
   }
 

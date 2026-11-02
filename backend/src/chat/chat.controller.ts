@@ -80,6 +80,7 @@ export class ChatController {
   async composeMessage(@Body() body: any, @Request() req: any) {
     this.assertNotCustomer(req);
     const userId = req.user.id || req.user.userId;
+    const senderTenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const result = await this.chatService.composeMessage({
       senderUserId: userId,
       toUserIds: body.toUserIds || body.to_user_ids || [],
@@ -87,6 +88,7 @@ export class ChatController {
       subject: body.subject,
       message: body.message,
       attachments: body.attachments || [],
+      tenantId: senderTenantId,
     });
     return result;
   }
@@ -123,7 +125,8 @@ export class ChatController {
   async getEmployees(@Request() req: any) {
     this.assertNotCustomer(req);
     const userId = req.user.id || req.user.userId;
-    const employees = await this.chatService.getActiveEmployeesForMessaging(userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const employees = await this.chatService.getActiveEmployeesForMessaging(userId, tenantId);
     return { success: true, employees };
   }
 
@@ -133,7 +136,8 @@ export class ChatController {
   async searchEmployees(@Query('q') q: string, @Request() req: any) {
     this.assertNotCustomer(req);
     const userId = req.user.id || req.user.userId;
-    const results = await this.chatService.searchEmployeesForChat(q || '', userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const results = await this.chatService.searchEmployeesForChat(q || '', userId, tenantId);
     return { success: true, employees: results };
   }
 

@@ -43,8 +43,13 @@ export class EmployeesService {
     department?: string;
     departmentId?: string;
     search?: string;
+    tenantId?: string;
   }) {
     const where: any = {};
+
+    if (params.tenantId) {
+      where.tenantId = params.tenantId;
+    }
 
     if (params.level) {
       where.level = params.level as EmployeeLevel;
@@ -96,7 +101,7 @@ export class EmployeesService {
     });
 
     return employees.map((e) => {
-      const isSuperAdmin = e.user?.role === UserRole.ADMIN;
+      const isSuperAdmin = e.user?.role === UserRole.ADMIN || e.user?.role === UserRole.SUPER_ADMIN;
       return {
         id: e.id,
         user_id: e.userId,
@@ -132,9 +137,11 @@ export class EmployeesService {
     });
   }
 
-  async getEmployeeById(id: string) {
-    const e = await this.prisma.employee.findUnique({
-      where: { id },
+  async getEmployeeById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const e = await this.prisma.employee.findFirst({
+      where,
       include: {
         user: { select: { id: true, role: true, isActive: true } },
         manager: { select: { id: true, name: true } },
@@ -169,7 +176,7 @@ export class EmployeesService {
       },
     });
 
-    const isSuperAdmin = e.user?.role === UserRole.ADMIN;
+    const isSuperAdmin = e.user?.role === UserRole.ADMIN || e.user?.role === UserRole.SUPER_ADMIN;
 
     return {
       id: e.id,
@@ -229,6 +236,7 @@ export class EmployeesService {
       role?: string;
       manager_id?: string;
       password?: string;
+      tenantId?: string;
     },
     actor?: number | ActorContext,
   ): Promise<string> {
@@ -329,11 +337,23 @@ export class EmployeesService {
           ? crypto.randomBytes(16).toString('hex')
           : 'Password@123';
     const passwordHash = await bcrypt.hash(rawPassword, 10);
+    const tenantId = data.tenantId || 'KANVTECH';
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
         role,
+        isActive: true,
+        defaultTenantId: tenantId,
+      },
+    });
+
+    await this.prisma.tenantMembership.create({
+      data: {
+        userId: user.id,
+        tenantId,
+        role,
+        isDefault: true,
         isActive: true,
       },
     });
@@ -356,6 +376,7 @@ export class EmployeesService {
       data: {
         id: employeeId,
         userId: user.id,
+        tenantId,
         name,
         email,
         alternateEmails: data.alternate_emails?.trim() || null,
@@ -408,11 +429,13 @@ export class EmployeesService {
     return employeeId;
   }
 
-  async updateEmployee(id: string, data: any, actor?: number | ActorContext): Promise<void> {
+  async updateEmployee(id: string, data: any, actor?: number | ActorContext, tenantId?: string): Promise<void> {
     const { id: actorUserId, role: actorRole } = parseActor(actor);
 
-    const existing = await this.prisma.employee.findUnique({
-      where: { id },
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.employee.findFirst({
+      where,
       include: { user: true },
     });
     if (!existing) throw new NotFoundException('Employee not found');
@@ -582,7 +605,7 @@ export class EmployeesService {
     });
   }
 
-  async promoteEmployee(id: string, targetLevel?: EmployeeLevel, actor?: number | ActorContext) {
+  async promoteEmployee(id: string, targetLevel?: EmployeeLevel, actor?: number | ActorContext, tenantId?: string) {
     const { id: actorUserId, role: actorRole } = parseActor(actor);
     if (actorRole && actorRole !== UserRole.ADMIN) {
       throw new ForbiddenException('Only Super Admins are authorized to promote employees.');
@@ -595,8 +618,10 @@ export class EmployeesService {
       throw new BadRequestException('Employee level management is currently disabled by Admin.');
     }
 
-    const existing = await this.prisma.employee.findUnique({
-      where: { id },
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.employee.findFirst({
+      where,
       include: { departmentRel: true, user: true },
     });
     if (!existing) throw new NotFoundException('Employee not found');
@@ -659,7 +684,7 @@ export class EmployeesService {
     return this.getEmployeeById(id);
   }
 
-  async demoteEmployee(id: string, targetLevel?: EmployeeLevel, actor?: number | ActorContext) {
+  async demoteEmployee(id: string, targetLevel?: EmployeeLevel, actor?: number | ActorContext, tenantId?: string) {
     const { id: actorUserId, role: actorRole } = parseActor(actor);
     if (actorRole && actorRole !== UserRole.ADMIN) {
       throw new ForbiddenException('Only Super Admins are authorized to demote employees.');
@@ -672,8 +697,10 @@ export class EmployeesService {
       throw new BadRequestException('Employee level management is currently disabled by Admin.');
     }
 
-    const existing = await this.prisma.employee.findUnique({
-      where: { id },
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.employee.findFirst({
+      where,
       include: { departmentRel: true, user: true },
     });
     if (!existing) throw new NotFoundException('Employee not found');
@@ -759,9 +786,11 @@ export class EmployeesService {
     });
   }
 
-  async checkIn(params: { employeeId: string; lat?: number; lng?: number; address?: string }) {
-    const emp = await this.prisma.employee.findUnique({
-      where: { id: params.employeeId },
+  async checkIn(params: { employeeId: string; lat?: number; lng?: number; address?: string; tenantId?: string }) {
+    const where: any = { id: params.employeeId };
+    if (params.tenantId) where.tenantId = params.tenantId;
+    const emp = await this.prisma.employee.findFirst({
+      where,
       include: { user: true },
     });
     if (!emp) throw new NotFoundException('Employee not found');
@@ -791,9 +820,11 @@ export class EmployeesService {
     return att;
   }
 
-  async checkOut(params: { employeeId: string; lat?: number; lng?: number; address?: string }) {
-    const emp = await this.prisma.employee.findUnique({
-      where: { id: params.employeeId },
+  async checkOut(params: { employeeId: string; lat?: number; lng?: number; address?: string; tenantId?: string }) {
+    const where: any = { id: params.employeeId };
+    if (params.tenantId) where.tenantId = params.tenantId;
+    const emp = await this.prisma.employee.findFirst({
+      where,
       include: { user: true },
     });
     if (!emp) throw new NotFoundException('Employee not found');
@@ -826,11 +857,13 @@ export class EmployeesService {
     });
   }
 
-  async toggleEmployeeStatus(id: string, actor?: number | ActorContext) {
+  async toggleEmployeeStatus(id: string, actor?: number | ActorContext, tenantId?: string) {
     const { id: actorUserId, role: actorRole } = parseActor(actor);
 
-    const existing = await this.prisma.employee.findUnique({
-      where: { id },
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.employee.findFirst({
+      where,
       include: { user: true },
     });
     if (!existing) throw new NotFoundException('Employee not found');
@@ -887,11 +920,13 @@ export class EmployeesService {
     return this.getEmployeeById(id);
   }
 
-  async deleteEmployee(id: string, actor?: number | ActorContext) {
+  async deleteEmployee(id: string, actor?: number | ActorContext, tenantId?: string) {
     const { id: actorUserId, role: actorRole } = parseActor(actor);
 
-    const existing = await this.prisma.employee.findUnique({
-      where: { id },
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.employee.findFirst({
+      where,
       include: { user: true },
     });
     if (!existing) throw new NotFoundException('Employee not found');

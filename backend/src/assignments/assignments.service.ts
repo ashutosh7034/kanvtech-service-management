@@ -12,11 +12,15 @@ export class AssignmentsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async findBestAvailableEmployee(targetLevel: EmployeeLevel = EmployeeLevel.L1, departmentId?: string) {
+  async findBestAvailableEmployee(targetLevel: EmployeeLevel = EmployeeLevel.L1, departmentId?: string, tenantId?: string) {
     const where: any = {
       level: targetLevel,
       status: 'ACTIVE',
     };
+
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
 
     if (departmentId) {
       where.OR = [
@@ -68,8 +72,11 @@ export class AssignmentsService {
     };
   }
 
-  async getEligibleEmployees(departmentId?: string) {
+  async getEligibleEmployees(departmentId?: string, tenantId?: string) {
     const where: any = { status: 'ACTIVE' };
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
     if (departmentId) {
       where.OR = [
         { departmentId: departmentId },
@@ -123,9 +130,12 @@ export class AssignmentsService {
     assignedByUserId: number;
     assignmentType: 'AUTO' | 'MANUAL';
     notes?: string;
+    tenantId?: string;
   }): Promise<any> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: params.ticketId },
+    const ticketWhere: any = { id: params.ticketId };
+    if (params.tenantId) ticketWhere.tenantId = params.tenantId;
+    const ticket = await this.prisma.ticket.findFirst({
+      where: ticketWhere,
       include: { assignedEmployee: true, department: true },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
@@ -281,6 +291,7 @@ export class AssignmentsService {
     search?: string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
@@ -289,6 +300,10 @@ export class AssignmentsService {
     const where: any = {
       status: { not: TicketStatus.CLOSED },
     };
+
+    if (params.tenantId) {
+      where.tenantId = params.tenantId;
+    }
 
     if (params.status && params.status !== 'ALL') {
       where.status = params.status;
@@ -387,22 +402,25 @@ export class AssignmentsService {
     };
   }
 
-  async getAllotmentStats() {
+  async getAllotmentStats(tenantId?: string) {
+    const baseWhere: any = { status: { not: TicketStatus.CLOSED } };
+    if (tenantId) baseWhere.tenantId = tenantId;
+
     const [unassigned, assigned, totalOpen] = await Promise.all([
       this.prisma.ticket.count({
         where: {
+          ...baseWhere,
           assignedEmployeeId: null,
-          status: { not: TicketStatus.CLOSED },
         },
       }),
       this.prisma.ticket.count({
         where: {
+          ...baseWhere,
           assignedEmployeeId: { not: null },
-          status: { not: TicketStatus.CLOSED },
         },
       }),
       this.prisma.ticket.count({
-        where: { status: { not: TicketStatus.CLOSED } },
+        where: baseWhere,
       }),
     ]);
 

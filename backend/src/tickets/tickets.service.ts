@@ -18,10 +18,13 @@ export class TicketsService {
     private readonly notificationsService: NotificationsService,
   ) {}
 
-  async generateTicketId(): Promise<string> {
+  async generateTicketId(tenantId?: string): Promise<string> {
+    const prefix = 'KT';
     const year = new Date().getFullYear();
+    const searchWhere: any = { id: { startsWith: `${prefix}-${year}-` } };
+    if (tenantId) searchWhere.tenantId = tenantId;
     const allTicketsThisYear = await this.prisma.ticket.findMany({
-      where: { id: { startsWith: `KT-${year}-` } },
+      where: searchWhere,
       select: { id: true },
     });
     let maxSeq = 0;
@@ -34,10 +37,10 @@ export class TicketsService {
     }
     const nextSeq = await this.prisma.getNextSequence('TICKET_SEQ');
     const safeSeq = Math.max(nextSeq, maxSeq + 1);
-    return `KT-${year}-${String(safeSeq).padStart(6, '0')}`;
+    return `${prefix}-${year}-${String(safeSeq).padStart(6, '0')}`;
   }
 
-  async validateTwoOpenTicketRule(customerContactId?: number): Promise<void> {
+  async validateTwoOpenTicketRule(customerContactId?: number, tenantId?: string): Promise<void> {
     if (!customerContactId || isNaN(customerContactId) || customerContactId <= 0) {
       return;
     }
@@ -51,11 +54,14 @@ export class TicketsService {
       TicketStatus.CUSTOMER_FEEDBACK,
     ];
 
+    const countWhere: any = {
+      customerContactId: Number(customerContactId),
+      status: { in: activeStatuses },
+    };
+    if (tenantId) countWhere.tenantId = tenantId;
+
     const activeCount = await this.prisma.ticket.count({
-      where: {
-        customerContactId: Number(customerContactId),
-        status: { in: activeStatuses },
-      },
+      where: countWhere,
     });
 
     if (activeCount >= 2) {
@@ -65,9 +71,11 @@ export class TicketsService {
     }
   }
 
-  async getAutoAssignmentLevel(): Promise<EmployeeLevel> {
-    const setting = await this.prisma.systemSetting.findUnique({
-      where: { settingKey: 'TICKET_AUTO_ASSIGNMENT_LEVEL' },
+  async getAutoAssignmentLevel(tenantId?: string): Promise<EmployeeLevel> {
+    const settingWhere: any = { settingKey: 'TICKET_AUTO_ASSIGNMENT_LEVEL' };
+    if (tenantId) settingWhere.tenantId = tenantId;
+    const setting = await this.prisma.systemSetting.findFirst({
+      where: settingWhere,
     });
     const val = setting?.settingValue?.trim()?.toUpperCase();
     if (val === 'L2') return EmployeeLevel.L2;
@@ -126,6 +134,7 @@ export class TicketsService {
     description: string;
     createdByUserId: number;
     assignedEmployeeId?: string | null;
+    tenantId?: string;
   }) {
     let customerContactId = Number(params.customerContactId || params.customer_contact_id);
     if (!customerContactId || isNaN(customerContactId)) {
@@ -259,7 +268,7 @@ export class TicketsService {
     }
 
     // 2. Strict Two-Open-Ticket Rule Validation on Backend
-    await this.validateTwoOpenTicketRule(customerContactId);
+    await this.validateTwoOpenTicketRule(customerContactId, params.tenantId);
 
     // 3. Automatic Department Derivation from Product
     let department = await this.prisma.department.findFirst({
@@ -281,7 +290,7 @@ export class TicketsService {
     const departmentId = department?.id || null;
 
     // 4. Collision-safe Monotonic Ticket ID Generation
-    const ticketId = await this.generateTicketId();
+    const ticketId = await this.generateTicketId(params.tenantId);
 
     // 5. Compute SLA Deadline
     const now = new Date();
@@ -318,6 +327,7 @@ export class TicketsService {
     await this.prisma.ticket.create({
       data: {
         id: ticketId,
+        tenantId: params.tenantId || 'KANVTECH',
         companyId: params.companyId,
         customerContactId,
         productId,
@@ -444,9 +454,13 @@ export class TicketsService {
     return this.getTicketById(ticketId);
   }
 
-  async getTicketById(id: string) {
-    const t = await this.prisma.ticket.findUnique({
-      where: { id },
+  async getTicketById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
+    const t = await this.prisma.ticket.findFirst({
+      where,
       include: {
         company: true,
         product: true,
@@ -645,12 +659,17 @@ export class TicketsService {
     slaStatus?: string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
     const skip = (page - 1) * limit;
 
     const where: any = {};
+
+    if (params.tenantId) {
+      where.tenantId = params.tenantId;
+    }
 
     const rawStatus = params.status;
     if (rawStatus && rawStatus !== 'undefined' && rawStatus !== 'null' && rawStatus !== 'ALL' && rawStatus.trim() !== '') {
@@ -810,8 +829,10 @@ export class TicketsService {
     };
   }
 
-  async startWork(ticketId: string, employeeId?: string, actorUserId?: number): Promise<void> {
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+  async startWork(ticketId: string, employeeId?: string, actorUserId?: number, tenantId?: string): Promise<void> {
+    const findWhere: any = { id: ticketId };
+    if (tenantId) findWhere.tenantId = tenantId;
+    const ticket = await this.prisma.ticket.findFirst({ where: findWhere });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     let effectiveEmployeeId = employeeId || ticket.assignedEmployeeId;
@@ -881,8 +902,10 @@ export class TicketsService {
     });
   }
 
-  async pauseWork(ticketId: string, actorUserId?: number): Promise<void> {
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+  async pauseWork(ticketId: string, actorUserId?: number, tenantId?: string): Promise<void> {
+    const findWhere: any = { id: ticketId };
+    if (tenantId) findWhere.tenantId = tenantId;
+    const ticket = await this.prisma.ticket.findFirst({ where: findWhere });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     const elapsed = await this.timerService.pauseWorkSession(ticketId);
@@ -906,8 +929,10 @@ export class TicketsService {
     });
   }
 
-  async resumeWork(ticketId: string, employeeId?: string, actorUserId?: number): Promise<void> {
-    const ticket = await this.prisma.ticket.findUnique({ where: { id: ticketId } });
+  async resumeWork(ticketId: string, employeeId?: string, actorUserId?: number, tenantId?: string): Promise<void> {
+    const findWhere: any = { id: ticketId };
+    if (tenantId) findWhere.tenantId = tenantId;
+    const ticket = await this.prisma.ticket.findFirst({ where: findWhere });
     if (!ticket) throw new NotFoundException('Ticket not found');
 
     const effectiveEmployeeId = employeeId || ticket.assignedEmployeeId;

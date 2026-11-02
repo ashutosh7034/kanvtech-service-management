@@ -32,7 +32,8 @@ export class ExportController {
   @ApiOperation({ summary: 'Get list of exportable business modules and live record counts' })
   async getExportModules(@Request() req: any) {
     const userRole = req.user?.role || 'MANAGER';
-    const summary = await this.exportService.getModulesSummary(userRole);
+    const tenantId = req.user?.tenantId;
+    const summary = await this.exportService.getModulesSummary(userRole, tenantId);
     return { success: true, ...summary };
   }
 
@@ -60,6 +61,8 @@ export class ExportController {
       userId: req.user?.userId || req.user?.id || 1,
       role: req.user?.role || 'MANAGER',
       email: req.user?.email || 'admin@kanvtech.com',
+      tenantId: req.user?.tenantId,
+      isSuperAdmin: req.user?.isSuperAdmin || false,
     };
 
     const result = await this.exportService.generateExportFile(moduleKey, cleanFormat, user, ip);
@@ -112,6 +115,7 @@ export class ExportController {
       userId: req.user?.userId || req.user?.id || 1,
       role: req.user?.role || 'ADMIN',
       email: req.user?.email || 'admin@kanvtech.com',
+      tenantId: req.user?.tenantId || 'KANVTECH',
     };
 
     const result = await this.exportService.commitRestore(body.backupPayload, user, ip);

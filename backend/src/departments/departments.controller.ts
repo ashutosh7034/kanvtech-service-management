@@ -22,37 +22,37 @@ export class DepartmentsController {
 
   @Get()
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
-  async getDepartments(@Query() query: any) {
-    return this.departmentsService.getDepartments(query);
+  async getDepartments(@Query() query: any, @Req() req: any) {
+    return this.departmentsService.getDepartments(query, req.user?.tenantId);
   }
 
   @Get(':id')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
-  async getDepartmentById(@Param('id') id: string) {
-    return this.departmentsService.getDepartmentById(id);
+  async getDepartmentById(@Param('id') id: string, @Req() req: any) {
+    return this.departmentsService.getDepartmentById(id, req.user?.tenantId);
   }
 
   @Get(':id/employees')
   @Roles('ADMIN', 'MANAGER')
-  async getDepartmentEmployees(@Param('id') id: string) {
-    return this.departmentsService.getDepartmentEmployees(id);
+  async getDepartmentEmployees(@Param('id') id: string, @Req() req: any) {
+    return this.departmentsService.getDepartmentEmployees(id, req.user?.tenantId);
   }
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
   async createDepartment(@Body() body: any, @Req() req: any) {
-    return this.departmentsService.createDepartment(body, req.user?.id || req.user?.userId);
+    return this.departmentsService.createDepartment(body, req.user?.id || req.user?.userId, req.user?.tenantId);
   }
 
   @Put(':id')
   @Roles('ADMIN', 'MANAGER')
   async updateDepartment(@Param('id') id: string, @Body() body: any, @Req() req: any) {
-    return this.departmentsService.updateDepartment(id, body, req.user?.id || req.user?.userId);
+    return this.departmentsService.updateDepartment(id, body, req.user?.id || req.user?.userId, req.user?.tenantId);
   }
 
   @Patch(':id/status')
   @Roles('ADMIN', 'MANAGER')
   async toggleDepartmentStatus(@Param('id') id: string, @Body() body: { isActive: boolean }, @Req() req: any) {
-    return this.departmentsService.toggleDepartmentStatus(id, body.isActive, req.user?.id || req.user?.userId);
+    return this.departmentsService.toggleDepartmentStatus(id, body.isActive, req.user?.id || req.user?.userId, req.user?.tenantId);
   }
 }

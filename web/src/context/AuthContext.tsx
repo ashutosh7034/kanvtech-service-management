@@ -8,7 +8,8 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, passwordPlain: string, rememberMe?: boolean) => Promise<void>;
+  login: (email: string, passwordPlain: string, rememberMe?: boolean, selectedTenantId?: string) => Promise<any>;
+  switchTenant: (tenantId: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -74,6 +75,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             res.user.employee?.name ||
             res.user.companyContact?.name ||
             res.user.email.split('@')[0],
+          tenantId: res.user.tenantId,
+          tenantName: res.user.tenantName,
+          isSuperAdmin: res.user.isSuperAdmin,
+          isPlatformIncharge: res.user.isPlatformIncharge || res.user.role === 'PLATFORM_INCHARGE',
+          tenants: res.user.tenants,
           employeeId: res.user.employeeId || res.user.employee?.id,
           companyId: res.user.companyId || res.user.companyContact?.companyId,
           contactId: res.user.contactId || res.user.companyContact?.id,
@@ -110,7 +116,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setToken(null);
       } else {
         // Transient network error or server offline: DO NOT wipe saved token or cached user!
-        // Preserves session so user is not logged out while offline.
       }
     } finally {
       setLoading(false);
@@ -133,11 +138,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     window.addEventListener('auth_unauthorized', handleUnauthorized);
     window.addEventListener('auth_session_terminated', handleSessionTerminated);
 
-    // Lightweight session-validity check on window focus / tab visibility change
     let lastCheckTime = 0;
     const checkActiveSession = async () => {
       const now = Date.now();
-      if (now - lastCheckTime < 20000) return; // at most once every 20s
+      if (now - lastCheckTime < 20000) return;
       lastCheckTime = now;
 
       const currentToken =
@@ -146,9 +150,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         await api.me();
-      } catch {
-        // api.me() will trigger 401 handler in client.ts if session is terminated
-      }
+      } catch {}
     };
 
     window.addEventListener('focus', checkActiveSession);
@@ -167,9 +169,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (email: string, passwordPlain: string, rememberMe = false) => {
-    const res = await api.login({ email, password: passwordPlain, rememberMe });
-    if (res.token && res.user) {
+  const login = async (email: string, passwordPlain: string, rememberMe = false, selectedTenantId?: string) => {
+    const res = await api.login({ email, password: passwordPlain, rememberMe, selectedTenantId });
+    if (res && res.requiresTenantSelection) {
+      return res;
+    }
+    if (res && res.token && res.user) {
       const userData: User = {
         id: res.user.id || res.user.userId,
         email: res.user.email,
@@ -180,6 +185,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           res.user.employeeName ||
           res.user.contactName ||
           res.user.email.split('@')[0],
+        tenantId: res.user.tenantId,
+        tenantName: res.user.tenantName,
+        isSuperAdmin: res.user.isSuperAdmin,
+        isPlatformIncharge: res.user.isPlatformIncharge || res.user.role === 'PLATFORM_INCHARGE',
+        tenants: res.user.tenants,
         employeeId: res.user.employeeId,
         companyId: res.user.companyId,
         contactId: res.user.contactId,
@@ -204,6 +214,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       setToken(res.token);
       setUser(userData);
+      return res;
+    }
+  };
+
+  const switchTenant = async (tenantId: string) => {
+    const res = await api.switchTenant(tenantId);
+    if (res && res.token && res.user) {
+      const isRemembered = typeof window !== 'undefined' && localStorage.getItem('kanvtech_remember_me') === 'true';
+      const updatedUser: User = {
+        ...user!,
+        tenantId: res.user.tenantId,
+        tenantName: res.user.tenantName,
+        role: res.user.role,
+      };
+      if (typeof window !== 'undefined') {
+        if (isRemembered) {
+          localStorage.setItem('kanvtech_token', res.token);
+          localStorage.setItem('kanvtech_user', JSON.stringify(updatedUser));
+        } else {
+          sessionStorage.setItem('kanvtech_token', res.token);
+          sessionStorage.setItem('kanvtech_user', JSON.stringify(updatedUser));
+        }
+      }
+      setToken(res.token);
+      setUser(updatedUser);
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
     }
   };
 
@@ -226,7 +264,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, switchTenant, logout }}>
       <NotificationProvider>
         {children}
       </NotificationProvider>

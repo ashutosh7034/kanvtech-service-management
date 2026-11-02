@@ -150,17 +150,14 @@ export class InboundEmailService {
   // SECURITY & WEBHOOK SIGNATURE VERIFICATION
   // ==========================================
 
-  verifyWebhookSignature(headers: Record<string, any>, rawBody: string | Buffer | object): boolean {
-    const signature = headers['x-webhook-signature'] || headers['x-kanvtech-signature'] || headers['x-hub-signature-256'] || headers['authorization'];
+  verifyWebhookSignature(headers: Record<string, any>, rawBody?: any): boolean {
+    const signature =
+      headers['x-webhook-signature'] ||
+      headers['x-kanvtech-signature'] ||
+      headers['x-hub-signature-256'] ||
+      headers['authorization'];
     const timestamp = headers['x-webhook-timestamp'] || headers['x-kanvtech-timestamp'];
 
-    // If Bearer token provided in Authorization header
-    if (signature && typeof signature === 'string' && signature.startsWith('Bearer ')) {
-      const token = signature.slice(7).trim();
-      return token.length > 0;
-    }
-
-    // If timestamp present, verify replay window (10 minutes)
     if (timestamp) {
       const ts = Number(timestamp);
       if (!isNaN(ts)) {
@@ -172,7 +169,28 @@ export class InboundEmailService {
       }
     }
 
-    return true;
+    const expectedSecret = process.env.INBOUND_EMAIL_WEBHOOK_SECRET || 'kanvtech-inbound-secret-2026';
+    if (!signature || typeof signature !== 'string') {
+      this.logger.warn('Inbound email webhook rejected: missing signature or authorization header.');
+      return false;
+    }
+
+    const cleanToken = signature.startsWith('Bearer ') ? signature.slice(7).trim() : signature.trim();
+    if (cleanToken === expectedSecret) {
+      return true;
+    }
+
+    if (rawBody) {
+      const crypto = require('crypto');
+      const bodyStr = typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody);
+      const hmac = crypto.createHmac('sha256', expectedSecret).update(bodyStr).digest('hex');
+      if (cleanToken === hmac || cleanToken === `sha256=${hmac}`) {
+        return true;
+      }
+    }
+
+    this.logger.warn('Inbound email webhook rejected: invalid signature or secret.');
+    return false;
   }
 
   // ==========================================
@@ -185,6 +203,12 @@ export class InboundEmailService {
     rawPayload?: any,
   ): Promise<{ success: boolean; status: string; logId: number; ticketId?: string; message: string }> {
     const settings = await this.getSettings();
+
+    // Verify webhook signature or bearer token against configured webhook secret
+    const headers = rawPayload && typeof rawPayload === 'object' ? rawPayload : {};
+    if (!this.verifyWebhookSignature(headers, payload)) {
+      throw new UnauthorizedException('Unauthorized inbound email webhook: invalid signature or secret.');
+    }
 
     // Check if system is active
     if (!settings.enabled) {

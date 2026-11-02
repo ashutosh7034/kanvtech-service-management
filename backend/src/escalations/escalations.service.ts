@@ -37,9 +37,12 @@ export class EscalationsService {
     reason: string;
     notes?: string;
     actorUserId: number;
+    tenantId?: string;
   }): Promise<void> {
-    const ticket = await this.prisma.ticket.findUnique({
-      where: { id: params.ticketId },
+    const ticketWhere: any = { id: params.ticketId };
+    if (params.tenantId) ticketWhere.tenantId = params.tenantId;
+    const ticket = await this.prisma.ticket.findFirst({
+      where: ticketWhere,
       include: { department: true, product: true },
     });
     if (!ticket) throw new NotFoundException('Ticket not found');
@@ -95,6 +98,7 @@ export class EscalationsService {
       const bestEmp = await this.assignmentsService.findBestAvailableEmployee(
         effectiveToLevel as EmployeeLevel,
         ticket.departmentId || undefined,
+        params.tenantId,
       );
       if (bestEmp) {
         targetEmployeeId = bestEmp.id;

@@ -37,7 +37,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
   const role = user?.role || 'CUSTOMER';
 
   const isAccessible = (allowed: string[]) => {
-    if (role === 'ADMIN') return true;
+    if (role === 'ADMIN' || role === 'SUPER_ADMIN') return true;
     return allowed.includes(role);
   };
 
@@ -69,6 +69,27 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
       </div>
 
       <div className="sidebar-nav">
+        {(user?.role === 'PLATFORM_INCHARGE' || user?.isPlatformIncharge) && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="nav-section-title" style={{ color: '#818cf8', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <ShieldCheck size={13} color="#818cf8" />
+              <span>Platform Control</span>
+            </div>
+            <button
+              className={`nav-item ${currentView === 'platform_admin' ? 'active' : ''}`}
+              onClick={() => handleNav('platform_admin')}
+              style={{
+                background: currentView === 'platform_admin' ? 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)' : undefined,
+                color: currentView === 'platform_admin' ? '#ffffff' : undefined,
+                fontWeight: 600,
+              }}
+            >
+              <Layers size={16} />
+              <span>Multi-Tenant Platform</span>
+            </button>
+          </div>
+        )}
+
         <div className="nav-section-title">Core Operations</div>
 
         <button
@@ -231,7 +252,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </>
         )}
 
-        {role === 'ADMIN' && (
+        {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
           <>
             <button
               className={`nav-item ${currentView === 'sla_settings' ? 'active' : ''}`}
@@ -277,6 +298,9 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </div>
           <div style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 1 }}>
             {user?.email || ''}
+          </div>
+          <div style={{ fontSize: 10, color: '#38bdf8', fontWeight: 600, marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            🏢 {user?.tenantName || 'Kanvtech Technologies'}
           </div>
         </div>
       </div>

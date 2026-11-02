@@ -1,5 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCircle2, LogOut, ChevronDown, KeyRound, User as UserIcon, Menu } from 'lucide-react';
+import {
+  Bell,
+  CheckCircle2,
+  LogOut,
+  ChevronDown,
+  KeyRound,
+  User as UserIcon,
+  Menu,
+  Building2,
+  Shield,
+  Repeat,
+  X,
+  ArrowRight,
+} from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
 import { api } from '../../api/client';
@@ -13,11 +26,13 @@ interface Props {
 }
 
 export const Header: React.FC<Props> = ({ pageTitle, onNavigate, onToggleMobileSidebar }) => {
-  const { user, logout } = useAuth();
+  const { user, logout, switchTenant } = useAuth();
   const { notifications, unreadCount, markAsRead, markAllAsRead, showToast } = useNotifications();
   const [showNotifMenu, setShowNotifMenu] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
+  const [showTenantSwitchModal, setShowTenantSwitchModal] = useState(false);
+  const [switchingTenantId, setSwitchingTenantId] = useState<string | null>(null);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
   const [isRecentlyCheckedOut, setIsRecentlyCheckedOut] = useState(false);
   const [notifFilter, setNotifFilter] = useState<'all' | 'unread'>('all');
@@ -47,7 +62,7 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate, onToggleMobileS
   }, []);
 
   const handleAttendanceToggle = async () => {
-    if (!user?.employeeId || user?.role === 'ADMIN') return;
+    if (!user?.employeeId || user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || user?.role === 'PLATFORM_INCHARGE') return;
     try {
       if (isCheckedIn) {
         await api.checkOut({ employeeId: user.employeeId });
@@ -125,9 +140,58 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate, onToggleMobileS
         <h1 className="header-title" style={{ fontSize: 17, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>{pageTitle}</h1>
       </div>
 
-      <div className="header-right">
-        {/* Employee Check-in Quick Control (Super Admin accounts are exempt) */}
-        {user?.employeeId && user?.role !== 'ADMIN' && (
+      <div className="header-right" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Company Workspace Badge */}
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: '#f8fafc',
+            border: '1px solid #cbd5e1',
+            borderRadius: 6,
+            padding: '4px 10px',
+            fontSize: 12,
+            fontWeight: 600,
+            color: '#1e293b',
+          }}
+          title={`Active Workspace: ${user?.tenantName || 'Kanvtech Technologies'} (ID: ${user?.tenantId || 'KANVTECH'})`}
+        >
+          <Building2 size={13} color="#0284c7" />
+          <span style={{ maxWidth: 160, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {user?.tenantName || 'Kanvtech Technologies'}
+          </span>
+        </div>
+
+        {/* Platform Incharge Badge / Shortcut */}
+        {(user?.role === 'PLATFORM_INCHARGE' || user?.isPlatformIncharge) && onNavigate && (
+          <button
+            type="button"
+            onClick={() => onNavigate('platform_admin')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 11,
+              fontWeight: 800,
+              padding: '4px 10px',
+              borderRadius: 6,
+              background: 'linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%)',
+              color: '#ffffff',
+              border: 'none',
+              cursor: 'pointer',
+              letterSpacing: '0.03em',
+              boxShadow: '0 1px 3px rgba(79, 70, 229, 0.3)',
+            }}
+            title="Open Multi-Tenant Platform Control Center"
+          >
+            <Shield size={12} />
+            <span>PLATFORM</span>
+          </button>
+        )}
+
+        {/* Employee Check-in Quick Control (Super Admin and Incharge accounts are exempt) */}
+        {user?.employeeId && user?.role !== 'ADMIN' && user?.role !== 'SUPER_ADMIN' && user?.role !== 'PLATFORM_INCHARGE' && (
           <button
             onClick={handleAttendanceToggle}
             title={isCheckedIn ? 'Click to Check Out' : 'Click to Check In'}
@@ -435,6 +499,37 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate, onToggleMobileS
 
               {/* Menu Actions */}
               <div style={{ padding: '6px' }}>
+                {user?.tenants && user.tenants.length > 1 && (
+                  <button
+                    onClick={() => {
+                      setShowProfileMenu(false);
+                      setShowTenantSwitchModal(true);
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '9px 12px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#0284c7',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s ease',
+                      marginBottom: 2,
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = '#f0f9ff')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <Repeat size={15} color="#0284c7" />
+                    <span>Switch Workspace</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => {
                     setShowProfileMenu(false);
@@ -493,6 +588,154 @@ export const Header: React.FC<Props> = ({ pageTitle, onNavigate, onToggleMobileS
           )}
         </div>
       </div>
+
+      {/* Verified Workspace Switcher Modal */}
+      {showTenantSwitchModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+            padding: 16,
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              borderRadius: 12,
+              maxWidth: 480,
+              width: '100%',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '16px 20px',
+                borderBottom: '1px solid #e2e8f0',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                background: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Building2 size={18} color="#0284c7" />
+                <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: '#0f172a' }}>
+                  Switch Company Workspace
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowTenantSwitchModal(false)}
+                style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#64748b' }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div style={{ padding: '20px' }}>
+              <div style={{ fontSize: 13, color: '#64748b', marginBottom: 16 }}>
+                Select an authorized company workspace to switch active sessions. Your access rights and data context will be strictly updated on the server:
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                {(user?.tenants || []).map((t) => {
+                  const isCurrent = t.id === user?.tenantId;
+                  return (
+                    <button
+                      key={t.id}
+                      type="button"
+                      disabled={isCurrent || switchingTenantId !== null}
+                      onClick={async () => {
+                        setSwitchingTenantId(t.id);
+                        try {
+                          await switchTenant(t.id);
+                          setShowTenantSwitchModal(false);
+                          window.location.reload();
+                        } catch (err: any) {
+                          showToast(err.message || 'Failed to switch workspace.', 'danger');
+                        } finally {
+                          setSwitchingTenantId(null);
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        borderRadius: 8,
+                        border: isCurrent ? '2px solid #0284c7' : '1px solid #cbd5e1',
+                        background: isCurrent ? '#f0f9ff' : '#ffffff',
+                        cursor: isCurrent || switchingTenantId !== null ? 'default' : 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 6,
+                            background: isCurrent ? '#0284c7' : '#f1f5f9',
+                            color: isCurrent ? '#ffffff' : '#334155',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontWeight: 700,
+                            fontSize: 12,
+                          }}
+                        >
+                          {t.name.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+                            {t.name}
+                            {isCurrent && (
+                              <span style={{ marginLeft: 8, fontSize: 11, background: '#0284c7', color: '#ffffff', padding: '1px 6px', borderRadius: 4 }}>
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#64748b' }}>
+                            Role: {t.role} {t.code && `• Code: ${t.code}`}
+                          </div>
+                        </div>
+                      </div>
+
+                      {!isCurrent && (
+                        <div>
+                          {switchingTenantId === t.id ? (
+                            <span style={{ fontSize: 12, color: '#0284c7', fontWeight: 600 }}>Switching...</span>
+                          ) : (
+                            <ArrowRight size={15} color="#64748b" />
+                          )}
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowTenantSwitchModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Change Password Modal */}
       <ChangePasswordModal

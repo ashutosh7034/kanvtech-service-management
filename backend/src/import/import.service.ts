@@ -481,7 +481,8 @@ export class ImportService {
   async commitProductImport(rows: any[], actorUserId?: number): Promise<{ importedCount: number }> {
     let importedCount = 0;
     for (const row of rows) {
-      const existingProduct = await this.prisma.product.findUnique({ where: { code: row.code } });
+      const tenantId = row.tenantId || 'KANVTECH';
+      const existingProduct = await this.prisma.product.findFirst({ where: { code: row.code, tenantId } });
       let id = existingProduct ? existingProduct.id : '';
       if (!id) {
         while (true) {
@@ -496,9 +497,9 @@ export class ImportService {
       }
 
       const product = await this.prisma.product.upsert({
-        where: { code: row.code },
+        where: { uq_product_tenant_code: { tenantId, code: row.code } },
         update: { name: row.name, category: row.category, description: row.description, isActive: true },
-        create: { id, code: row.code, name: row.name, category: row.category, description: row.description, isActive: true },
+        create: { id, code: row.code, name: row.name, category: row.category, description: row.description, isActive: true, tenantId },
       });
 
       if (row.modules && Array.isArray(row.modules)) {

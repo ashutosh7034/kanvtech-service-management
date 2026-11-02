@@ -1,10 +1,20 @@
 export type UserRole = 
+  | 'PLATFORM_INCHARGE'
+  | 'SUPER_ADMIN'
   | 'ADMIN' 
   | 'MANAGER' 
   | 'L1_EMPLOYEE' 
   | 'L2_EMPLOYEE' 
   | 'L3_EMPLOYEE' 
   | 'CUSTOMER';
+
+export interface TenantInfo {
+  id: string;
+  name: string;
+  code: string;
+  role: UserRole;
+  isDefault?: boolean;
+}
 
 export type TicketPriority = 'HIGH' | 'MEDIUM' | 'LOW';
 
@@ -25,6 +35,11 @@ export interface User {
   email: string;
   role: UserRole;
   displayName: string;
+  tenantId?: string;
+  tenantName?: string;
+  isSuperAdmin?: boolean;
+  isPlatformIncharge?: boolean;
+  tenants?: TenantInfo[];
   employeeId?: string | null;
   companyId?: string | null;
   contactId?: number | null;

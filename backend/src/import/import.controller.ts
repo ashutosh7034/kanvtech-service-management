@@ -10,21 +10,129 @@ import {
   Res,
   Request,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
 import { ImportService } from './import.service';
+import { MassUpdateService } from './mass-update.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { UpdateMode, MassUpdateCommitPayload } from './mass-update.types';
 
 @ApiTags('Import')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('import')
 export class ImportController {
-  constructor(private readonly importService: ImportService) {}
+  constructor(
+    private readonly importService: ImportService,
+    private readonly massUpdateService: MassUpdateService,
+  ) {}
+
+  // ===========================================================================
+  // MASS UPDATE ENDPOINTS (MODE 2 - Supplementary Updates & Missing Completion)
+  // ===========================================================================
+
+  @Get('mass-update/modules')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'List supported modules for mass update' })
+  getMassUpdateModules() {
+    return {
+      success: true,
+      modules: this.massUpdateService.getSupportedModules(),
+    };
+  }
+
+  @Get('mass-update/template/:type')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Download supplementary template for mass update' })
+  downloadMassUpdateTemplate(@Param('type') type: string, @Res() res: Response) {
+    const buffer = this.massUpdateService.generateUpdateTemplate(type);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=kanvtech_${type}_update_template.xlsx`);
+    res.send(buffer);
+  }
+
+  @Post('mass-update/parse')
+  @Roles('ADMIN', 'MANAGER')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Parse uploaded Excel or CSV document for column detection' })
+  parseMassUpdateFile(@UploadedFile() file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('No file uploaded.');
+    const parsed = this.massUpdateService.parseUploadedFile(file.buffer, file.originalname);
+    return { success: true, ...parsed };
+  }
+
+  @Post('mass-update/preview/:type')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Preview record matching and proposed field updates' })
+  async previewMassUpdate(
+    @Param('type') type: string,
+    @Body()
+    body: {
+      rows: any[];
+      identifierColumn: string;
+      fieldMappings: Record<string, string>;
+      updateMode: UpdateMode;
+      selectedFields?: string[];
+      allowClearValues?: boolean;
+    },
+    @Request() req: any,
+  ) {
+    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const result = await this.massUpdateService.previewMassUpdate(
+      type,
+      body,
+      userTenantId || 'KANVTECH',
+    );
+    return { success: true, preview: result };
+  }
+
+  @Post('mass-update/commit/:type')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Commit mass update changes to database' })
+  async commitMassUpdate(
+    @Param('type') type: string,
+    @Body() body: MassUpdateCommitPayload,
+    @Request() req: any,
+  ) {
+    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const actorUserId = req.user?.userId || req.user?.id;
+    const result = await this.massUpdateService.commitMassUpdate(
+      type,
+      body,
+      actorUserId,
+      userTenantId || 'KANVTECH',
+    );
+    return { success: true, ...result };
+  }
+
+  @Get('mass-update/history')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Retrieve mass update execution history' })
+  async getMassUpdateHistory(@Request() req: any) {
+    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const history = await this.massUpdateService.getMassUpdateHistory(userTenantId || 'KANVTECH');
+    return { success: true, history };
+  }
+
+  @Get('mass-update/report/:operationId')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Download execution result report for a mass update operation' })
+  downloadMassUpdateReport(@Param('operationId') operationId: string, @Res() res: Response) {
+    const { buffer, fileName } = this.massUpdateService.generateResultReport(operationId);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    res.send(buffer);
+  }
+
+  // ===========================================================================
+  // EXISTING MASS UPLOAD ENDPOINTS (MODE 1 - Create New Records, PRESERVED)
+  // ===========================================================================
 
   @Get('template/:type')
   @Roles('ADMIN', 'MANAGER')
@@ -81,30 +189,36 @@ export class ImportController {
       throw new BadRequestException('No rows provided for import commit.');
     }
 
+    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const rows = body.rows.map((r: any) => ({
+      ...r,
+      tenantId: userTenantId || r.tenantId || 'KANVTECH',
+    }));
+
     let result: { importedCount: number };
     const normalizedType = type.toLowerCase();
     const actorUserId = req.user?.userId || req.user?.id;
 
     if (normalizedType === 'products') {
-      result = await this.importService.commitProductImport(body.rows, actorUserId);
+      result = await this.importService.commitProductImport(rows, actorUserId);
     } else if (normalizedType === 'departments') {
-      result = await this.importService.commitDepartmentImport(body.rows, actorUserId);
+      result = await this.importService.commitDepartmentImport(rows, actorUserId);
     } else if (normalizedType === 'companies' || normalizedType === 'customers') {
-      result = await this.importService.commitCompanyImport(body.rows, actorUserId);
+      result = await this.importService.commitCompanyImport(rows, actorUserId);
     } else if (normalizedType === 'employees') {
-      result = await this.importService.commitEmployeeImport(body.rows, actorUserId);
+      result = await this.importService.commitEmployeeImport(rows, actorUserId);
     } else if (normalizedType === 'branches') {
-      result = await this.importService.commitBranchImport(body.rows, actorUserId);
+      result = await this.importService.commitBranchImport(rows, actorUserId);
     } else if (normalizedType === 'prospects') {
-      result = await this.importService.commitProspectImport(body.rows, actorUserId);
+      result = await this.importService.commitProspectImport(rows, actorUserId);
     } else if (normalizedType === 'subscriptions') {
-      result = await this.importService.commitSubscriptionImport(body.rows, actorUserId);
+      result = await this.importService.commitSubscriptionImport(rows, actorUserId);
     } else if (normalizedType === 'implementations') {
-      result = await this.importService.commitImplementationImport(body.rows, actorUserId);
+      result = await this.importService.commitImplementationImport(rows, actorUserId);
     } else if (normalizedType === 'tickets') {
-      result = await this.importService.commitTicketImport(body.rows, actorUserId);
+      result = await this.importService.commitTicketImport(rows, actorUserId);
     } else if (normalizedType === 'tasks') {
-      result = await this.importService.commitTaskImport(body.rows, actorUserId);
+      result = await this.importService.commitTaskImport(rows, actorUserId);
     } else {
       throw new BadRequestException(`Unsupported commit type '${type}'`);
     }
@@ -114,10 +228,12 @@ export class ImportController {
 
   @Post('dev-reset')
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Safely reset demo/staging data (Development and Staging only)' })
+  @ApiOperation({ summary: 'Safely reset demo/staging data (Platform Super Admin only)' })
   async devReset(@Request() req: any) {
+    if (!req.user?.isSuperAdmin) {
+      throw new ForbiddenException('Only Platform Super Administrators are authorized to execute dev data reset.');
+    }
     const result = await this.importService.devReset(req.user?.userId || req.user?.id);
     return { success: true, ...result };
   }
 }
-

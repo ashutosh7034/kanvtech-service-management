@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useNotifications } from '../../context/NotificationContext';
+import { MassUpdateSection } from './MassUpdateSection';
 import {
   FileSpreadsheet,
   Download,
@@ -53,6 +54,7 @@ export const ImportPage: React.FC = () => {
   // ==========================================
   // 1. IMPORT STATE & HANDLERS (Preserved)
   // ==========================================
+  const [operationMode, setOperationMode] = useState<'create' | 'update'>('create');
   const [importType, setImportType] = useState<string>('customers');
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<any | null>(null);
@@ -719,6 +721,78 @@ export const ImportPage: React.FC = () => {
       {/* ========================================================================= */}
       {activeTab === 'import' && (
         <div>
+          {/* Operation Mode Selector: Create New Records vs Update Existing Records */}
+          <div
+            className="card"
+            style={{
+              marginBottom: 20,
+              background: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              padding: '14px 18px',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 15, color: '#0b3b60', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FileSpreadsheet size={18} /> Bulk Data Operations & Synchronization
+                </div>
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                  Choose the operation you want to perform: onboard fresh records or update missing/existing data in current records.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', background: '#e2e8f0', borderRadius: 8, padding: 3, gap: 4 }}>
+                <button
+                  type="button"
+                  onClick={() => setOperationMode('create')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    border: 'none',
+                    fontSize: 13,
+                    fontWeight: operationMode === 'create' ? 700 : 500,
+                    background: operationMode === 'create' ? '#0b3b60' : 'transparent',
+                    color: operationMode === 'create' ? '#ffffff' : '#334155',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: operationMode === 'create' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <Upload size={14} /> Create New Records
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setOperationMode('update')}
+                  style={{
+                    padding: '8px 16px',
+                    borderRadius: 6,
+                    border: 'none',
+                    fontSize: 13,
+                    fontWeight: operationMode === 'update' ? 700 : 500,
+                    background: operationMode === 'update' ? '#0b3b60' : 'transparent',
+                    color: operationMode === 'update' ? '#ffffff' : '#334155',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    boxShadow: operationMode === 'update' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.15s ease',
+                  }}
+                >
+                  <RefreshCw size={14} /> Update Existing Records
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {operationMode === 'update' ? (
+            <MassUpdateSection />
+          ) : (
+            <>
           {/* Header Action & Template Download */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 13, color: '#475569' }}>
@@ -919,6 +993,8 @@ export const ImportPage: React.FC = () => {
                 </div>
               )}
             </div>
+          )}
+            </>
           )}
         </div>
       )}

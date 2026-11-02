@@ -30,7 +30,8 @@ export class EmployeesController {
   @Get()
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'List employees filtered by level, department, or status' })
-  async getEmployees(@Query() query: any) {
+  async getEmployees(@Query() query: any, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
     const list = await this.employeesService.getEmployees({
       level: query.level,
       status: query.status,
@@ -38,6 +39,7 @@ export class EmployeesController {
       department: query.department,
       departmentId: query.departmentId || query.department_id,
       search: query.search,
+      tenantId,
     });
     return { success: true, employees: list, data: list };
   }
@@ -61,8 +63,9 @@ export class EmployeesController {
   @Get(':id')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get employee details and handled tickets' })
-  async getEmployee(@Param('id') id: string) {
-    const emp = await this.employeesService.getEmployeeById(id);
+  async getEmployee(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const emp = await this.employeesService.getEmployeeById(id, tenantId);
     if (!emp) {
       return { success: false, error: 'Employee not found' };
     }
@@ -77,7 +80,8 @@ export class EmployeesController {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    const id = await this.employeesService.createEmployee(body, actor);
+    const tenantId = req.user.tenantId || 'KANVTECH';
+    const id = await this.employeesService.createEmployee({ ...body, tenantId }, actor);
     return { success: true, employeeId: id, id, message: 'Employee created successfully' };
   }
 
@@ -89,7 +93,8 @@ export class EmployeesController {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    await this.employeesService.updateEmployee(id, body, actor);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    await this.employeesService.updateEmployee(id, body, actor, tenantId);
     return { success: true, message: 'Employee updated successfully' };
   }
 
@@ -102,7 +107,8 @@ export class EmployeesController {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    const updated = await this.employeesService.promoteEmployee(id, body?.level, actor);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const updated = await this.employeesService.promoteEmployee(id, body?.level, actor, tenantId);
     return { success: true, employee: updated, message: 'Employee promoted successfully' };
   }
 
@@ -115,7 +121,8 @@ export class EmployeesController {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    const updated = await this.employeesService.demoteEmployee(id, body?.level, actor);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const updated = await this.employeesService.demoteEmployee(id, body?.level, actor, tenantId);
     return { success: true, employee: updated, message: 'Employee demoted successfully' };
   }
 
@@ -128,7 +135,8 @@ export class EmployeesController {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    const updated = await this.employeesService.toggleEmployeeStatus(id, actor);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const updated = await this.employeesService.toggleEmployeeStatus(id, actor, tenantId);
     return { success: true, employee: updated, message: `Employee status set to ${updated?.status}` };
   }
 
@@ -140,38 +148,55 @@ export class EmployeesController {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
     };
-    const res = await this.employeesService.deleteEmployee(id, actor);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const res = await this.employeesService.deleteEmployee(id, actor, tenantId);
     return res;
   }
 
   @Post('attendance/check-in')
+  @Roles('MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Employee attendance check-in' })
   async checkIn(@Body() body: any, @Request() req: any) {
     if (req.user?.role === 'ADMIN' || req.user?.role === UserRole.ADMIN) {
       throw new BadRequestException('Super Admin is exempt from attendance check-in. Attendance records are not created for Super Admin accounts.');
     }
-    const employeeId = req.user?.employeeId || body.employeeId;
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    let employeeId = req.user?.employeeId;
+    if (req.user?.role === 'MANAGER' && !employeeId && body.employeeId) {
+      employeeId = body.employeeId;
+    } else if (!employeeId) {
+      throw new ForbiddenException('No active employee profile linked to your user account.');
+    }
     const att = await this.employeesService.checkIn({
       employeeId,
       lat: body.lat,
       lng: body.lng,
       address: body.address,
+      tenantId,
     });
     return { success: true, attendance: att };
   }
 
   @Post('attendance/check-out')
+  @Roles('MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Employee attendance check-out' })
   async checkOut(@Body() body: any, @Request() req: any) {
     if (req.user?.role === 'ADMIN' || req.user?.role === UserRole.ADMIN) {
       throw new BadRequestException('Super Admin is exempt from attendance check-out.');
     }
-    const employeeId = req.user?.employeeId || body.employeeId;
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    let employeeId = req.user?.employeeId;
+    if (req.user?.role === 'MANAGER' && !employeeId && body.employeeId) {
+      employeeId = body.employeeId;
+    } else if (!employeeId) {
+      throw new ForbiddenException('No active employee profile linked to your user account.');
+    }
     await this.employeesService.checkOut({
       employeeId,
       lat: body.lat,
       lng: body.lng,
       address: body.address,
+      tenantId,
     });
     return { success: true, message: 'Checked out successfully' };
   }

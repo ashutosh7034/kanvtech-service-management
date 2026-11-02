@@ -39,12 +39,14 @@ export class SubscriptionsService {
     search?: string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
     const skip = (page - 1) * limit;
 
     const where: any = {};
+    if (params.tenantId) where.tenantId = params.tenantId;
 
     if (params.companyId) where.companyId = params.companyId;
     if (params.productId) where.productId = params.productId;
@@ -122,9 +124,12 @@ export class SubscriptionsService {
     };
   }
 
-  async getSubscriptionById(id: string) {
-    const sub = await this.prisma.subscription.findUnique({
-      where: { id },
+  async getSubscriptionById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+
+    const sub = await this.prisma.subscription.findFirst({
+      where,
       include: {
         company: true,
         product: true,
@@ -207,6 +212,7 @@ export class SubscriptionsService {
       notes?: string;
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
     const companyId = data.companyId || data.company_id;
     const planName = data.agreementName || data.planName || data.plan_name || (data as any).contractName || (data as any).contract_name || 'Standard Enterprise AMC';
@@ -216,6 +222,15 @@ export class SubscriptionsService {
 
     if (!companyId || !rawStartDate || !rawExpiryDate) {
       throw new BadRequestException('Company, Start Date, and Expiry Date are required');
+    }
+
+    if (tenantId) {
+      const company = await this.prisma.company.findFirst({
+        where: { id: companyId, tenantId },
+      });
+      if (!company) {
+        throw new BadRequestException('Referenced company does not belong to active tenant');
+      }
     }
 
     const startDate = new Date(rawStartDate);
@@ -249,8 +264,10 @@ export class SubscriptionsService {
         planName: planName,
       }];
     } else {
-      const defaultProd = await this.prisma.product.findFirst({ where: { isActive: true } });
-      const pId = defaultProd?.id || (await this.prisma.product.findFirst())?.id;
+      const defaultProd = await this.prisma.product.findFirst({
+        where: { isActive: true, ...(tenantId ? { tenantId } : {}) },
+      });
+      const pId = defaultProd?.id || (await this.prisma.product.findFirst({ where: tenantId ? { tenantId } : {} }))?.id;
       if (!pId) {
         throw new BadRequestException('At least one Product must be specified for AMC');
       }
@@ -292,6 +309,7 @@ export class SubscriptionsService {
           status,
           ownerEmployeeId,
           notes: combinedNotes || null,
+          tenantId: tenantId || 'KANVTECH',
         },
       });
 
@@ -300,10 +318,10 @@ export class SubscriptionsService {
         action: 'SUBSCRIPTION_CREATED',
         entityType: 'SUBSCRIPTION',
         entityId: sub.id,
-        newValues: { id: sub.id, companyId, productId: item.productId, planName: sub.planName, expiryDate, slaRulesCount: data.slaRules?.length || 0 },
+        newValues: { id: sub.id, companyId, productId: item.productId, planName: sub.planName, expiryDate, slaRulesCount: data.slaRules?.length || 0, tenantId: sub.tenantId },
       });
 
-      const fullSub = await this.getSubscriptionById(sub.id);
+      const fullSub = await this.getSubscriptionById(sub.id, tenantId);
       createdSubscriptions.push(fullSub);
     }
 
@@ -327,8 +345,11 @@ export class SubscriptionsService {
       notes?: string;
     },
     actorUserId: number,
+    tenantId?: string,
   ) {
-    const existing = await this.prisma.subscription.findUnique({ where: { id } });
+    const existing = await this.prisma.subscription.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+    });
     if (!existing) throw new NotFoundException('Subscription not found');
 
     const updateData: any = {};
@@ -349,7 +370,7 @@ export class SubscriptionsService {
     if (data.notes !== undefined) updateData.notes = data.notes?.trim() || null;
 
     const updated = await this.prisma.subscription.update({
-      where: { id },
+      where: { id: existing.id },
       data: updateData,
     });
 
@@ -362,12 +383,12 @@ export class SubscriptionsService {
       newValues: updateData,
     });
 
-    return this.getSubscriptionById(id);
+    return this.getSubscriptionById(id, tenantId);
   }
 
-  async sendWarning(id: string, actorUserId: number, customMessage?: string) {
-    const sub = await this.prisma.subscription.findUnique({
-      where: { id },
+  async sendWarning(id: string, actorUserId: number, customMessage?: string, tenantId?: string) {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
       include: {
         company: {
           include: {
@@ -381,7 +402,7 @@ export class SubscriptionsService {
     if (!sub) throw new NotFoundException('Subscription not found');
 
     const updated = await this.prisma.subscription.update({
-      where: { id },
+      where: { id: sub.id },
       data: {
         lastWarningSentAt: new Date(),
         warningCount: { increment: 1 },
@@ -425,8 +446,11 @@ export class SubscriptionsService {
     id: string,
     data: { newExpiryDate: string | Date; planName?: string; notes?: string },
     actorUserId: number,
+    tenantId?: string,
   ) {
-    const sub = await this.prisma.subscription.findUnique({ where: { id } });
+    const sub = await this.prisma.subscription.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+    });
     if (!sub) throw new NotFoundException('Subscription not found');
 
     const newExpiry = new Date(data.newExpiryDate);
@@ -435,7 +459,7 @@ export class SubscriptionsService {
     }
 
     const updated = await this.prisma.subscription.update({
-      where: { id },
+      where: { id: sub.id },
       data: {
         renewalDate: new Date(),
         expiryDate: newExpiry,
@@ -454,12 +478,12 @@ export class SubscriptionsService {
       newValues: { newExpiry, status: SubscriptionStatus.RENEWED },
     });
 
-    return this.getSubscriptionById(id);
+    return this.getSubscriptionById(id, tenantId);
   }
 
-  async getStats() {
-    const now = new Date();
-    const all = await this.prisma.subscription.findMany();
+  async getStats(tenantId?: string) {
+    const where: any = tenantId ? { tenantId } : {};
+    const all = await this.prisma.subscription.findMany({ where });
 
     let active = 0;
     let expiringSoon = 0;

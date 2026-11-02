@@ -106,8 +106,8 @@ export class ExportService {
   /**
    * Return metadata and current live record counts for all export modules
    */
-  async getModulesSummary(userRole: string) {
-    const counts = await this.fetchLiveRecordCounts();
+  async getModulesSummary(userRole: string, tenantId?: string) {
+    const counts = await this.fetchLiveRecordCounts(tenantId);
 
     const modules = EXPORT_MODULES.map((mod) => {
       const isAuthorized = !mod.requiresAdmin || userRole === 'ADMIN';
@@ -153,7 +153,8 @@ export class ExportService {
     };
   }
 
-  private async fetchLiveRecordCounts() {
+  private async fetchLiveRecordCounts(tenantId?: string) {
+    const tWhere = tenantId ? { tenantId } : {};
     const [
       companies,
       contacts,
@@ -177,27 +178,27 @@ export class ExportService {
       chatMessages,
       auditLogs,
     ] = await Promise.all([
-      this.prisma.company.count(),
-      this.prisma.companyContact.count(),
-      this.prisma.companyBranch.count(),
-      this.prisma.product.count(),
+      this.prisma.company.count({ where: tWhere }),
+      this.prisma.companyContact.count(tenantId ? { where: { company: { tenantId } } } : undefined),
+      this.prisma.companyBranch.count(tenantId ? { where: { company: { tenantId } } } : undefined),
+      this.prisma.product.count({ where: tWhere }),
       this.prisma.productModule.count(),
       this.prisma.productSubmodule.count(),
-      this.prisma.department.count(),
+      this.prisma.department.count({ where: tWhere }),
       this.prisma.departmentProduct.count(),
-      this.prisma.employee.count(),
+      this.prisma.employee.count({ where: tWhere }),
       this.prisma.employeeAttendance.count(),
-      this.prisma.ticket.count(),
+      this.prisma.ticket.count({ where: tWhere }),
       this.prisma.ticketHistory.count(),
       this.prisma.ticketComment.count(),
-      this.prisma.subscription.count(),
-      this.prisma.slaConfiguration.count(),
-      this.prisma.implementation.count(),
+      this.prisma.subscription.count({ where: tWhere }),
+      this.prisma.slaConfiguration.count({ where: tWhere }),
+      this.prisma.implementation.count({ where: tWhere }),
       this.prisma.implementationTask.count(),
-      this.prisma.prospect.count(),
-      this.prisma.employeeTask.count(),
+      this.prisma.prospect.count({ where: tWhere }),
+      this.prisma.employeeTask.count({ where: tWhere }),
       this.prisma.chatMessage.count(),
-      this.prisma.auditLog.count(),
+      this.prisma.auditLog.count({ where: tWhere }),
     ]);
 
     return {
@@ -228,7 +229,7 @@ export class ExportService {
   /**
    * Fetch sanitized data records for requested modules
    */
-  async getExportData(moduleKey: string, user: { userId: number; role: string }) {
+  async getExportData(moduleKey: string, user: { userId: number; role: string; tenantId?: string; isSuperAdmin?: boolean }) {
     if (user.role !== 'ADMIN' && user.role !== 'MANAGER') {
       throw new ForbiddenException('Only Administrators and Managers are authorized to export business data.');
     }
@@ -236,6 +237,9 @@ export class ExportService {
     if ((moduleKey === 'chat' || moduleKey === 'audit') && user.role !== 'ADMIN') {
       throw new ForbiddenException('Only Administrators are authorized to export internal communication or audit logs.');
     }
+
+    const tWhere = user.tenantId && !user.isSuperAdmin ? { tenantId: user.tenantId } : {};
+    const companyWhere = user.tenantId && !user.isSuperAdmin ? { company: { tenantId: user.tenantId } } : {};
 
     const data: Record<string, any[]> = {};
     const modulesToExport =
@@ -247,15 +251,19 @@ export class ExportService {
       switch (mod) {
         case 'customers': {
           const companies = await this.prisma.company.findMany({
+            where: tWhere,
             orderBy: { createdAt: 'desc' },
           });
           const contacts = await this.prisma.companyContact.findMany({
+            where: companyWhere,
             orderBy: { id: 'asc' },
           });
           const branches = await this.prisma.companyBranch.findMany({
+            where: companyWhere,
             orderBy: { id: 'asc' },
           });
           const entitlements = await this.prisma.companyProduct.findMany({
+            where: companyWhere,
             include: { modules: true },
             orderBy: { id: 'asc' },
           });
@@ -276,6 +284,7 @@ export class ExportService {
 
         case 'products': {
           const products = await this.prisma.product.findMany({
+            where: tWhere,
             orderBy: { code: 'asc' },
           });
           const modules = await this.prisma.productModule.findMany({
@@ -292,6 +301,7 @@ export class ExportService {
 
         case 'departments': {
           const departments = await this.prisma.department.findMany({
+            where: tWhere,
             orderBy: { code: 'asc' },
           });
           const deptProducts = await this.prisma.departmentProduct.findMany({
@@ -308,6 +318,7 @@ export class ExportService {
 
         case 'employees': {
           const employees = await this.prisma.employee.findMany({
+            where: tWhere,
             include: {
               user: {
                 select: {
@@ -322,6 +333,7 @@ export class ExportService {
             orderBy: { id: 'asc' },
           });
           const attendance = await this.prisma.employeeAttendance.findMany({
+            where: user.tenantId && !user.isSuperAdmin ? { employee: { tenantId: user.tenantId } } : {},
             take: 2000,
             orderBy: { checkInTime: 'desc' },
           });
@@ -349,24 +361,32 @@ export class ExportService {
 
         case 'tickets': {
           const tickets = await this.prisma.ticket.findMany({
+            where: tWhere,
             orderBy: { createdAt: 'desc' },
           });
+          const ticketIds = tickets.map((t) => t.id);
+          const ticketRelationWhere = user.tenantId && !user.isSuperAdmin ? { ticketId: { in: ticketIds } } : {};
           const assignments = await this.prisma.ticketAssignment.findMany({
+            where: ticketRelationWhere,
             orderBy: { id: 'desc' },
             take: 3000,
           });
           const history = await this.prisma.ticketHistory.findMany({
+            where: ticketRelationWhere,
             orderBy: { id: 'desc' },
             take: 3000,
           });
           const escalations = await this.prisma.ticketEscalation.findMany({
+            where: ticketRelationWhere,
             orderBy: { id: 'desc' },
           });
           const comments = await this.prisma.ticketComment.findMany({
+            where: ticketRelationWhere,
             orderBy: { id: 'desc' },
             take: 3000,
           });
           const feedback = await this.prisma.ticketFeedback.findMany({
+            where: ticketRelationWhere,
             orderBy: { id: 'desc' },
           });
 
@@ -381,9 +401,11 @@ export class ExportService {
 
         case 'subscriptions': {
           const subscriptions = await this.prisma.subscription.findMany({
+            where: tWhere,
             orderBy: { expiryDate: 'asc' },
           });
           const slaConfigs = await this.prisma.slaConfiguration.findMany({
+            where: tWhere,
             orderBy: { id: 'asc' },
           });
           data['AMC_Subscriptions'] = subscriptions;
@@ -393,9 +415,12 @@ export class ExportService {
 
         case 'implementations': {
           const implementations = await this.prisma.implementation.findMany({
+            where: tWhere,
             orderBy: { createdAt: 'desc' },
           });
+          const impIds = implementations.map((i) => i.id);
           const tasks = await this.prisma.implementationTask.findMany({
+            where: user.tenantId && !user.isSuperAdmin ? { implementationId: { in: impIds } } : {},
             orderBy: { orderIndex: 'asc' },
           });
           data['Implementations'] = implementations;
@@ -405,6 +430,7 @@ export class ExportService {
 
         case 'prospects': {
           const prospects = await this.prisma.prospect.findMany({
+            where: tWhere,
             orderBy: { createdAt: 'desc' },
           });
           data['Prospects_Enquiries'] = prospects;
@@ -413,6 +439,7 @@ export class ExportService {
 
         case 'tasks': {
           const tasks = await this.prisma.employeeTask.findMany({
+            where: tWhere,
             orderBy: { createdAt: 'desc' },
           });
           data['Employee_Tasks'] = tasks;
@@ -422,9 +449,12 @@ export class ExportService {
         case 'chat': {
           if (user.role === 'ADMIN') {
             const conversations = await this.prisma.chatConversation.findMany({
+              where: tWhere,
               orderBy: { id: 'desc' },
             });
+            const convIds = conversations.map((c) => c.id);
             const messages = await this.prisma.chatMessage.findMany({
+              where: user.tenantId && !user.isSuperAdmin ? { conversationId: { in: convIds } } : {},
               orderBy: { createdAt: 'desc' },
               take: 5000,
             });
@@ -437,10 +467,12 @@ export class ExportService {
         case 'audit': {
           if (user.role === 'ADMIN') {
             const auditLogs = await this.prisma.auditLog.findMany({
+              where: tWhere,
               orderBy: { createdAt: 'desc' },
               take: 5000,
             });
             const settings = await this.prisma.systemSetting.findMany({
+              where: tWhere,
               orderBy: { settingKey: 'asc' },
             });
             data['Audit_Logs'] = auditLogs;
@@ -460,7 +492,7 @@ export class ExportService {
   async generateExportFile(
     moduleKey: string,
     format: 'xlsx' | 'csv' | 'json',
-    user: { userId: number; role: string; email: string },
+    user: { userId: number; role: string; email: string; tenantId?: string; isSuperAdmin?: boolean },
     ipAddress?: string,
   ): Promise<{ buffer: Buffer; fileName: string; mimeType: string; totalRecords: number }> {
     const rawData = await this.getExportData(moduleKey, user);
@@ -513,13 +545,28 @@ export class ExportService {
       };
     }
 
+    // Defensive CSV Formula Sanitization Helper (CWE-1236)
+    const sanitizeExportRows = (rows: any[]): any[] => {
+      return rows.map((row) => {
+        const clean: any = {};
+        for (const [k, v] of Object.entries(row)) {
+          if (typeof v === 'string' && v.length > 0 && ['=', '+', '-', '@', '\t', '\r'].includes(v.charAt(0))) {
+            clean[k] = `'${v}`;
+          } else {
+            clean[k] = v;
+          }
+        }
+        return clean;
+      });
+    };
+
     // 2. CSV Format
     if (format === 'csv') {
       let csvContent = '';
       const tableNames = Object.keys(rawData);
 
       if (tableNames.length === 1) {
-        const ws = XLSX.utils.json_to_sheet(rawData[tableNames[0]]);
+        const ws = XLSX.utils.json_to_sheet(sanitizeExportRows(rawData[tableNames[0]]));
         csvContent = XLSX.utils.sheet_to_csv(ws);
       } else {
         // Multi-table composite CSV with structured section markers
@@ -791,7 +838,7 @@ export class ExportService {
    */
   async commitRestore(
     backupPayload: any,
-    user: { userId: number; role: string; email: string },
+    user: { userId: number; role: string; email: string; tenantId?: string },
     ipAddress?: string,
   ) {
     if (user.role !== 'ADMIN') {
@@ -808,8 +855,9 @@ export class ExportService {
       if (tables['Products'] && Array.isArray(tables['Products'])) {
         for (const item of tables['Products']) {
           if (!item.code || !item.name) continue;
+          const tenantId = user.tenantId || item.tenantId || 'KANVTECH';
           await tx.product.upsert({
-            where: { code: item.code },
+            where: { uq_product_tenant_code: { tenantId, code: item.code } },
             update: {
               name: item.name,
               category: item.category || 'General',
@@ -859,8 +907,9 @@ export class ExportService {
       if (tables['Departments'] && Array.isArray(tables['Departments'])) {
         for (const item of tables['Departments']) {
           if (!item.code || !item.name) continue;
+          const tenantId = item.tenantId || 'KANVTECH';
           await tx.department.upsert({
-            where: { code: item.code },
+            where: { uq_dept_tenant_code: { tenantId, code: item.code } },
             update: {
               name: item.name,
               description: item.description,
@@ -912,8 +961,9 @@ export class ExportService {
       if (tables['SLA_Configurations'] && Array.isArray(tables['SLA_Configurations'])) {
         for (const item of tables['SLA_Configurations']) {
           if (!item.priority) continue;
+          const tenantId = item.tenantId || 'KANVTECH';
           await tx.slaConfiguration.upsert({
-            where: { priority: item.priority },
+            where: { uq_sla_tenant_priority: { tenantId, priority: item.priority } },
             update: {
               responseTimeHours: Number(item.responseTimeHours) || 4,
               resolutionTimeHours: Number(item.resolutionTimeHours) || 24,

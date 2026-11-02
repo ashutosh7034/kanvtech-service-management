@@ -48,11 +48,48 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       });
     }
 
+    const isPlatformIncharge = payload.role === 'PLATFORM_INCHARGE' || payload.isPlatformIncharge || false;
+    const tenantId = payload.tenantId;
+
+    // Platform Incharge operates at the platform layer. All tenant roles (including SUPER_ADMIN)
+    // require an active, verified tenant membership in the target workspace.
+    if (!isPlatformIncharge) {
+      if (!tenantId) {
+        throw new UnauthorizedException('Authentication context missing verified tenant workspace.');
+      }
+
+      const membership = await this.prisma.tenantMembership.findFirst({
+        where: {
+          userId: user.id,
+          tenantId,
+          isActive: true,
+        },
+        include: {
+          tenant: {
+            select: { id: true, name: true, status: true },
+          },
+        },
+      });
+
+      if (!membership || !membership.tenant || membership.tenant.status !== 'ACTIVE') {
+        throw new UnauthorizedException({
+          statusCode: 401,
+          error: 'Unauthorized',
+          code: 'TENANT_SUSPENDED',
+          message: 'Company workspace is suspended or access has been revoked.',
+        });
+      }
+    }
+
     return {
       userId: payload.userId,
       id: payload.userId,
       email: payload.email,
       role: payload.role,
+      tenantId: tenantId || (isPlatformIncharge ? 'KANVTECH' : null),
+      tenantName: payload.tenantName || (isPlatformIncharge ? 'Platform Administration' : 'Company Workspace'),
+      isSuperAdmin: false,
+      isPlatformIncharge,
       employeeId: payload.employeeId,
       companyId: payload.companyId,
       contactId: payload.contactId,

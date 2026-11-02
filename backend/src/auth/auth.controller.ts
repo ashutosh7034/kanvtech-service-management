@@ -21,30 +21,61 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid email or password' })
   @ApiResponse({ status: 429, description: 'Too many failed attempts' })
   async login(
-    @Body() body: { email: string; password?: string; password_hash?: string; rememberMe?: boolean },
+    @Body() body: { email: string; password?: string; password_hash?: string; rememberMe?: boolean; selectedTenantId?: string },
     @Res({ passthrough: true }) res: Response,
   ) {
     const password = body.password || body.password_hash || '';
-    const result = await this.authService.login(body.email, password, !!body.rememberMe);
+    const result = await this.authService.login(body.email, password, !!body.rememberMe, body.selectedTenantId);
+
+    if (result && (result as any).token) {
+      const isProduction = process.env.NODE_ENV === 'production';
+      const cookieOptions: any = {
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: 'lax',
+        path: '/',
+      };
+
+      if (body.rememberMe) {
+        // 30 days persistent cookie
+        cookieOptions.maxAge = 30 * 24 * 60 * 60 * 1000;
+      }
+      res.cookie('kanvtech_token', (result as any).token, cookieOptions);
+    }
+
+    return result;
+  }
+
+  @Post('switch-tenant')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Switch company workspace with server-side verified membership' })
+  async switchTenant(
+    @Request() req: any,
+    @Body() body: { tenantId: string },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.switchTenant(req.user.userId, body.tenantId);
 
     const isProduction = process.env.NODE_ENV === 'production';
-    const cookieOptions: any = {
+    res.cookie('kanvtech_token', result.token, {
       httpOnly: true,
       secure: isProduction,
       sameSite: 'lax',
       path: '/',
-    };
-
-    if (body.rememberMe) {
-      // 30 days persistent cookie
-      cookieOptions.maxAge = 30 * 24 * 60 * 60 * 1000;
-    }
-    // When rememberMe is false, omitting maxAge and expires creates a Session Cookie
-    // that the browser clears automatically upon browser session termination.
-
-    res.cookie('kanvtech_token', result.token, cookieOptions);
+    });
 
     return result;
+  }
+
+  @Get('my-tenants')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get list of authorized company workspaces for the current user' })
+  async getMyTenants(@Request() req: any) {
+    const tenants = await this.authService.getMyTenants(req.user.userId);
+    return { success: true, tenants };
   }
 
   @Post('logout')
@@ -136,7 +167,9 @@ export class AuthController {
     },
   ) {
     return this.authService.adminResetPassword({
-      adminUserId: req.user.userId,
+      adminUserId: req.user.userId || req.user.id,
+      adminRole: req.user.role,
+      adminTenantId: req.user.tenantId,
       targetUserId: body.userId,
       newPassword: body.newPassword,
       ipAddress: ip,

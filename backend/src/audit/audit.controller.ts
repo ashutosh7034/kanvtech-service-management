@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuditService } from './audit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -15,9 +15,10 @@ export class AuditController {
 
   @Get()
   @ApiOperation({ summary: 'Retrieve security and operational audit logs (Admin only)' })
-  async getAuditLogs(@Query('limit') limit?: string) {
+  async getAuditLogs(@Query('limit') limit?: string, @Request() req?: any) {
     const parsedLimit = Math.min(500, Math.max(1, Number(limit) || 100));
-    const logs = await this.auditService.getLogs(parsedLimit);
+    const tenantId = req?.user?.isSuperAdmin ? undefined : (req?.user?.tenantId || 'KANVTECH');
+    const logs = await this.auditService.getLogs(parsedLimit, tenantId);
 
     return {
       success: true,

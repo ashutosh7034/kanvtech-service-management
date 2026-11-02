@@ -27,6 +27,7 @@ export class ProspectsService {
     source?: string;
     assignedEmployeeId?: string;
     notes?: string;
+    tenantId?: string;
   }, actorUserId?: number) {
     const companyName = (data.companyName || '').trim();
     const contactPerson = (data.contactPerson || '').trim();
@@ -40,6 +41,7 @@ export class ProspectsService {
     const prospect = await this.prisma.prospect.create({
       data: {
         id,
+        tenantId: data.tenantId || 'KANVTECH',
         companyName,
         contactPerson,
         phone,
@@ -69,11 +71,16 @@ export class ProspectsService {
     search?: string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
     const skip = (page - 1) * limit;
     const where: any = {};
+
+    if (params.tenantId) {
+      where.tenantId = params.tenantId;
+    }
 
     if (params.status) where.status = params.status;
     if (params.search) {
@@ -93,8 +100,10 @@ export class ProspectsService {
     return { data, total, page, limit };
   }
 
-  async getProspectById(id: string) {
-    const p = await this.prisma.prospect.findUnique({ where: { id } });
+  async getProspectById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const p = await this.prisma.prospect.findFirst({ where });
     if (!p) throw new NotFoundException(`Prospect ${id} not found.`);
     return p;
   }
@@ -110,8 +119,9 @@ export class ProspectsService {
     status?: string;
     assignedEmployeeId?: string;
     notes?: string;
+    tenantId?: string;
   }, actorUserId?: number) {
-    const existing = await this.getProspectById(id);
+    const existing = await this.getProspectById(id, data.tenantId);
     if (existing.status === 'CONVERTED') {
       throw new BadRequestException('Cannot edit a converted prospect.');
     }
@@ -151,8 +161,9 @@ export class ProspectsService {
     address?: string;
     gstn?: string;
     productIds: string[];
+    tenantId?: string;
   }, actorUserId: number) {
-    const prospect = await this.getProspectById(id);
+    const prospect = await this.getProspectById(id, conversionData.tenantId);
 
     if (prospect.status === 'CONVERTED') {
       throw new BadRequestException('This prospect has already been converted to a customer.');
@@ -171,6 +182,7 @@ export class ProspectsService {
       contact_person: prospect.contactPerson,
       contact_phone: prospect.phone,
       products: conversionData.productIds,
+      tenantId: conversionData.tenantId || prospect.tenantId || 'KANVTECH',
     });
 
     // Mark prospect as converted
@@ -195,6 +207,6 @@ export class ProspectsService {
       },
     });
 
-    return { prospect: await this.getProspectById(id), companyId };
+    return { prospect: await this.getProspectById(id, conversionData.tenantId), companyId };
   }
 }

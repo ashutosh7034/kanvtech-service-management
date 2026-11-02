@@ -11,8 +11,13 @@ export class ReportsService {
     userId?: number,
     employeeId?: string,
     companyId?: string,
+    tenantId?: string,
   ) {
     const where: any = {};
+
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
 
     if (userRole === 'CUSTOMER' && companyId) {
       where.companyId = companyId;
@@ -140,9 +145,13 @@ export class ReportsService {
     };
   }
 
-  async getResolutionTimeByLevel() {
+  async getResolutionTimeByLevel(tenantId?: string) {
+    const sessionWhere: any = { endedAt: { not: null } };
+    if (tenantId) {
+      sessionWhere.ticket = { tenantId };
+    }
     const sessions = await this.prisma.ticketResolutionSession.findMany({
-      where: { endedAt: { not: null } },
+      where: sessionWhere,
       select: {
         level: true,
         ticketId: true,
@@ -170,9 +179,13 @@ export class ReportsService {
     }));
   }
 
-  async getEmployeeWorkloadReport() {
+  async getEmployeeWorkloadReport(tenantId?: string) {
+    const empWhere: any = { status: 'ACTIVE' };
+    if (tenantId) {
+      empWhere.tenantId = tenantId;
+    }
     const employees = await this.prisma.employee.findMany({
-      where: { status: 'ACTIVE' },
+      where: empWhere,
       include: {
         assignedTickets: {
           select: { status: true, totalResolutionSeconds: true },
@@ -202,8 +215,12 @@ export class ReportsService {
     });
   }
 
-  async getEscalationReport() {
-    const escList = await this.prisma.ticketEscalation.findMany();
+  async getEscalationReport(tenantId?: string) {
+    const escWhere: any = {};
+    if (tenantId) {
+      escWhere.ticket = { tenantId };
+    }
+    const escList = await this.prisma.ticketEscalation.findMany({ where: escWhere });
 
     const transitionMap: Record<string, number> = {};
     const reasonMap: Record<string, number> = {};

@@ -27,12 +27,14 @@ import { EmailVerificationModule } from './email-verification/email-verification
 import { EmployeeTasksModule } from './employee-tasks/employee-tasks.module';
 import { InboundEmailModule } from './inbound-email/inbound-email.module';
 import { ExportModule } from './export/export.module';
+import { PlatformModule } from './platform/platform.module';
 
 @Module({
   imports: [
     PrismaModule,
     HealthModule,
     AuthModule,
+    PlatformModule,
     AuditModule,
     StorageModule,
     NotificationsModule,

@@ -15,6 +15,7 @@ export class AuditService {
     oldValues?: any;
     newValues?: any;
     ipAddress?: string;
+    tenantId?: string;
   }) {
     try {
       await this.prisma.auditLog.create({
@@ -26,6 +27,7 @@ export class AuditService {
           oldValuesJson: params.oldValues ? JSON.stringify(params.oldValues) : null,
           newValuesJson: params.newValues ? JSON.stringify(params.newValues) : null,
           ipAddress: params.ipAddress || null,
+          tenantId: params.tenantId || 'KANVTECH',
         },
       });
     } catch (e: any) {
@@ -33,8 +35,13 @@ export class AuditService {
     }
   }
 
-  async getLogs(limit = 100) {
+  async getLogs(limit = 100, tenantId?: string) {
+    const where: any = {};
+    if (tenantId) {
+      where.tenantId = tenantId;
+    }
     return this.prisma.auditLog.findMany({
+      where,
       take: limit,
       orderBy: { createdAt: 'desc' },
       include: {

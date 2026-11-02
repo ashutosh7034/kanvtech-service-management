@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
   Request,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ImplementationsService } from './implementations.service';
@@ -26,8 +27,8 @@ export class ImplementationsController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Get summary metrics of new customer implementations' })
-  async getStats() {
-    const stats = await this.implementationsService.getStats();
+  async getStats(@Request() req: any) {
+    const stats = await this.implementationsService.getStats(req.user?.tenantId);
     return { success: true, stats };
   }
 
@@ -46,6 +47,7 @@ export class ImplementationsController {
       search: query.search,
       page: query.page,
       limit: query.limit,
+      tenantId: req.user?.tenantId,
     });
     return { success: true, ...result };
   }
@@ -55,7 +57,11 @@ export class ImplementationsController {
   async getEntitledModules(
     @Query('companyId') companyId: string,
     @Query('productId') productId: string,
+    @Request() req: any,
   ) {
+    if (req?.user?.role === 'CUSTOMER' && req?.user?.companyId && req.user.companyId !== companyId) {
+      throw new ForbiddenException('Unauthorized access to customer product entitlements.');
+    }
     const modules = await this.implementationsService.getEntitledModules(companyId, productId);
     return { success: true, modules, data: modules };
   }
@@ -63,7 +69,7 @@ export class ImplementationsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get single implementation details by ID' })
   async getImplementation(@Param('id') id: string, @Request() req: any) {
-    const imp = await this.implementationsService.getImplementationById(id);
+    const imp = await this.implementationsService.getImplementationById(id, req.user?.tenantId);
     if (!imp) {
       return { success: false, error: 'Implementation not found' };
     }
@@ -77,7 +83,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new customer implementation project' })
   async createImplementation(@Body() body: any, @Request() req: any) {
-    const imp = await this.implementationsService.createImplementation(body, req.user.userId || req.user.id);
+    const imp = await this.implementationsService.createImplementation(body, req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, implementation: imp, message: 'Implementation project created successfully' };
   }
 
@@ -85,7 +91,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Update implementation status, milestones, or team progress' })
   async updateImplementation(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const imp = await this.implementationsService.updateImplementation(id, body, req.user.userId || req.user.id);
+    const imp = await this.implementationsService.updateImplementation(id, body, req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, implementation: imp, message: 'Implementation project updated successfully' };
   }
 
@@ -95,12 +101,12 @@ export class ImplementationsController {
   @ApiOperation({ summary: 'Get all task checklist items for an implementation project' })
   async getTasks(@Param('id') id: string, @Request() req: any) {
     if (req.user.role === 'CUSTOMER') {
-      const imp = await this.implementationsService.getImplementationById(id);
+      const imp = await this.implementationsService.getImplementationById(id, req.user?.tenantId);
       if (!imp || imp.company_id !== req.user.companyId) {
         return { success: false, error: 'Unauthorized access to implementation tasks' };
       }
     }
-    const tasks = await this.implementationsService.getImplementationTasks(id);
+    const tasks = await this.implementationsService.getImplementationTasks(id, req.user?.tenantId);
     return { success: true, data: tasks, tasks };
   }
 
@@ -108,7 +114,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Add a new task checklist item to an implementation' })
   async addTask(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const result = await this.implementationsService.addTask(id, body, req.user.userId || req.user.id);
+    const result = await this.implementationsService.addTask(id, body, req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, ...result, message: 'Task added successfully' };
   }
 
@@ -116,7 +122,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Edit implementation task details' })
   async updateTask(@Param('taskId') taskId: string, @Body() body: any, @Request() req: any) {
-    const task = await this.implementationsService.updateTask(taskId, body, req.user.userId || req.user.id);
+    const task = await this.implementationsService.updateTask(taskId, body, req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, task, message: 'Task updated successfully' };
   }
 
@@ -126,7 +132,7 @@ export class ImplementationsController {
   @ApiOperation({ summary: 'Toggle completion status of a task checklist item' })
   async toggleTask(@Param('taskId') taskId: string, @Body() body: any, @Request() req: any) {
     const isCompleted = body.isCompleted !== undefined ? Boolean(body.isCompleted) : (body.status === 'COMPLETED');
-    const result = await this.implementationsService.toggleTaskCompletion(taskId, isCompleted, req.user.userId || req.user.id);
+    const result = await this.implementationsService.toggleTaskCompletion(taskId, isCompleted, req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, ...result, message: isCompleted ? 'Task marked as completed' : 'Task reopened' };
   }
 
@@ -134,7 +140,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Reopen a completed implementation task' })
   async reopenTask(@Param('taskId') taskId: string, @Request() req: any) {
-    const result = await this.implementationsService.toggleTaskCompletion(taskId, false, req.user.userId || req.user.id);
+    const result = await this.implementationsService.toggleTaskCompletion(taskId, false, req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, ...result, message: 'Task reopened successfully' };
   }
 
@@ -142,7 +148,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Remove an implementation task' })
   async removeTask(@Param('taskId') taskId: string, @Request() req: any) {
-    const result = await this.implementationsService.removeTask(taskId, req.user.userId || req.user.id);
+    const result = await this.implementationsService.removeTask(taskId, req.user.userId || req.user.id, req.user?.tenantId);
     return { ...result };
   }
 
@@ -150,7 +156,7 @@ export class ImplementationsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Reorder tasks for an implementation project' })
   async reorderTasks(@Param('id') id: string, @Body() body: { taskIds: string[] }, @Request() req: any) {
-    const tasks = await this.implementationsService.reorderTasks(id, body.taskIds || [], req.user.userId || req.user.id);
+    const tasks = await this.implementationsService.reorderTasks(id, body.taskIds || [], req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, tasks, message: 'Tasks reordered successfully' };
   }
 }

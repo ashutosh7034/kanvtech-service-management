@@ -24,9 +24,11 @@ export class SlaService {
   async updateConfiguration(
     priority: TicketPriority,
     data: { response_time_hours: number; resolution_time_hours: number; warning_threshold_percent?: number },
+    tenantId?: string,
   ) {
+    const effectiveTenantId = tenantId || 'KANVTECH';
     await this.prisma.slaConfiguration.update({
-      where: { priority },
+      where: { uq_sla_tenant_priority: { tenantId: effectiveTenantId, priority } },
       data: {
         responseTimeHours: Number(data.response_time_hours),
         resolutionTimeHours: Number(data.resolution_time_hours),
@@ -38,9 +40,10 @@ export class SlaService {
     });
   }
 
-  async calculateDeadline(priority: TicketPriority, createdAtDate: Date): Promise<Date> {
-    const config = await this.prisma.slaConfiguration.findUnique({
-      where: { priority },
+  async calculateDeadline(priority: TicketPriority, createdAtDate: Date, tenantId?: string): Promise<Date> {
+    const effectiveTenantId = tenantId || 'KANVTECH';
+    const config = await this.prisma.slaConfiguration.findFirst({
+      where: { priority, tenantId: effectiveTenantId },
     });
     const hours = config ? config.resolutionTimeHours : (priority === 'HIGH' ? 4 : priority === 'MEDIUM' ? 12 : 24);
     return new Date(createdAtDate.getTime() + hours * 60 * 60 * 1000);

@@ -21,12 +21,17 @@ export class CompaniesService {
     companyId?: string;
     page?: number;
     limit?: number;
+    tenantId?: string;
   }) {
     const page = Math.max(1, Number(params.page) || 1);
     const limit = Math.max(1, Number(params.limit) || 20);
     const skip = (page - 1) * limit;
 
     const where: any = {};
+
+    if (params.tenantId) {
+      where.tenantId = params.tenantId;
+    }
 
     if (params.companyId) {
       where.id = params.companyId;
@@ -137,9 +142,11 @@ export class CompaniesService {
     };
   }
 
-  async getCompanyById(id: string) {
-    const c = await this.prisma.company.findUnique({
-      where: { id },
+  async getCompanyById(id: string, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const c = await this.prisma.company.findFirst({
+      where,
       include: {
         contacts: {
           orderBy: [{ isPrimary: 'desc' }, { createdAt: 'asc' }],
@@ -453,15 +460,16 @@ export class CompaniesService {
       }
     }
 
+    const targetTenantId = data.tenantId || 'KANVTECH';
     const existingName = await this.prisma.company.findFirst({
-      where: { companyName: { equals: companyName, mode: 'insensitive' } },
+      where: { companyName: { equals: companyName, mode: 'insensitive' }, tenantId: targetTenantId },
     });
     if (existingName) {
       throw new BadRequestException(`Company with name '${companyName}' already exists.`);
     }
 
     const existingEmail = await this.prisma.company.findFirst({
-      where: { primaryEmail: { equals: primaryEmail, mode: 'insensitive' } },
+      where: { primaryEmail: { equals: primaryEmail, mode: 'insensitive' }, tenantId: targetTenantId },
     });
     if (existingEmail) {
       throw new BadRequestException(`Company with primary email '${primaryEmail}' already exists.`);
@@ -469,7 +477,7 @@ export class CompaniesService {
 
     if (gstn) {
       const existingGstn = await this.prisma.company.findFirst({
-        where: { gstn: { equals: gstn, mode: 'insensitive' } },
+        where: { gstn: { equals: gstn, mode: 'insensitive' }, tenantId: targetTenantId },
       });
       if (existingGstn) {
         throw new BadRequestException(`Company with GSTN '${gstn}' already exists.`);
@@ -517,6 +525,7 @@ export class CompaniesService {
     await this.prisma.company.create({
       data: {
         id: companyId,
+        tenantId: data.tenantId || 'KANVTECH',
         companyName,
         address,
         gstn: gstn || null,
@@ -649,8 +658,10 @@ export class CompaniesService {
       .filter((p: any) => Boolean(p.productId));
   }
 
-  async updateCompany(id: string, data: any, actorUserId?: number): Promise<void> {
-    const existing = await this.prisma.company.findUnique({ where: { id } });
+  async updateCompany(id: string, data: any, actorUserId?: number, tenantId?: string): Promise<void> {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.company.findFirst({ where });
     if (!existing) throw new NotFoundException('Company not found');
 
     const companyName = data.company_name ?? data.companyName;
@@ -781,7 +792,12 @@ export class CompaniesService {
     });
   }
 
-  async toggleCompanyStatus(id: string, isActive: boolean, actorUserId?: number): Promise<void> {
+  async toggleCompanyStatus(id: string, isActive: boolean, actorUserId?: number, tenantId?: string): Promise<void> {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const existing = await this.prisma.company.findFirst({ where });
+    if (!existing) throw new NotFoundException('Company not found');
+
     await this.prisma.company.update({
       where: { id },
       data: { isActive },
@@ -804,8 +820,11 @@ export class CompaniesService {
     purchaseType?: string,
     modules?: any[],
     actorUserId?: number,
+    tenantId?: string,
   ) {
-    const company = await this.prisma.company.findUnique({ where: { id: companyId } });
+    const cWhere: any = { id: companyId };
+    if (tenantId) cWhere.tenantId = tenantId;
+    const company = await this.prisma.company.findFirst({ where: cWhere });
     if (!company) throw new NotFoundException('Company not found');
 
     const product = await this.prisma.product.findUnique({ where: { id: productId } });
@@ -888,7 +907,12 @@ export class CompaniesService {
     return created;
   }
 
-  async removeCompanyProduct(companyId: string, productId: string, actorUserId?: number) {
+  async removeCompanyProduct(companyId: string, productId: string, actorUserId?: number, tenantId?: string) {
+    const cWhere: any = { id: companyId };
+    if (tenantId) cWhere.tenantId = tenantId;
+    const company = await this.prisma.company.findFirst({ where: cWhere });
+    if (!company) throw new NotFoundException('Company not found');
+
     // productId might be the Master Product ID (e.g. PROD-0001) or the CompanyProduct integer ID
     let existing = await this.prisma.companyProduct.findFirst({
       where: {
@@ -956,7 +980,12 @@ export class CompaniesService {
 
   // --- Branch Management ---
 
-  async getCompanyBranches(companyId: string) {
+  async getCompanyBranches(companyId: string, tenantId?: string) {
+    const cWhere: any = { id: companyId };
+    if (tenantId) cWhere.tenantId = tenantId;
+    const company = await this.prisma.company.findFirst({ where: cWhere });
+    if (!company) throw new NotFoundException('Company not found');
+
     const branches = await this.prisma.companyBranch.findMany({
       where: { companyId },
       include: {
@@ -1043,11 +1072,11 @@ export class CompaniesService {
     }));
   }
 
-  async getBranchById(branchId: string) {
+  async getBranchById(branchId: string, tenantId?: string) {
     const b = await this.prisma.companyBranch.findUnique({
       where: { id: branchId },
       include: {
-        company: { select: { id: true, companyName: true } },
+        company: { select: { id: true, companyName: true, tenantId: true } },
         branchProducts: {
           where: { isActive: true },
           include: {
@@ -1068,6 +1097,7 @@ export class CompaniesService {
       },
     });
     if (!b) return null;
+    if (tenantId && b.company.tenantId !== tenantId) return null;
 
     return {
       id: b.id,
@@ -1134,9 +1164,11 @@ export class CompaniesService {
     };
   }
 
-  async createCompanyBranch(companyId: string, data: any, actorUserId?: number): Promise<string> {
-    const company = await this.prisma.company.findUnique({
-      where: { id: companyId },
+  async createCompanyBranch(companyId: string, data: any, actorUserId?: number, tenantId?: string): Promise<string> {
+    const cWhere: any = { id: companyId };
+    if (tenantId) cWhere.tenantId = tenantId;
+    const company = await this.prisma.company.findFirst({
+      where: cWhere,
       include: { products: { where: { isActive: true }, include: { modules: true } } },
     });
     if (!company) throw new NotFoundException('Company not found');
@@ -1267,9 +1299,14 @@ export class CompaniesService {
     return branchId;
   }
 
-  async updateCompanyBranch(branchId: string, data: any, actorUserId?: number) {
-    const existing = await this.prisma.companyBranch.findUnique({ where: { id: branchId } });
-    if (!existing) throw new NotFoundException('Branch not found');
+  async updateCompanyBranch(branchId: string, data: any, actorUserId?: number, tenantId?: string) {
+    const existing = await this.prisma.companyBranch.findUnique({
+      where: { id: branchId },
+      include: { company: true },
+    });
+    if (!existing || (tenantId && existing.company.tenantId !== tenantId)) {
+      throw new NotFoundException('Branch not found');
+    }
 
     const branchName = data.branch_name ?? data.branchName;
     const gstn = data.gstn;
@@ -1316,9 +1353,14 @@ export class CompaniesService {
     });
   }
 
-  async toggleBranchStatus(branchId: string, status: string, actorUserId?: number) {
-    const existing = await this.prisma.companyBranch.findUnique({ where: { id: branchId } });
-    if (!existing) throw new NotFoundException('Branch not found');
+  async toggleBranchStatus(branchId: string, status: string, actorUserId?: number, tenantId?: string) {
+    const existing = await this.prisma.companyBranch.findUnique({
+      where: { id: branchId },
+      include: { company: true },
+    });
+    if (!existing || (tenantId && existing.company.tenantId !== tenantId)) {
+      throw new NotFoundException('Branch not found');
+    }
 
     await this.prisma.companyBranch.update({
       where: { id: branchId },
@@ -1334,12 +1376,14 @@ export class CompaniesService {
     });
   }
 
-  async assignBranchProducts(branchId: string, rawProducts: any, actorUserId?: number) {
+  async assignBranchProducts(branchId: string, rawProducts: any, actorUserId?: number, tenantId?: string) {
     const branch = await this.prisma.companyBranch.findUnique({
       where: { id: branchId },
       include: { company: { include: { products: { where: { isActive: true }, include: { modules: true } } } } },
     });
-    if (!branch) throw new NotFoundException('Branch not found');
+    if (!branch || (tenantId && branch.company.tenantId !== tenantId)) {
+      throw new NotFoundException('Branch not found');
+    }
 
     const normalizedBranchProds = this.normalizeProductEntitlements(rawProducts);
 
@@ -1434,7 +1478,15 @@ export class CompaniesService {
     });
   }
 
-  async removeBranchProduct(branchId: string, productId: string, actorUserId?: number) {
+  async removeBranchProduct(branchId: string, productId: string, actorUserId?: number, tenantId?: string) {
+    const branch = await this.prisma.companyBranch.findUnique({
+      where: { id: branchId },
+      include: { company: true },
+    });
+    if (!branch || (tenantId && branch.company.tenantId !== tenantId)) {
+      throw new NotFoundException('Branch not found');
+    }
+
     let existing = await this.prisma.branchProduct.findUnique({
       where: { uq_branch_product: { branchId, productId } },
     });

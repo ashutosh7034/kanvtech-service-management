@@ -25,28 +25,32 @@ export class ProductsController {
 
   @Get('stats')
   @ApiOperation({ summary: 'Get summary statistics of products' })
-  async getStats() {
-    const stats = await this.productsService.getStats();
+  async getStats(@Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const stats = await this.productsService.getStats(tenantId);
     return { success: true, stats };
   }
 
   @Get()
   @ApiOperation({ summary: 'List all products with filters and pagination' })
-  async getProducts(@Query() query: any) {
+  async getProducts(@Query() query: any, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
     const result = await this.productsService.getProducts({
       search: query.search,
       category: query.category,
       isActive: query.isActive !== undefined ? query.isActive : query.is_active,
       page: query.page,
       limit: query.limit,
+      tenantId,
     });
     return { success: true, ...result };
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get single product details by ID' })
-  async getProduct(@Param('id') id: string) {
-    const product = await this.productsService.getProductById(id);
+  async getProduct(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const product = await this.productsService.getProductById(id, tenantId);
     if (!product) {
       return { success: false, error: 'Product not found' };
     }
@@ -57,7 +61,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a new product' })
   async createProduct(@Body() body: any, @Request() req: any) {
-    const product = await this.productsService.createProduct(body, req.user.userId);
+    const tenantId = req.user.tenantId || 'KANVTECH';
+    const product = await this.productsService.createProduct({ ...body, tenantId }, req.user.userId);
     return { success: true, id: product.id, productId: product.id, product, message: 'Product created successfully' };
   }
 
@@ -65,7 +70,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update existing product details' })
   async updateProduct(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const product = await this.productsService.updateProduct(id, body, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const product = await this.productsService.updateProduct(id, body, req.user.userId, tenantId);
     return { success: true, product, message: 'Product updated successfully' };
   }
 
@@ -78,7 +84,8 @@ export class ProductsController {
     @Request() req: any,
   ) {
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : Boolean(body.is_active);
-    const product = await this.productsService.toggleProductStatus(id, isActive, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const product = await this.productsService.toggleProductStatus(id, isActive, req.user.userId, tenantId);
     return { success: true, product, message: 'Product status updated successfully' };
   }
 
@@ -86,7 +93,8 @@ export class ProductsController {
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Delete a product' })
   async deleteProduct(@Param('id') id: string, @Request() req: any) {
-    const result = await this.productsService.deleteProduct(id, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const result = await this.productsService.deleteProduct(id, req.user.userId, tenantId);
     return result;
   }
 
@@ -94,8 +102,9 @@ export class ProductsController {
 
   @Get(':id/modules')
   @ApiOperation({ summary: 'Get all modules for a product' })
-  async getModules(@Param('id') id: string) {
-    const result = await this.productsService.getModules(id);
+  async getModules(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const result = await this.productsService.getModules(id, tenantId);
     return { success: true, ...result };
   }
 
@@ -103,7 +112,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a module for a product' })
   async createModule(@Param('id') id: string, @Body() body: any, @Request() req: any) {
-    const module = await this.productsService.createModule(id, body, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const module = await this.productsService.createModule(id, body, req.user.userId, tenantId);
     return { success: true, module, message: 'Module created successfully' };
   }
 
@@ -111,7 +121,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update a module' })
   async updateModule(@Param('moduleId') moduleId: string, @Body() body: any, @Request() req: any) {
-    const module = await this.productsService.updateModule(moduleId, body, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const module = await this.productsService.updateModule(moduleId, body, req.user.userId, tenantId);
     return { success: true, module, message: 'Module updated successfully' };
   }
 
@@ -119,7 +130,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Delete a module and its submodules' })
   async deleteModule(@Param('moduleId') moduleId: string, @Request() req: any) {
-    const result = await this.productsService.deleteModule(moduleId, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const result = await this.productsService.deleteModule(moduleId, req.user.userId, tenantId);
     return result;
   }
 
@@ -129,7 +141,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Create a submodule' })
   async createSubmodule(@Param('moduleId') moduleId: string, @Body() body: any, @Request() req: any) {
-    const submodule = await this.productsService.createSubmodule(moduleId, body, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const submodule = await this.productsService.createSubmodule(moduleId, body, req.user.userId, tenantId);
     return { success: true, submodule, message: 'Submodule created successfully' };
   }
 
@@ -137,7 +150,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Update a submodule' })
   async updateSubmodule(@Param('submoduleId') submoduleId: string, @Body() body: any, @Request() req: any) {
-    const submodule = await this.productsService.updateSubmodule(submoduleId, body, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const submodule = await this.productsService.updateSubmodule(submoduleId, body, req.user.userId, tenantId);
     return { success: true, submodule, message: 'Submodule updated successfully' };
   }
 
@@ -145,7 +159,8 @@ export class ProductsController {
   @Roles('ADMIN', 'MANAGER')
   @ApiOperation({ summary: 'Delete a submodule' })
   async deleteSubmodule(@Param('submoduleId') submoduleId: string, @Request() req: any) {
-    const result = await this.productsService.deleteSubmodule(submoduleId, req.user.userId);
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const result = await this.productsService.deleteSubmodule(submoduleId, req.user.userId, tenantId);
     return result;
   }
 }
