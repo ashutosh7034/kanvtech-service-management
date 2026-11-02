@@ -5,6 +5,8 @@ import { AuditService } from '../audit/audit.service';
 import { UserRole } from '@prisma/client';
 
 const EMPLOYEE_ROLES: UserRole[] = [
+  UserRole.PLATFORM_INCHARGE,
+  UserRole.SUPER_ADMIN,
   UserRole.ADMIN,
   UserRole.MANAGER,
   UserRole.L1_EMPLOYEE,

@@ -37,7 +37,7 @@ export class ChatController {
   }
 
   @Post('upload')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload file attachment for internal message' })
@@ -51,7 +51,7 @@ export class ChatController {
   }
 
   @Get('conversations')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get internal message conversations / mailbox folders for the authenticated user' })
   async getConversations(
     @Query('folder') folder: 'inbox' | 'sent' | 'unread',
@@ -65,7 +65,7 @@ export class ChatController {
   }
 
   @Get('conversations/:id')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get single message thread with details and full message history' })
   async getConversationDetails(@Param('id') id: string, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -75,7 +75,7 @@ export class ChatController {
   }
 
   @Post('compose')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Compose and send a new internal message (Mailbox style)' })
   async composeMessage(@Body() body: any, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -94,7 +94,7 @@ export class ChatController {
   }
 
   @Post('conversations/:id/reply')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Reply or Reply All to an internal conversation thread' })
   async replyMessage(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -110,7 +110,7 @@ export class ChatController {
   }
 
   @Post('conversations/:id/read')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Mark all messages in a conversation as read' })
   async markRead(@Param('id') id: string, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -120,7 +120,7 @@ export class ChatController {
   }
 
   @Get('employees')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get active internal employees for recipient selection' })
   async getEmployees(@Request() req: any) {
     this.assertNotCustomer(req);
@@ -131,7 +131,7 @@ export class ChatController {
   }
 
   @Get('search/employees')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Search employees for internal messages' })
   async searchEmployees(@Query('q') q: string, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -142,7 +142,7 @@ export class ChatController {
   }
 
   @Get('conversations/:id/messages')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get messages in a conversation (compat)' })
   async getMessages(@Param('id') id: string, @Query() query: any, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -152,7 +152,7 @@ export class ChatController {
   }
 
   @Post('conversations/:id/messages')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Send a message in a conversation (compat)' })
   async sendMessage(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     this.assertNotCustomer(req);
@@ -162,7 +162,7 @@ export class ChatController {
   }
 
   @Post('conversations/direct')
-  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @Roles('PLATFORM_INCHARGE', 'SUPER_ADMIN', 'ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Start or retrieve direct conversation (compat)' })
   async getOrCreateDirect(@Body() body: any, @Request() req: any) {
     this.assertNotCustomer(req);
