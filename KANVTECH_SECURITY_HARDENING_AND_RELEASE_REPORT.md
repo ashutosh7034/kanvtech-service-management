@@ -6,7 +6,7 @@
 **Auditor / Security Architect:** Senior Application Security Engineer, Full-Stack SaaS Architect & QA Lead  
 **Repository:** `https://github.com/ashutosh7034/kanvtech-service-management.git`  
 **Base Commit (Pre-Hardening):** `b76230f1f338b1660222c063f9e99d65b704774d`  
-**Hardened Commit:** `Pending Verification / Release Staging`  
+**Hardened Commit:** `fd62ab955b50fc08d0d3e3f808a5e62594735063` (Verified & Pushed to `origin/main`)  
 **Overall Security Hardening Verdict:** **PASSED — PRODUCTION HARDENED**  
 
 ---
