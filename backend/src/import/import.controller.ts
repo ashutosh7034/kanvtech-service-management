@@ -20,7 +20,7 @@ import { MassUpdateService } from './mass-update.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { UpdateMode, MassUpdateCommitPayload } from './mass-update.types';
+import { UpdateMode, MassUpdateCommitPayload, EntitlementCommitPayload } from './mass-update.types';
 
 @ApiTags('Import')
 @ApiBearerAuth()
@@ -52,7 +52,7 @@ export class ImportController {
   downloadMassUpdateTemplate(@Param('type') type: string, @Res() res: Response) {
     const buffer = this.massUpdateService.generateUpdateTemplate(type);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename=kanvtech_${type}_update_template.xlsx`);
+    res.setHeader('Content-Disposition', `attachment; filename=kanvtech_${type}_mass_update_template.xlsx`);
     res.send(buffer);
   }
 
@@ -61,10 +61,42 @@ export class ImportController {
   @UseInterceptors(FileInterceptor('file'))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Parse uploaded Excel or CSV document for column detection' })
-  parseMassUpdateFile(@UploadedFile() file: Express.Multer.File) {
+  parseMassUpdateFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Body('sheetName') sheetName?: string,
+  ) {
     if (!file) throw new BadRequestException('No file uploaded.');
-    const parsed = this.massUpdateService.parseUploadedFile(file.buffer, file.originalname);
+    const parsed = this.massUpdateService.parseUploadedFile(file.buffer, file.originalname, sheetName);
     return { success: true, ...parsed };
+  }
+
+  @Post('mass-update/entitlements/preview')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Preview customer product & module entitlement updates' })
+  async previewEntitlementsUpdate(
+    @Body() body: { rows: any[]; mode?: any; fileName?: string },
+    @Request() req: any,
+  ) {
+    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const result = await this.massUpdateService.previewEntitlementsUpdate(body, userTenantId);
+    return { success: true, preview: result };
+  }
+
+  @Post('mass-update/entitlements/commit')
+  @Roles('ADMIN', 'MANAGER')
+  @ApiOperation({ summary: 'Commit customer product & module entitlement updates' })
+  async commitEntitlementsUpdate(
+    @Body() body: EntitlementCommitPayload,
+    @Request() req: any,
+  ) {
+    const userTenantId = req.user?.isSuperAdmin ? undefined : (req.user?.tenantId || 'KANVTECH');
+    const actorUserId = req.user?.userId || req.user?.id;
+    const result = await this.massUpdateService.commitEntitlementsUpdate(
+      body,
+      actorUserId,
+      userTenantId || 'KANVTECH',
+    );
+    return { success: true, result };
   }
 
   @Post('mass-update/preview/:type')

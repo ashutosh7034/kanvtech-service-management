@@ -237,6 +237,10 @@ export const api = {
   commitMassUpdate: (type: string, payload: any) =>
     request(`/import/mass-update/commit/${type}`, { method: 'POST', body: JSON.stringify(payload) }),
   getMassUpdateHistory: () => request('/import/mass-update/history'),
+  previewEntitlementsUpdate: (payload: any) =>
+    request('/import/mass-update/entitlements/preview', { method: 'POST', body: JSON.stringify(payload) }),
+  commitEntitlementsUpdate: (payload: any) =>
+    request('/import/mass-update/entitlements/commit', { method: 'POST', body: JSON.stringify(payload) }),
   downloadMassUpdateReport: (operationId: string) =>
     request(`/import/mass-update/report/${operationId}`, {
       headers: { Accept: 'application/octet-stream' },

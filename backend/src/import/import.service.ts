@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CompaniesService } from '../companies/companies.service';
 import { EmployeesService } from '../employees/employees.service';
 import { AuditService } from '../audit/audit.service';
+import { generateUnifiedCustomerWorkbook } from './customer-template.generator';
 import {
   UserRole,
   EmployeeLevel,
@@ -71,6 +72,11 @@ export class ImportService {
   ) {}
 
   generateTemplate(type: string): Buffer {
+    const lowerType = (type || '').toLowerCase();
+    if (lowerType === 'companies' || lowerType === 'customers') {
+      return generateUnifiedCustomerWorkbook();
+    }
+
     let headers: string[] = [];
     let sampleData: any[] = [];
     let instructions: string[][] = [];

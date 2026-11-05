@@ -84,15 +84,21 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const [editActiveTab, setEditActiveTab] = useState<'details' | 'entitlements'>('details');
   const [editingCompany, setEditingCompany] = useState<any | null>(null);
   const [editFormData, setEditFormData] = useState({
+    id: '',
     company_name: '',
     address: '',
     gstn: '',
     primary_email: '',
+    alternate_emails: '',
     contact_person: '',
     contact_phone: '',
+    contact_address: '',
+    contact_status: 'ACTIVE',
     alternate_contact: '',
     alternate_contact_phone: '',
     alternate_contact_email: '',
+    alternate_contact_address: '',
+    is_active: 1,
     product_ids: [] as string[],
     productEntitlements: [] as CustomerProductEntitlement[],
   });
@@ -249,15 +255,21 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     const initialProductIds = initialEntitlements.map((e) => e.productId);
 
     setEditFormData({
-      company_name: rawCompany.company_name || '',
+      id: rawCompany.id || '',
+      company_name: rawCompany.company_name || rawCompany.companyName || '',
       address: rawCompany.address || '',
       gstn: rawCompany.gstn || '',
-      primary_email: rawCompany.primary_email || '',
-      contact_person: rawCompany.contact_person || '',
-      contact_phone: rawCompany.contact_phone || '',
-      alternate_contact: rawCompany.alternate_contact || '',
-      alternate_contact_phone: rawCompany.alternate_contact_phone || '',
-      alternate_contact_email: rawCompany.alternate_contact_email || '',
+      primary_email: rawCompany.primary_email || rawCompany.primaryEmail || '',
+      alternate_emails: rawCompany.alternate_emails || rawCompany.alternateEmails || '',
+      contact_person: rawCompany.contact_person || rawCompany.contactPerson || '',
+      contact_phone: rawCompany.contact_phone || rawCompany.contactPhone || '',
+      contact_address: rawCompany.contact_address || rawCompany.contactAddress || '',
+      contact_status: (rawCompany.contact_status || rawCompany.contactStatus || 'ACTIVE').toUpperCase(),
+      alternate_contact: rawCompany.alternate_contact || rawCompany.alternateContact || '',
+      alternate_contact_phone: rawCompany.alternate_contact_phone || rawCompany.alternateContactPhone || '',
+      alternate_contact_email: rawCompany.alternate_contact_email || rawCompany.alternateContactEmail || '',
+      alternate_contact_address: rawCompany.alternate_contact_address || rawCompany.alternateContactAddress || '',
+      is_active: rawCompany.is_active !== undefined ? (rawCompany.is_active ? 1 : 0) : (rawCompany.isActive !== false ? 1 : 0),
       product_ids: initialProductIds,
       productEntitlements: initialEntitlements,
     });
@@ -361,6 +373,19 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       return;
     }
 
+    if (editFormData.alternate_emails && editFormData.alternate_emails.trim()) {
+      const emailList = editFormData.alternate_emails
+        .split(/[;,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const em of emailList) {
+        if (!isValidEmail(em)) {
+          setEditFormError(`Invalid alternate email format: '${em}'. Please provide valid comma-separated emails.`);
+          return;
+        }
+      }
+    }
+
     // Must have at least 1 product
     if (editFormData.product_ids.length === 0) {
       setEditFormError('A customer must have at least one product entitlement.');
@@ -370,15 +395,21 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     setSavingEdit(true);
     try {
       await api.updateCompany(editingCompany.id, {
-        company_name: editFormData.company_name,
-        address: editFormData.address,
-        gstn: editFormData.gstn,
-        primary_email: editFormData.primary_email,
-        contact_person: editFormData.contact_person,
-        contact_phone: editFormData.contact_phone,
-        alternate_contact: editFormData.alternate_contact,
-        alternate_contact_phone: editFormData.alternate_contact_phone,
-        alternate_contact_email: editFormData.alternate_contact_email,
+        company_name: editFormData.company_name.trim(),
+        address: editFormData.address.trim(),
+        gstn: editFormData.gstn.trim() || null,
+        primary_email: editFormData.primary_email.trim(),
+        alternate_emails: editFormData.alternate_emails.trim() || null,
+        contact_person: editFormData.contact_person.trim(),
+        contact_phone: editFormData.contact_phone.trim(),
+        contact_address: editFormData.contact_address.trim() || null,
+        contact_status: editFormData.contact_status || 'ACTIVE',
+        alternate_contact: editFormData.alternate_contact.trim() || null,
+        alternate_contact_phone: editFormData.alternate_contact_phone.trim() || null,
+        alternate_contact_email: editFormData.alternate_contact_email.trim() || null,
+        alternate_contact_address: editFormData.alternate_contact_address.trim() || null,
+        is_active: editFormData.is_active === 1,
+        isActive: editFormData.is_active === 1,
         products: editFormData.productEntitlements,
         product_ids: editFormData.product_ids,
       });
@@ -1354,100 +1385,207 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 )}
 
                 {editActiveTab === 'details' ? (
-                  <div>
-                    <div className="form-group">
-                      <label className="form-label">Company / Organization Name *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        required
-                        value={editFormData.company_name}
-                        onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })}
-                      />
-                    </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                    {/* SECTION 1: CUSTOMER IDENTIFICATION & CORPORATE PROFILE */}
+                    <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                        <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                          1. Customer Identification & Corporate Profile
+                        </div>
+                        <span style={{ fontSize: 11, background: '#e0e7ff', color: '#3730a3', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>
+                          ID: {editFormData.id || editingCompany.id}
+                        </span>
+                      </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div className="form-group">
-                        <label className="form-label">Primary Corporate Email *</label>
-                        <input
-                          type="email"
-                          className="form-control"
-                          required
-                          value={editFormData.primary_email}
-                          onChange={(e) => setEditFormData({ ...editFormData, primary_email: e.target.value })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">GST Number (Optional)</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          value={editFormData.gstn}
-                          onChange={(e) => setEditFormData({ ...editFormData, gstn: e.target.value.toUpperCase() })}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="form-group">
-                      <label className="form-label">Full Corporate Address *</label>
-                      <input
-                        type="text"
-                        className="form-control"
-                        required
-                        value={editFormData.address}
-                        onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
-                      />
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                      <div className="form-group">
-                        <label className="form-label">Primary Contact Person *</label>
-                        <input
-                          type="text"
-                          className="form-control"
-                          required
-                          value={editFormData.contact_person}
-                          onChange={(e) => setEditFormData({ ...editFormData, contact_person: e.target.value })}
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">Contact Phone *</label>
-                        <PhoneInput
-                          required
-                          value={editFormData.contact_phone}
-                          onChange={(val) => setEditFormData({ ...editFormData, contact_phone: val })}
-                        />
-                      </div>
-                    </div>
-
-                    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid #e2e8f0' }}>
-                      <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 10 }}>
-                        ALTERNATE CONTACT (Optional)
-                      </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                        <div className="form-group">
-                          <label className="form-label">Alternate Contact Name</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 12, marginBottom: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Customer ID (Read-Only)</label>
                           <input
                             type="text"
                             className="form-control"
+                            value={editFormData.id || editingCompany.id}
+                            disabled
+                            readOnly
+                            style={{ background: '#f1f5f9', cursor: 'not-allowed', color: '#64748b', fontWeight: 600 }}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Company / Organization Name *</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            required
+                            placeholder="Enter company or legal corporate name"
+                            value={editFormData.company_name}
+                            onChange={(e) => setEditFormData({ ...editFormData, company_name: e.target.value })}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="form-group" style={{ marginBottom: 12 }}>
+                        <label className="form-label" style={{ fontWeight: 600 }}>Office Address *</label>
+                        <input
+                          type="text"
+                          className="form-control"
+                          required
+                          placeholder="Registered corporate / office address"
+                          value={editFormData.address}
+                          onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                        />
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>GSTN / Tax ID (Optional)</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="15-character GSTIN (e.g. 27AABCU9603R1ZM)"
+                            maxLength={15}
+                            value={editFormData.gstn}
+                            onChange={(e) => setEditFormData({ ...editFormData, gstn: e.target.value.toUpperCase() })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Customer Account Status (Is Active) *</label>
+                          <select
+                            className="form-control"
+                            value={editFormData.is_active}
+                            onChange={(e) => setEditFormData({ ...editFormData, is_active: Number(e.target.value) })}
+                            style={{ fontWeight: 600, color: editFormData.is_active === 1 ? '#15803d' : '#b91c1c' }}
+                          >
+                            <option value={1}>Active — Operational & Enabled</option>
+                            <option value={0}>Inactive — Suspended / Disabled</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Primary Corporate Email *</label>
+                          <input
+                            type="email"
+                            className="form-control"
+                            required
+                            placeholder="e.g. contact@company.com"
+                            value={editFormData.primary_email}
+                            onChange={(e) => setEditFormData({ ...editFormData, primary_email: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Alternate Emails (Optional)</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="e.g. billing@company.com, alerts@company.com"
+                            value={editFormData.alternate_emails}
+                            onChange={(e) => setEditFormData({ ...editFormData, alternate_emails: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 2: PRIMARY CONTACT DETAILS */}
+                    <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#1e293b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        2. Primary Contact Details
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Primary Contact Person *</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            required
+                            placeholder="Full name of primary coordinator"
+                            value={editFormData.contact_person}
+                            onChange={(e) => setEditFormData({ ...editFormData, contact_person: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Primary Contact Phone *</label>
+                          <PhoneInput
+                            required
+                            value={editFormData.contact_phone}
+                            onChange={(val) => setEditFormData({ ...editFormData, contact_phone: val })}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Contact Location (Optional)</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="e.g. Head Office 4th Floor / Mumbai Branch"
+                            value={editFormData.contact_address}
+                            onChange={(e) => setEditFormData({ ...editFormData, contact_address: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label" style={{ fontWeight: 600 }}>Contact Status *</label>
+                          <select
+                            className="form-control"
+                            value={editFormData.contact_status}
+                            onChange={(e) => setEditFormData({ ...editFormData, contact_status: e.target.value })}
+                            style={{ fontWeight: 600 }}
+                          >
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="VERIFIED">VERIFIED</option>
+                            <option value="PENDING">PENDING</option>
+                            <option value="INACTIVE">INACTIVE</option>
+                          </select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* SECTION 3: ALTERNATE CONTACT (OPTIONAL) */}
+                    <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#64748b', marginBottom: 12, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                        3. Alternate Contact Details (Optional)
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Alternate Contact Person</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Secondary contact or escalation person"
                             value={editFormData.alternate_contact}
                             onChange={(e) => setEditFormData({ ...editFormData, alternate_contact: e.target.value })}
                           />
                         </div>
-                        <div className="form-group">
+                        <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label">Alternate Contact Phone</label>
                           <PhoneInput
                             value={editFormData.alternate_contact_phone}
                             onChange={(val) => setEditFormData({ ...editFormData, alternate_contact_phone: val })}
                           />
                         </div>
-                        <div className="form-group" style={{ gridColumn: 'span 2' }}>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
                           <label className="form-label">Alternate Contact Email</label>
                           <input
                             type="email"
                             className="form-control"
+                            placeholder="e.g. escalation@company.com"
                             value={editFormData.alternate_contact_email}
                             onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_email: e.target.value })}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">Alternate Contact Location / Address</label>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="e.g. Pune Regional Hub"
+                            value={editFormData.alternate_contact_address}
+                            onChange={(e) => setEditFormData({ ...editFormData, alternate_contact_address: e.target.value })}
                           />
                         </div>
                       </div>

@@ -53,6 +53,41 @@ interface ModuleConfig {
 }
 
 export const MassUpdateSection: React.FC = () => {
+  const autoMatchField = (col: string, idCol: string, fields?: any[]) => {
+    if (col === idCol) return '__IDENTIFIER__';
+    if (!fields || fields.length === 0) return '__SKIP__';
+    const clean = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const cClean = clean(col);
+    
+    // 1. Exact match on clean key or label
+    let match = fields.find((f: any) => clean(f.key) === cClean || clean(f.label) === cClean);
+    
+    // 2. Exact match on known aliases
+    if (!match) {
+      if (cClean === 'address') match = fields.find((f: any) => f.key === 'address');
+      else if (cClean === 'gstn') match = fields.find((f: any) => f.key === 'gstn');
+      else if (cClean === 'contactperson') match = fields.find((f: any) => f.key === 'contactPerson');
+      else if (cClean === 'contactphone') match = fields.find((f: any) => f.key === 'contactPhone');
+      else if (cClean === 'alternatecontact') match = fields.find((f: any) => f.key === 'alternateContact');
+      else if (cClean === 'alternatecontactlocationaddress') match = fields.find((f: any) => f.key === 'alternateContactAddress');
+      else if (cClean === 'isactive') match = fields.find((f: any) => f.key === 'isActive');
+    }
+    
+    // 3. Fallback to substring inclusion with alternate-tag preference
+    if (!match) {
+      const candidates = fields.filter((f: any) => {
+        const l = clean(f.label);
+        const k = clean(f.key);
+        return l.includes(cClean) || cClean.includes(l) || k.includes(cClean) || cClean.includes(k);
+      });
+      if (candidates.length > 0) {
+        const isAlt = cClean.includes('alternate');
+        const filtered = candidates.filter((f: any) => isAlt === f.key.toLowerCase().includes('alternate'));
+        match = filtered.length > 0 ? filtered[0] : candidates[0];
+      }
+    }
+    return match ? match.key : '__SKIP__';
+  };
   const { user } = useAuth();
   const { showToast } = useNotifications();
 
@@ -69,6 +104,14 @@ export const MassUpdateSection: React.FC = () => {
     sampleRows: any[];
     totalRows: number;
     rawRows: any[];
+    sheets?: Array<{
+      name: string;
+      totalRows: number;
+      columns: string[];
+      isEntitlementsSheet?: boolean;
+    }>;
+    activeSheet?: string;
+    isEntitlementsSheet?: boolean;
   } | null>(null);
 
   // 3. Matching & Mapping state
@@ -85,6 +128,12 @@ export const MassUpdateSection: React.FC = () => {
   const [previewResult, setPreviewResult] = useState<any | null>(null);
   const [previewFilter, setPreviewFilter] = useState<'all' | 'ready' | 'matched' | 'unmatched' | 'invalid' | 'no_change'>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // 5b. Entitlement Specific State
+  const [entitlementMode, setEntitlementMode] = useState<'selective' | 'full_sync'>('selective');
+  const [entitlementPreviewResult, setEntitlementPreviewResult] = useState<any | null>(null);
+  const [entitlementPreviewFilter, setEntitlementPreviewFilter] = useState<string>('all');
+  const [entitlementSearchQuery, setEntitlementSearchQuery] = useState<string>('');
 
   // 6. Execution state
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
@@ -204,17 +253,7 @@ export const MassUpdateSection: React.FC = () => {
         // Auto-guess initial field mappings
         const initialMappings: Record<string, string> = {};
         cols.forEach((col) => {
-          if (col === idCol) {
-            initialMappings[col] = '__IDENTIFIER__';
-          } else {
-            const matchedField = currentModule?.fields.find(
-              (f) =>
-                f.label.toLowerCase() === col.toLowerCase() ||
-                f.key.toLowerCase() === col.toLowerCase() ||
-                col.toLowerCase().includes(f.key.toLowerCase()),
-            );
-            initialMappings[col] = matchedField ? matchedField.key : '__SKIP__';
-          }
+          initialMappings[col] = autoMatchField(col, idCol, currentModule?.fields);
         });
         setFieldMappings(initialMappings);
 
@@ -234,12 +273,56 @@ export const MassUpdateSection: React.FC = () => {
     }
   };
 
+  // Switch worksheet inside multi-sheet workbook
+  const handleSwitchSheet = async (sheetName: string) => {
+    if (!file) return;
+    setIsParsing(true);
+    setPreviewResult(null);
+    setEntitlementPreviewResult(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('sheetName', sheetName);
+      const res = await api.parseMassUpdateFile(formData);
+      setParsedData(res);
+
+      if (!res.isEntitlementsSheet) {
+        const cols: string[] = res.columns || [];
+        const idCol =
+          cols.find((c) =>
+            currentModule?.recordIdentifierLabel.toLowerCase().includes(c.toLowerCase()) ||
+            c.toLowerCase().includes(currentModule?.recordIdentifierField.toLowerCase()) ||
+            c.toLowerCase() === 'id' ||
+            c.toLowerCase() === 'code' ||
+            c.toLowerCase() === 'customer id',
+          ) || cols[0] || '';
+        setIdentifierColumn(idCol);
+
+        const initialMappings: Record<string, string> = {};
+        cols.forEach((col) => {
+          initialMappings[col] = autoMatchField(col, idCol, currentModule?.fields);
+        });
+        setFieldMappings(initialMappings);
+        const mappedKeys = Object.values(initialMappings).filter(
+          (k) => k !== '__SKIP__' && k !== '__IDENTIFIER__',
+        );
+        setSelectedFields(mappedKeys);
+      }
+      showToast(`Switched to worksheet "${sheetName}" (${res.totalRows} data rows).`, 'success');
+    } catch (err: any) {
+      showToast(err.message || 'Failed to switch sheet.', 'danger');
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
   // Switch module
   const handleSelectModule = (modId: string) => {
     setSelectedModuleId(modId);
     setFile(null);
     setParsedData(null);
     setPreviewResult(null);
+    setEntitlementPreviewResult(null);
     setExecutionResult(null);
   };
 
@@ -393,6 +476,83 @@ export const MassUpdateSection: React.FC = () => {
         return matchesId || matchesName;
       }
 
+      return true;
+    });
+  };
+
+  // Preview Entitlement Updates
+  const handleEntitlementPreview = async () => {
+    if (!parsedData || !parsedData.rawRows) return;
+    setIsPreviewing(true);
+    setEntitlementPreviewResult(null);
+    try {
+      const res = await api.previewEntitlementsUpdate({
+        rows: parsedData.rawRows,
+        mode: entitlementMode,
+        fileName: file?.name,
+      });
+      setEntitlementPreviewResult(res.preview);
+      const s = res.preview?.summary;
+      if (s) {
+        showToast(
+          `Entitlement analysis complete: ${s.readyCount} ready to apply (${s.newCount} new, ${s.updateCount} updates, ${s.removeCount} removes).`,
+          s.readyCount > 0 ? 'success' : 'warning',
+        );
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Entitlement validation and preview failed.', 'danger');
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  // Commit Entitlement Updates
+  const handleEntitlementCommit = async () => {
+    if (!entitlementPreviewResult || !parsedData) return;
+    setIsCommitting(true);
+    setShowConfirmModal(false);
+    try {
+      const res = await api.commitEntitlementsUpdate({
+        rows: parsedData.rawRows,
+        mode: entitlementMode,
+        fileName: file?.name || 'entitlements_mass_update.xlsx',
+      });
+      setExecutionResult(res.result || res);
+      setEntitlementPreviewResult(null);
+      setFile(null);
+      setParsedData(null);
+      showToast(
+        `Entitlement updates applied! ${res.result?.appliedCount ?? res.appliedCount} changes saved.`,
+        'success',
+      );
+      loadHistory();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to apply entitlement updates.', 'danger');
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
+  // Filter entitlement rows
+  const getFilteredEntitlementRows = () => {
+    if (!entitlementPreviewResult?.rows) return [];
+    return entitlementPreviewResult.rows.filter((row: any) => {
+      if (entitlementPreviewFilter === 'ready' && !row.isValid) return false;
+      if (entitlementPreviewFilter === 'new' && row.actionCategory !== 'NEW') return false;
+      if (entitlementPreviewFilter === 'update' && row.actionCategory !== 'UPDATE') return false;
+      if (entitlementPreviewFilter === 'remove' && row.actionCategory !== 'REMOVE') return false;
+      if (entitlementPreviewFilter === 'unchanged' && row.actionCategory !== 'UNCHANGED') return false;
+      if (entitlementPreviewFilter === 'invalid' && row.isValid) return false;
+
+      if (entitlementSearchQuery.trim()) {
+        const q = entitlementSearchQuery.toLowerCase();
+        const mCust = String(row.customerId || '').toLowerCase().includes(q) || String(row.customerName || row.companyName || '').toLowerCase().includes(q);
+        const mProd = String(row.productId || '').toLowerCase().includes(q) || String(row.productName || '').toLowerCase().includes(q);
+        const mMod = String(row.moduleId || '').toLowerCase().includes(q) || String(row.moduleName || '').toLowerCase().includes(q);
+        const mSub = String(row.submoduleId || '').toLowerCase().includes(q) || String(row.submoduleName || '').toLowerCase().includes(q);
+        const mBranch = String(row.branchId || '').toLowerCase().includes(q) || String(row.branchName || '').toLowerCase().includes(q);
+        return mCust || mProd || mMod || mSub || mBranch;
+      }
       return true;
     });
   };
@@ -693,8 +853,504 @@ export const MassUpdateSection: React.FC = () => {
         </div>
       </div>
 
+      {/* Multi-Sheet Selector */}
+      {parsedData && parsedData.sheets && parsedData.sheets.length > 1 && (
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            borderRadius: 8,
+            padding: '12px 16px',
+            marginBottom: 20,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FileSpreadsheet size={18} color="#0b3b60" />
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                Workbook Worksheets Detected ({parsedData.sheets.length})
+              </div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>
+                Select a worksheet to process. Product Entitlements and Customer Profiles are configured separately.
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {parsedData.sheets.map((sh: any) => {
+              const isActive = parsedData.activeSheet === sh.name;
+              return (
+                <button
+                  key={sh.name}
+                  type="button"
+                  onClick={() => handleSwitchSheet(sh.name)}
+                  className={`btn ${isActive ? 'btn-primary' : 'btn-outline'}`}
+                  style={{
+                    fontSize: 12,
+                    padding: '6px 14px',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ fontWeight: isActive ? 700 : 500 }}>{sh.name}</span>
+                  <span
+                    style={{
+                      background: isActive ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                      color: isActive ? '#ffffff' : '#475569',
+                      padding: '1px 6px',
+                      borderRadius: 10,
+                      fontSize: 11,
+                    }}
+                  >
+                    {sh.totalRows} rows
+                  </span>
+                  {sh.isEntitlementsSheet && (
+                    <span
+                      style={{
+                        background: '#e0f2fe',
+                        color: '#0369a1',
+                        padding: '1px 6px',
+                        borderRadius: 10,
+                        fontSize: 10,
+                        fontWeight: 700,
+                      }}
+                    >
+                      Entitlements
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Entitlements Configuration Card */}
+      {parsedData && parsedData.isEntitlementsSheet && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div className="card-title">3. Customer Product & Module Entitlements Configuration</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                Relational mapping for customer-level and branch-level products, modules, and sub-modules.
+              </div>
+            </div>
+            <span
+              style={{
+                background: '#e0f2fe',
+                color: '#0369a1',
+                padding: '4px 10px',
+                borderRadius: 12,
+                fontSize: 11,
+                fontWeight: 700,
+              }}
+            >
+              Relational Entitlements Sheet
+            </span>
+          </div>
+
+          {/* Mode Selection */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 13, color: '#0f172a', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Sliders size={16} color="#0b3b60" /> Select Entitlement Update Mode
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              {/* Mode A: Selective Entitlement Update */}
+              <div
+                onClick={() => setEntitlementMode('selective')}
+                style={{
+                  border: entitlementMode === 'selective' ? '2px solid #0b3b60' : '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: 16,
+                  cursor: 'pointer',
+                  background: entitlementMode === 'selective' ? '#f0f9ff' : '#ffffff',
+                  boxShadow: entitlementMode === 'selective' ? '0 2px 4px rgba(11, 59, 96, 0.08)' : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#0b3b60' }}>
+                    MODE A: Selective Entitlement Update
+                  </div>
+                  <span
+                    style={{
+                      background: '#e0f2fe',
+                      color: '#0369a1',
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      fontSize: 10,
+                      fontWeight: 700,
+                    }}
+                  >
+                    Recommended
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                  Only updates, adds, or removes the <strong>explicitly listed entitlement rows</strong> in your file. All unlisted customer products and modules remain untouched.
+                </div>
+              </div>
+
+              {/* Mode B: Full Entitlement Synchronization */}
+              <div
+                onClick={() => setEntitlementMode('full_sync')}
+                style={{
+                  border: entitlementMode === 'full_sync' ? '2px solid #0b3b60' : '1px solid #e2e8f0',
+                  borderRadius: 8,
+                  padding: 16,
+                  cursor: 'pointer',
+                  background: entitlementMode === 'full_sync' ? '#f0f9ff' : '#ffffff',
+                  boxShadow: entitlementMode === 'full_sync' ? '0 2px 4px rgba(11, 59, 96, 0.08)' : 'none',
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: '#0b3b60' }}>
+                    MODE B: Full Entitlement Synchronization
+                  </div>
+                  <span
+                    style={{
+                      background: '#fef3c7',
+                      color: '#92400e',
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      fontSize: 10,
+                      fontWeight: 700,
+                    }}
+                  >
+                    Strict Sync
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#475569', lineHeight: 1.5 }}>
+                  Synchronizes customer product/module entitlements to strictly match the file. Any active product/module not listed for the affected customers will be <strong>flagged for deactivation</strong>.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Action Codes Guide Banner */}
+          <div
+            style={{
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              borderRadius: 8,
+              padding: 14,
+              marginBottom: 16,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 12, color: '#0f172a', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Info size={15} color="#0284c7" /> Supported Actions & Hierarchy Rules
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10, fontSize: 11, color: '#475569' }}>
+              <div><strong>ADD:</strong> Assigns new product, module, or sub-module entitlement.</div>
+              <div><strong>UPDATE:</strong> Modifies active/inactive status of existing entitlement.</div>
+              <div><strong>REMOVE:</strong> Deletes module/sub-module or soft-deactivates product.</div>
+              <div><strong>Branch Prerequisite:</strong> Branch must belong to customer and customer must have the product active.</div>
+            </div>
+          </div>
+
+          {/* Action Button */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <button
+              className="btn btn-primary"
+              onClick={handleEntitlementPreview}
+              disabled={isPreviewing}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              {isPreviewing ? <RefreshCw size={14} className="animate-spin" /> : <FileCheck size={14} />}
+              {isPreviewing ? 'Validating Entitlements & Hierarchy...' : 'Analyze & Preview Entitlement Changes'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Entitlements Preview Card */}
+      {entitlementPreviewResult && (
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+            <div>
+              <div className="card-title">4. Entitlements Validation & Detailed Preview</div>
+              <div style={{ fontSize: 12, color: '#64748b' }}>
+                Review before-and-after entitlement states across customers and branches. Confirm below to apply updates.
+              </div>
+            </div>
+
+            <button
+              className="btn btn-success"
+              onClick={() => setShowConfirmModal(true)}
+              disabled={isCommitting || entitlementPreviewResult.summary.readyCount === 0}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <CheckCircle2 size={15} /> Confirm & Apply {entitlementPreviewResult.summary.readyCount} Entitlement Changes
+            </button>
+          </div>
+
+          {/* KPI Summary Cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 16 }}>
+            <div style={{ background: '#f8fafc', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #e2e8f0' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#0f172a' }}>{entitlementPreviewResult.summary.totalRows}</div>
+              <div style={{ fontSize: 11, color: '#64748b' }}>Total Rows</div>
+            </div>
+            <div style={{ background: '#eff6ff', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #bfdbfe' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#2563eb' }}>{entitlementPreviewResult.summary.readyCount}</div>
+              <div style={{ fontSize: 11, color: '#1e40af' }}>Ready to Apply</div>
+            </div>
+            <div style={{ background: '#f0fdf4', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #bbf7d0' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#16a34a' }}>{entitlementPreviewResult.summary.newCount}</div>
+              <div style={{ fontSize: 11, color: '#166534' }}>New (ADD)</div>
+            </div>
+            <div style={{ background: '#e0f2fe', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #bae6fd' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#0284c7' }}>{entitlementPreviewResult.summary.updateCount}</div>
+              <div style={{ fontSize: 11, color: '#0369a1' }}>Status Updates</div>
+            </div>
+            <div style={{ background: '#fef2f2', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #fecaca' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#dc2626' }}>{entitlementPreviewResult.summary.removeCount}</div>
+              <div style={{ fontSize: 11, color: '#991b1b' }}>Removals</div>
+            </div>
+            <div style={{ background: '#f8fafc', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #cbd5e1' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#64748b' }}>{entitlementPreviewResult.summary.unchangedCount}</div>
+              <div style={{ fontSize: 11, color: '#475569' }}>Unchanged</div>
+            </div>
+            <div style={{ background: '#fff1f2', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #fecdd3' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#e11d48' }}>{entitlementPreviewResult.summary.invalidCount}</div>
+              <div style={{ fontSize: 11, color: '#be123c' }}>Invalid Rows</div>
+            </div>
+            <div style={{ background: '#faf5ff', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #e9d5ff' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#7c3aed' }}>{entitlementPreviewResult.summary.affectedCustomerCount}</div>
+              <div style={{ fontSize: 11, color: '#6d28d9' }}>Customers</div>
+            </div>
+            <div style={{ background: '#f5f3ff', padding: 10, borderRadius: 6, textAlign: 'center', border: '1px solid #ddd6fe' }}>
+              <div style={{ fontSize: 20, fontWeight: 700, color: '#6d28d9' }}>{entitlementPreviewResult.summary.affectedBranchCount}</div>
+              <div style={{ fontSize: 11, color: '#5b21b6' }}>Branches</div>
+            </div>
+          </div>
+
+          {/* Validation Errors Breakdown */}
+          {entitlementPreviewResult.validationErrors && entitlementPreviewResult.validationErrors.length > 0 && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, color: '#991b1b', fontSize: 12, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <AlertTriangle size={15} /> Validation Issues Detected ({entitlementPreviewResult.validationErrors.length})
+              </div>
+              <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {entitlementPreviewResult.validationErrors.map((err: any, idx: number) => (
+                  <div key={idx} style={{ fontSize: 11, color: '#b91c1c' }}>
+                    Row {err.rowNumber} [{err.customerId}]: Field <strong>{err.field}</strong> — {err.message}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Preview Filters & Search */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10, marginBottom: 12 }}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('all')}
+              >
+                All Rows ({entitlementPreviewResult.rows.length})
+              </button>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'ready' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('ready')}
+              >
+                Ready to Apply ({entitlementPreviewResult.summary.readyCount})
+              </button>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'new' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('new')}
+              >
+                New ADD ({entitlementPreviewResult.summary.newCount})
+              </button>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'update' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('update')}
+              >
+                Updates ({entitlementPreviewResult.summary.updateCount})
+              </button>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'remove' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('remove')}
+              >
+                Removals ({entitlementPreviewResult.summary.removeCount})
+              </button>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'unchanged' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('unchanged')}
+              >
+                Unchanged ({entitlementPreviewResult.summary.unchangedCount})
+              </button>
+              <button
+                className={`btn ${entitlementPreviewFilter === 'invalid' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: 11, padding: '4px 10px' }}
+                onClick={() => setEntitlementPreviewFilter('invalid')}
+              >
+                Invalid ({entitlementPreviewResult.summary.invalidCount})
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Search customer, product, module..."
+              className="form-control"
+              style={{ maxWidth: 240, fontSize: 12, padding: '4px 8px' }}
+              value={entitlementSearchQuery}
+              onChange={(e) => setEntitlementSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {/* Row-by-Row Table */}
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: 6, overflowX: 'auto', background: '#ffffff' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                <tr>
+                  <th style={{ padding: '8px 10px', color: '#475569', width: 45 }}>Row</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Action</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Customer</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Scope / Branch</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Entitlement Hierarchy</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Status Transition</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Category</th>
+                  <th style={{ padding: '8px 10px', color: '#475569' }}>Validation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {getFilteredEntitlementRows().map((row: any) => {
+                  return (
+                    <tr key={row.rowNumber} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '8px 10px', color: '#64748b' }}>{row.rowNumber}</td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <span
+                          style={{
+                            background:
+                              row.action === 'ADD' ? '#dcfce7' :
+                              row.action === 'UPDATE' ? '#e0f2fe' :
+                              row.action === 'REMOVE' ? '#fee2e2' :
+                              row.action === 'ENABLE' ? '#d1fae5' : '#ffedd5',
+                            color:
+                              row.action === 'ADD' ? '#166534' :
+                              row.action === 'UPDATE' ? '#0369a1' :
+                              row.action === 'REMOVE' ? '#991b1b' :
+                              row.action === 'ENABLE' ? '#065f46' : '#9a3412',
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {row.action}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <div style={{ fontWeight: 600, color: '#0b3b60' }}>{row.customerId}</div>
+                        <div style={{ fontSize: 11, color: '#64748b' }}>{row.customerName || row.companyName || '-'}</div>
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        {row.branchId ? (
+                          <div>
+                            <span style={{ fontWeight: 600, color: '#0f172a' }}>{row.branchName || row.branchId}</span>
+                            <div style={{ fontSize: 10, color: '#64748b' }}>Branch: {row.branchId}</div>
+                          </div>
+                        ) : (
+                          <span style={{ background: '#f1f5f9', color: '#475569', padding: '2px 6px', borderRadius: 4, fontSize: 10 }}>
+                            Head Office (HO)
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          <div style={{ fontWeight: 600, color: '#0b3b60', display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <Package size={13} color="#0284c7" />
+                            <span>{row.productName || row.productId}</span>
+                            <span style={{ fontSize: 10, color: '#64748b' }}>({row.productId})</span>
+                          </div>
+                          {row.moduleId && (
+                            <div style={{ fontSize: 11, color: '#0369a1', paddingLeft: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              ↳ <Layers size={11} color="#0284c7" />
+                              <span>{row.moduleName || row.moduleId}</span>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>({row.moduleId})</span>
+                            </div>
+                          )}
+                          {row.submoduleId && (
+                            <div style={{ fontSize: 11, color: '#475569', paddingLeft: 24, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              ↳ ↳ <Target size={10} color="#64748b" />
+                              <span>{row.submoduleName || row.submoduleId}</span>
+                              <span style={{ fontSize: 10, color: '#64748b' }}>({row.submoduleId})</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}>
+                          <span style={{ color: '#64748b' }}>{row.currentStatus}</span>
+                          <ArrowRight size={10} color="#94a3b8" />
+                          <span style={{ fontWeight: 700, color: row.requestedStatus === 'ENABLED' ? '#16a34a' : '#dc2626' }}>
+                            {row.requestedStatus}
+                          </span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        <span
+                          style={{
+                            background:
+                              row.actionCategory === 'NEW' ? '#dcfce7' :
+                              row.actionCategory === 'UPDATE' ? '#e0f2fe' :
+                              row.actionCategory === 'REMOVE' ? '#fee2e2' :
+                              row.actionCategory === 'UNCHANGED' ? '#f1f5f9' : '#fef2f2',
+                            color:
+                              row.actionCategory === 'NEW' ? '#166534' :
+                              row.actionCategory === 'UPDATE' ? '#0369a1' :
+                              row.actionCategory === 'REMOVE' ? '#991b1b' :
+                              row.actionCategory === 'UNCHANGED' ? '#64748b' : '#b91c1c',
+                            padding: '2px 6px',
+                            borderRadius: 4,
+                            fontSize: 10,
+                            fontWeight: 700,
+                          }}
+                        >
+                          {row.actionCategory}
+                        </span>
+                      </td>
+                      <td style={{ padding: '8px 10px' }}>
+                        {row.errors.length > 0 ? (
+                          <div style={{ color: '#dc2626', fontSize: 11 }}>
+                            {row.errors.map((e: string, i: number) => (
+                              <div key={i}>• {e}</div>
+                            ))}
+                          </div>
+                        ) : row.warnings.length > 0 ? (
+                          <div style={{ color: '#d97706', fontSize: 11 }}>
+                            {row.warnings.map((w: string, i: number) => (
+                              <div key={i}>• {w}</div>
+                            ))}
+                          </div>
+                        ) : (
+                          <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <CheckCircle2 size={13} /> Valid
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Step 3 & 4: Matching Identifier, Field Mapping & Update Mode Selection */}
-      {parsedData && (
+      {parsedData && !parsedData.isEntitlementsSheet && (
         <div className="card" style={{ marginBottom: 20 }}>
           <div className="card-header">
             <div className="card-title">3. Record Matching & Field Mapping Configuration</div>
@@ -1271,19 +1927,34 @@ export const MassUpdateSection: React.FC = () => {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <AlertTriangle size={24} color="#d97706" />
               <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a' }}>
-                Confirm Mass Update Execution
+                {entitlementPreviewResult ? 'Confirm Customer Entitlements Update' : 'Confirm Mass Update Execution'}
               </div>
             </div>
 
             <div style={{ fontSize: 13, color: '#475569', lineHeight: 1.6, marginBottom: 16 }}>
-              You are about to update <strong>{previewResult?.summary.readyCount} existing records</strong> in the <strong>{currentModule?.label}</strong> table.
-              <br />
-              <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }}>
-                <div>• Mode: <strong>{updateMode === 'fill_missing' ? 'Fill Missing Fields Only' : 'Selective Overwrite'}</strong></div>
-                <div>• Verified Tenant Isolation: <strong>Active ({user?.tenantId || 'KANVTECH'})</strong></div>
-                <div>• Database Safety: <strong>Zero new records will be created</strong></div>
-                <div>• Audit Logging: <strong>All field diffs will be permanently recorded</strong></div>
-              </div>
+              {entitlementPreviewResult ? (
+                <>
+                  You are about to apply <strong>{entitlementPreviewResult.summary.readyCount} product & module entitlement changes</strong> across <strong>{entitlementPreviewResult.summary.affectedCustomerCount} customer(s)</strong> and <strong>{entitlementPreviewResult.summary.affectedBranchCount} branch(es)</strong>.
+                  <br />
+                  <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }}>
+                    <div>• Entitlement Mode: <strong>{entitlementMode === 'selective' ? 'Selective Entitlement Update' : 'Full Entitlement Synchronization'}</strong></div>
+                    <div>• Verified Tenant Isolation: <strong>Active ({user?.tenantId || 'KANVTECH'})</strong></div>
+                    <div>• Hierarchy Enforcement: <strong>Products, Modules, Sub-Modules strictly validated</strong></div>
+                    <div>• Audit Logging: <strong>Recorded permanently in database audit log</strong></div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  You are about to update <strong>{previewResult?.summary.readyCount} existing records</strong> in the <strong>{currentModule?.label}</strong> table.
+                  <br />
+                  <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0', fontSize: 12 }}>
+                    <div>• Mode: <strong>{updateMode === 'fill_missing' ? 'Fill Missing Fields Only' : 'Selective Overwrite'}</strong></div>
+                    <div>• Verified Tenant Isolation: <strong>Active ({user?.tenantId || 'KANVTECH'})</strong></div>
+                    <div>• Database Safety: <strong>Zero new records will be created</strong></div>
+                    <div>• Audit Logging: <strong>All field diffs will be permanently recorded</strong></div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
@@ -1296,7 +1967,7 @@ export const MassUpdateSection: React.FC = () => {
               </button>
               <button
                 className="btn btn-primary"
-                onClick={handleCommit}
+                onClick={entitlementPreviewResult ? handleEntitlementCommit : handleCommit}
                 disabled={isCommitting}
                 style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >

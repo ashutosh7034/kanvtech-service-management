@@ -665,24 +665,26 @@ export class CompaniesService {
     if (!existing) throw new NotFoundException('Company not found');
 
     const companyName = data.company_name ?? data.companyName;
-    const address = data.address;
-    const gstn = data.gstn;
+    const address = data.address ?? data.office_address ?? data.officeAddress;
+    const gstn = data.gstn ?? data.tax_id ?? data.taxId ?? data.gstn_tax_id;
     const primaryEmail = data.primary_email ?? data.primaryEmail;
     const alternateEmails = data.alternate_emails ?? data.alternateEmails;
     const contactPerson = data.contact_person ?? data.contactPerson;
     const contactPhone = data.contact_phone ?? data.contactPhone;
-    const contactAddress = data.contact_address ?? data.contactAddress;
-    const alternateContact = data.alternate_contact ?? data.alternateContact;
+    const contactAddress = data.contact_address ?? data.contactAddress ?? data.contact_location ?? data.contactLocation;
+    const contactStatus = data.contact_status ?? data.contactStatus;
+    const alternateContact = data.alternate_contact ?? data.alternateContact ?? data.alternate_contact_person ?? data.alternateContactPerson;
     const alternateContactPhone = data.alternate_contact_phone ?? data.alternateContactPhone;
-    const alternateContactAddress = data.alternate_contact_address ?? data.alternateContactAddress;
+    const alternateContactAddress = data.alternate_contact_address ?? data.alternateContactAddress ?? data.alternate_contact_location ?? data.alternateContactLocation;
     const alternateContactEmail = data.alternate_contact_email ?? data.alternateContactEmail;
     const isActive = data.is_active !== undefined ? Boolean(data.is_active) : (data.isActive !== undefined ? Boolean(data.isActive) : undefined);
 
     const validPrimaryEmail = primaryEmail !== undefined ? validateEmail(primaryEmail, 'Primary corporate email') : undefined;
-    const validGstn = gstn !== undefined ? validateOptionalGSTN(gstn) : undefined;
+    const validGstn = gstn !== undefined ? ((gstn === null || (typeof gstn === 'string' && gstn.trim() === '')) ? null : validateOptionalGSTN(gstn)) : undefined;
     const validContactPhone = contactPhone !== undefined ? validatePhone(contactPhone, 'Contact phone') : undefined;
-    const validAltPhone = alternateContactPhone !== undefined ? validateOptionalPhone(alternateContactPhone, 'Alternate contact phone') : undefined;
-    const validAltEmail = alternateContactEmail !== undefined ? validateOptionalEmail(alternateContactEmail, 'Alternate contact email') : undefined;
+    const validAltPhone = alternateContactPhone !== undefined ? ((alternateContactPhone === null || (typeof alternateContactPhone === 'string' && alternateContactPhone.trim() === '')) ? null : validateOptionalPhone(alternateContactPhone, 'Alternate contact phone')) : undefined;
+    const validAltEmail = alternateContactEmail !== undefined ? ((alternateContactEmail === null || (typeof alternateContactEmail === 'string' && alternateContactEmail.trim() === '')) ? null : validateOptionalEmail(alternateContactEmail, 'Alternate contact email')) : undefined;
+    const validContactStatus = contactStatus !== undefined ? (contactStatus ? String(contactStatus).trim().toUpperCase() : 'ACTIVE') : undefined;
 
     if (companyName !== undefined && !companyName.trim()) {
       throw new BadRequestException('Company name cannot be empty.');
@@ -694,6 +696,48 @@ export class CompaniesService {
       throw new BadRequestException('Contact person cannot be empty.');
     }
 
+    // Check duplicate company name if changing name
+    if (companyName && companyName.trim().toLowerCase() !== existing.companyName.toLowerCase()) {
+      const duplicateName = await this.prisma.company.findFirst({
+        where: {
+          id: { not: id },
+          companyName: { equals: companyName.trim(), mode: 'insensitive' },
+          tenantId: existing.tenantId,
+        },
+      });
+      if (duplicateName) {
+        throw new BadRequestException(`Company with name '${companyName.trim()}' already exists.`);
+      }
+    }
+
+    // Check duplicate primary email if changing primary email
+    if (validPrimaryEmail && validPrimaryEmail.toLowerCase() !== existing.primaryEmail.toLowerCase()) {
+      const duplicateEmail = await this.prisma.company.findFirst({
+        where: {
+          id: { not: id },
+          primaryEmail: { equals: validPrimaryEmail, mode: 'insensitive' },
+          tenantId: existing.tenantId,
+        },
+      });
+      if (duplicateEmail) {
+        throw new BadRequestException(`Company with primary email '${validPrimaryEmail}' already exists.`);
+      }
+    }
+
+    // Check duplicate GSTN if changing GSTN and not null
+    if (validGstn && validGstn !== existing.gstn) {
+      const duplicateGstn = await this.prisma.company.findFirst({
+        where: {
+          id: { not: id },
+          gstn: { equals: validGstn, mode: 'insensitive' },
+          tenantId: existing.tenantId,
+        },
+      });
+      if (duplicateGstn) {
+        throw new BadRequestException(`Company with GSTN '${validGstn}' already exists.`);
+      }
+    }
+
     await this.prisma.company.update({
       where: { id },
       data: {
@@ -701,17 +745,35 @@ export class CompaniesService {
         address: address !== undefined ? address.trim() : undefined,
         gstn: validGstn !== undefined ? validGstn : undefined,
         primaryEmail: validPrimaryEmail !== undefined ? validPrimaryEmail : undefined,
-        alternateEmails: alternateEmails !== undefined ? alternateEmails.trim() : undefined,
+        alternateEmails: alternateEmails !== undefined ? (alternateEmails ? alternateEmails.trim() : null) : undefined,
         contactPerson: contactPerson !== undefined ? contactPerson.trim() : undefined,
         contactPhone: validContactPhone !== undefined ? validContactPhone : undefined,
-        contactAddress: contactAddress !== undefined ? contactAddress.trim() : undefined,
-        alternateContact: alternateContact !== undefined ? alternateContact.trim() : undefined,
+        contactAddress: contactAddress !== undefined ? (contactAddress ? contactAddress.trim() : null) : undefined,
+        contactStatus: validContactStatus !== undefined ? validContactStatus : undefined,
+        alternateContact: alternateContact !== undefined ? (alternateContact ? alternateContact.trim() : null) : undefined,
         alternateContactPhone: validAltPhone !== undefined ? validAltPhone : undefined,
-        alternateContactAddress: alternateContactAddress !== undefined ? alternateContactAddress.trim() : undefined,
+        alternateContactAddress: alternateContactAddress !== undefined ? (alternateContactAddress ? alternateContactAddress.trim() : null) : undefined,
         alternateContactEmail: validAltEmail !== undefined ? validAltEmail : undefined,
         isActive,
       },
     });
+
+    // Also sync the primary CompanyContact record if contactPerson, primaryEmail, or contactPhone changed
+    if (contactPerson !== undefined || validPrimaryEmail !== undefined || validContactPhone !== undefined) {
+      const primaryContact = await this.prisma.companyContact.findFirst({
+        where: { companyId: id, isPrimary: true },
+      });
+      if (primaryContact) {
+        await this.prisma.companyContact.update({
+          where: { id: primaryContact.id },
+          data: {
+            name: contactPerson !== undefined ? contactPerson.trim() : undefined,
+            email: validPrimaryEmail !== undefined ? validPrimaryEmail : undefined,
+            phone: validContactPhone !== undefined ? validContactPhone : undefined,
+          },
+        });
+      }
+    }
 
     // If product entitlements are passed to updateCompany:
     const rawProductsToUpdate = data.products !== undefined ? data.products : (data.product_ids !== undefined ? data.product_ids : (data.productIds !== undefined ? data.productIds : data.entitlements));

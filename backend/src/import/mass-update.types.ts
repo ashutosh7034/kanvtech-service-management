@@ -131,3 +131,84 @@ export interface MassUpdateHistoryItem {
   createdAt: string;
 }
 
+// -----------------------------------------------------------------------------
+// Product & Module Entitlements Mass Update Types
+// -----------------------------------------------------------------------------
+
+export type EntitlementAction = 'ADD' | 'UPDATE' | 'REMOVE' | 'ENABLE' | 'DISABLE';
+export type EntitlementUpdateMode = 'selective' | 'full_sync';
+
+export interface EntitlementRowPreview {
+  rowNumber: number;
+  customerId: string;
+  customerName?: string | null;
+  companyName?: string | null;
+  branchId?: string | null;
+  branchName?: string | null;
+  productId: string;
+  productName: string;
+  moduleId?: string | null;
+  moduleName?: string | null;
+  submoduleId?: string | null;
+  submoduleName?: string | null;
+  action: EntitlementAction;
+  requestedStatus: 'ENABLED' | 'DISABLED';
+  currentStatus: 'ENABLED' | 'DISABLED' | 'NOT_ASSIGNED';
+  actionCategory: 'NEW' | 'UPDATE' | 'REMOVE' | 'UNCHANGED' | 'INVALID';
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface EntitlementPreviewSummary {
+  totalRows: number;
+  newCount: number;
+  updateCount: number;
+  removeCount: number;
+  unchangedCount: number;
+  invalidCount: number;
+  readyCount: number;
+  affectedCustomerCount: number;
+  affectedBranchCount: number;
+}
+
+export interface EntitlementPreviewResult {
+  mode: EntitlementUpdateMode;
+  summary: EntitlementPreviewSummary;
+  rows: EntitlementRowPreview[];
+  validationErrors: Array<{
+    rowNumber: number;
+    customerId: string;
+    field: string;
+    message: string;
+  }>;
+}
+
+export interface EntitlementCommitPayload {
+  rows: any[];
+  mode: EntitlementUpdateMode;
+  fileName?: string;
+}
+
+export interface EntitlementExecutionResult {
+  operationId: string;
+  mode: EntitlementUpdateMode;
+  totalRows: number;
+  appliedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  timestamp: string;
+  message: string;
+  details: Array<{
+    rowNumber: number;
+    customerId: string;
+    branchId?: string | null;
+    productId: string;
+    moduleId?: string | null;
+    submoduleId?: string | null;
+    action: string;
+    status: 'APPLIED' | 'SKIPPED' | 'FAILED';
+    errorReason?: string;
+  }>;
+}
+
