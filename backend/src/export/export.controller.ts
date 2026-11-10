@@ -19,6 +19,7 @@ import { ExportService } from './export.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Data Export & Recovery')
 @ApiBearerAuth()
@@ -39,6 +40,7 @@ export class ExportController {
 
   @Get('download')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('reports.export')
   @ApiOperation({ summary: 'Export business data in Excel (.xlsx), CSV, or structured JSON backup' })
   @ApiQuery({ name: 'module', required: true, description: 'Module key or "all"' })
   @ApiQuery({ name: 'format', required: true, enum: ['xlsx', 'csv', 'json'] })

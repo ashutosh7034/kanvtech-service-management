@@ -383,6 +383,17 @@ export const api = {
   // Audit Logs
   getAuditLogs: () => request('/audit-logs'),
 
+  // Permissions Management
+  getPermissionCatalog: () => request('/permissions/catalog'),
+  getMyPermissions: () => request('/permissions/my-permissions'),
+  getEmployeesPermissions: () => request('/permissions/employees'),
+  getEmployeePermissions: (employeeId: string) => request(`/permissions/employees/${employeeId}`),
+  updateEmployeePermissions: (employeeId: string, permissionCodes: string[]) =>
+    request(`/permissions/employees/${employeeId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissionCodes }),
+    }),
+
   // Employee Tasks (Task Reminders)
   getMyTasks: (params: any = {}) => request(`/employee-tasks${toQueryString(params)}`),
   getMyTaskSummary: () => request('/employee-tasks/summary'),

@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Param,
   Query,
@@ -14,6 +15,7 @@ import { SubscriptionsService } from './subscriptions.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Subscriptions')
 @ApiBearerAuth()
@@ -63,6 +65,7 @@ export class SubscriptionsController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('amc.create')
   @ApiOperation({ summary: 'Create a new customer subscription or AMC plan' })
   async createSubscription(@Body() body: any, @Request() req: any) {
     const sub = await this.subscriptionsService.createSubscription(body, req.user.userId, req.user?.tenantId);
@@ -71,6 +74,7 @@ export class SubscriptionsController {
 
   @Put(':id')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('amc.update')
   @ApiOperation({ summary: 'Update subscription details' })
   async updateSubscription(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const sub = await this.subscriptionsService.updateSubscription(id, body, req.user.userId, req.user?.tenantId);
@@ -101,5 +105,13 @@ export class SubscriptionsController {
       req.user?.tenantId,
     );
     return { success: true, subscription: sub, message: 'Subscription renewed successfully' };
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @RequirePermissions('amc.delete')
+  @ApiOperation({ summary: 'Delete customer subscription' })
+  async deleteSubscription(@Param('id') id: string, @Request() req: any) {
+    return this.subscriptionsService.deleteSubscription(id, req.user.userId, req.user?.tenantId);
   }
 }

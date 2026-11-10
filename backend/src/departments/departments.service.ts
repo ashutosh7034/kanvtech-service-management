@@ -546,4 +546,40 @@ export class DepartmentsService {
       active_workload: e.assignedTickets.length,
     }));
   }
+
+  async deleteDepartment(id: string, actorUserId?: number, tenantId?: string) {
+    const dept = await this.prisma.department.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+      include: {
+        _count: {
+          select: { employees: true, tickets: true },
+        },
+      },
+    });
+    if (!dept) throw new NotFoundException('Department not found');
+
+    if (dept._count.employees > 0) {
+      throw new BadRequestException(
+        `Cannot delete department '${dept.name}' because ${dept._count.employees} employees are currently assigned to it. Reassign employees first.`,
+      );
+    }
+
+    if (dept._count.tickets > 0) {
+      throw new BadRequestException(
+        `Cannot delete department '${dept.name}' because ${dept._count.tickets} tickets are associated with it.`,
+      );
+    }
+
+    await this.prisma.department.delete({ where: { id: dept.id } });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'DEPARTMENT_DELETED',
+      entityType: 'DEPARTMENT',
+      entityId: id,
+      oldValues: { name: dept.name, code: dept.code },
+    });
+
+    return { success: true, message: `Department '${dept.name}' deleted successfully.` };
+  }
 }

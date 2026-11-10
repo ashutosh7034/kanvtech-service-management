@@ -28,6 +28,7 @@ import { EmployeeTasksModule } from './employee-tasks/employee-tasks.module';
 import { InboundEmailModule } from './inbound-email/inbound-email.module';
 import { ExportModule } from './export/export.module';
 import { PlatformModule } from './platform/platform.module';
+import { PermissionsModule } from './permissions/permissions.module';
 
 @Module({
   imports: [
@@ -60,6 +61,7 @@ import { PlatformModule } from './platform/platform.module';
     EmployeeTasksModule,
     InboundEmailModule,
     ExportModule,
+    PermissionsModule,
   ],
 })
 export class AppModule {}

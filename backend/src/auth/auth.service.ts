@@ -2,6 +2,7 @@ import { Injectable, UnauthorizedException, BadRequestException, NotFoundExcepti
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { PERMISSION_CATALOG } from '../permissions/permissions.constants';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
@@ -212,6 +213,13 @@ export class AuthService {
 
     const token = this.jwtService.sign(payload, { expiresIn });
 
+    const effectivePermissions = await this.resolveEffectivePermissions(
+      effectiveRole,
+      isPlatformIncharge,
+      employeeId,
+      effectiveTenantId,
+    );
+
     return {
       token,
       user: {
@@ -234,6 +242,8 @@ export class AuthService {
         companyId,
         contactId,
         name: employee?.name || (user.companyContacts?.[0]?.name ?? (isPlatformIncharge ? 'Platform Incharge' : user.role === 'SUPER_ADMIN' ? 'Super Administrator' : user.role === 'ADMIN' ? 'Company Administrator' : user.email)),
+        effectivePermissions,
+        permissions: effectivePermissions,
       },
     };
   }
@@ -330,6 +340,14 @@ export class AuthService {
     const isPlatformIncharge = user.role === 'PLATFORM_INCHARGE';
     const effectiveRole = isPlatformIncharge ? 'PLATFORM_INCHARGE' : (defaultMembership?.role || user.role);
 
+    const effectiveTenantId = defaultMembership?.tenantId || user.defaultTenantId || (isPlatformIncharge ? 'KANVTECH' : 'KANVTECH');
+    const effectivePermissions = await this.resolveEffectivePermissions(
+      effectiveRole,
+      isPlatformIncharge,
+      employee?.id,
+      effectiveTenantId,
+    );
+
     return {
       id: user.id,
       userId: user.id,
@@ -337,7 +355,7 @@ export class AuthService {
       role: effectiveRole,
       isSuperAdmin: false,
       isPlatformIncharge,
-      tenantId: defaultMembership?.tenantId || user.defaultTenantId || (isPlatformIncharge ? 'KANVTECH' : 'KANVTECH'),
+      tenantId: effectiveTenantId,
       tenantName: defaultMembership?.tenant?.name || (isPlatformIncharge ? 'Platform Administration' : 'Kanvtech Technologies'),
       tenants: activeMemberships.map((m: any) => ({
         id: m.tenant.id,
@@ -350,6 +368,8 @@ export class AuthService {
       companyId,
       contactId,
       name: employee?.name || (user.companyContacts?.[0]?.name ?? (isPlatformIncharge ? 'Platform Incharge' : user.role === 'SUPER_ADMIN' ? 'Super Administrator' : user.role === 'ADMIN' ? 'Company Administrator' : user.email)),
+      effectivePermissions,
+      permissions: effectivePermissions,
     };
   }
 
@@ -417,6 +437,13 @@ export class AuthService {
       expiresIn: process.env.JWT_EXPIRES_IN || '24h',
     });
 
+    const effectivePermissions = await this.resolveEffectivePermissions(
+      effectiveRole,
+      isPlatformIncharge,
+      user.employee?.id,
+      targetTenantId,
+    );
+
     return {
       success: true,
       token,
@@ -430,8 +457,50 @@ export class AuthService {
         tenantId: targetTenantId,
         tenantName: tenantObj?.name || targetTenantId,
         name: user.employee?.name || (user.companyContacts?.[0]?.name ?? user.email),
+        effectivePermissions,
+        permissions: effectivePermissions,
       },
     };
+  }
+
+  /**
+   * Helper to compute effective permissions for user context.
+   */
+  private async resolveEffectivePermissions(
+    userRole: string,
+    isPlatformIncharge: boolean,
+    employeeId?: string | null,
+    tenantId?: string | null,
+  ): Promise<string[]> {
+    if (isPlatformIncharge || userRole === 'SUPER_ADMIN' || userRole === 'ADMIN') {
+      return PERMISSION_CATALOG.map((p) => p.permissionCode);
+    }
+    if (!employeeId || !tenantId) {
+      return [];
+    }
+    const emp = await this.prisma.employee.findFirst({
+      where: { id: employeeId, tenantId },
+      include: {
+        employeePermissions: {
+          include: {
+            permission: { select: { permissionCode: true } },
+          },
+        },
+      },
+    });
+    if (!emp || emp.status !== 'ACTIVE') {
+      return [];
+    }
+    const perms = new Set<string>(emp.employeePermissions.map((ep) => ep.permission.permissionCode));
+    perms.add('ticket.view');
+    perms.add('ticket.update');
+    if (userRole === 'MANAGER') {
+      perms.add('department.view');
+      perms.add('employee.view');
+      perms.add('ticket.assign');
+      perms.add('ticket.create');
+    }
+    return Array.from(perms);
   }
 
   async getMyTenants(userId: number) {

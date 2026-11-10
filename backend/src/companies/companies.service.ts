@@ -1574,4 +1574,43 @@ export class CompaniesService {
       newValues: { branchId, productId },
     });
   }
+
+  async deleteCompany(id: string, actorUserId?: number, tenantId?: string) {
+    const where: any = { id };
+    if (tenantId) where.tenantId = tenantId;
+    const company = await this.prisma.company.findFirst({
+      where,
+      include: {
+        _count: {
+          select: {
+            tickets: { where: { status: { not: TicketStatus.CLOSED } } },
+            subscriptions: { where: { status: 'ACTIVE' } },
+          },
+        },
+      },
+    });
+    if (!company) throw new NotFoundException('Company not found');
+
+    if (company._count.tickets > 0) {
+      throw new BadRequestException(
+        `Cannot delete company '${company.companyName}' because it has ${company._count.tickets} active ticket(s). Close or resolve tickets first.`,
+      );
+    }
+
+    await this.prisma.company.update({
+      where: { id: company.id },
+      data: { isActive: false },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'COMPANY_DEACTIVATED',
+      entityType: 'COMPANY',
+      entityId: id,
+      oldValues: { companyName: company.companyName, isActive: company.isActive },
+      newValues: { isActive: false },
+    });
+
+    return { success: true, message: `Company '${company.companyName}' deactivated successfully.` };
+  }
 }

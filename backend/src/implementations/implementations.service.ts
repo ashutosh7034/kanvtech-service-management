@@ -1232,4 +1232,39 @@ export class ImplementationsService {
       activeProjects: inProgress + configuration + testing + readyForGoLive + planning,
     };
   }
+
+  async deleteImplementation(id: string, actorUserId: number, tenantId?: string) {
+    const imp = await this.prisma.implementation.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+      include: { tasks: true, company: true, product: true },
+    });
+    if (!imp) throw new NotFoundException('Implementation project not found');
+
+    const empTaskIds = imp.tasks.map((t) => t.employeeTaskId).filter(Boolean) as string[];
+
+    if (empTaskIds.length > 0) {
+      await this.prisma.employeeTask.deleteMany({
+        where: { id: { in: empTaskIds } },
+      });
+    }
+
+    await this.prisma.implementation.delete({
+      where: { id },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'IMPLEMENTATION_DELETED',
+      entityType: 'IMPLEMENTATION',
+      entityId: id,
+      oldValues: {
+        id,
+        companyName: imp.company?.companyName,
+        productName: imp.product?.name,
+        status: imp.status,
+      },
+    });
+
+    return { success: true, message: `Implementation project '${id}' deleted successfully.` };
+  }
 }

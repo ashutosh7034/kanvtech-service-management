@@ -27,6 +27,7 @@ import { TaskRemindersPage } from './pages-components/task-reminders/TaskReminde
 import { ChatPage } from './pages-components/chat/ChatPage';
 import { EmailVerificationPage } from './pages-components/email-verification/EmailVerificationPage';
 import { PlatformAdminPage } from './pages-components/platform/PlatformAdminPage';
+import { EmployeePermissionsPage } from './pages-components/permissions/EmployeePermissionsPage';
 export interface AppProps {
   initialView?: string;
 }
@@ -38,6 +39,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
     if (initialView) return initialView;
     if (typeof window !== 'undefined') {
       const path = window.location.pathname.replace(/^\//, '');
+      if (path === 'tenant/employee-permissions' || path === 'employee-permissions' || path === 'employee_permissions') return 'employee_permissions';
       if (path === 'platform' || path === 'platform-admin' || path === 'platform_admin') return 'platform_admin';
       if (path === 'companies' || path === 'customers') return 'companies';
       if (path === 'departments') return 'departments';
@@ -113,6 +115,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
         audit_logs: '/audit-logs',
         customer_mobile: '/customer-mobile',
         employee_mobile: '/employee-mobile',
+        employee_permissions: '/tenant/employee-permissions',
         platform_admin: '/platform',
       };
       const newPath = pathToViewMap[view] || '/dashboard';
@@ -126,6 +129,8 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
     switch (currentView) {
       case 'platform_admin':
         return 'Platform Administration • Multi-Tenant Control';
+      case 'employee_permissions':
+        return 'Employee Permission Management';
       case 'dashboard':
         return 'Operations Dashboard';
       case 'companies':
@@ -184,31 +189,41 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
     }
     if (userRole === 'ADMIN' || userRole === 'SUPER_ADMIN') return true;
     switch (view) {
+      case 'employee_permissions':
+        return (user?.effectivePermissions || []).includes('employee.assign_permissions');
       case 'dashboard':
       case 'tickets':
       case 'tickets_create':
       case 'ticket_detail':
         return true;
       case 'companies':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('company.view');
       case 'departments':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('department.view');
       case 'employees':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('employee.view');
       case 'approvals':
-      case 'reports':
       case 'import':
       case 'task_allotment':
-      case 'products':
-      case 'implementations':
       case 'prospects':
-      case 'maintenance':
         return userRole === 'MANAGER';
+      case 'products':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('product.view');
+      case 'implementations':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('implementation.view');
+      case 'maintenance':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('amc.view');
+      case 'reports':
+        return userRole === 'MANAGER' || (user?.effectivePermissions || []).includes('reports.view');
       case 'task_reminders':
       case 'chat':
         return userRole !== 'CUSTOMER';
       case 'escalations':
         return ['MANAGER', 'L2_EMPLOYEE', 'L3_EMPLOYEE'].includes(userRole);
       case 'sla_settings':
+        return (user?.effectivePermissions || []).includes('sla.view') || (user?.effectivePermissions || []).includes('sla.manage');
       case 'audit_logs':
-        return false;
+        return (user?.effectivePermissions || []).includes('audit_logs.view');
       case 'customer_mobile':
         return true;
       case 'employee_mobile':
@@ -237,6 +252,7 @@ export const App: React.FC<AppProps> = ({ initialView }) => {
       ) : (
         <>
           {currentView === 'platform_admin' && <PlatformAdminPage />}
+          {currentView === 'employee_permissions' && <EmployeePermissionsPage />}
           {currentView === 'dashboard' && <DashboardPage onNavigate={navigateTo} />}
           {currentView === 'companies' && <CompaniesPage onNavigateTicket={(id) => navigateTo('ticket_detail', id)} />}
           {currentView === 'departments' && <DepartmentsPage />}

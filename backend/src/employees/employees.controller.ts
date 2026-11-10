@@ -12,12 +12,14 @@ import {
   Request,
   BadRequestException,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 import { UserRole } from '@prisma/client';
 
 @ApiTags('Employees')
@@ -29,6 +31,7 @@ export class EmployeesController {
 
   @Get()
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('employee.view')
   @ApiOperation({ summary: 'List employees filtered by level, department, or status' })
   async getEmployees(@Query() query: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
@@ -74,6 +77,7 @@ export class EmployeesController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('employee.create')
   @ApiOperation({ summary: 'Create a new employee profile and credentials' })
   async createEmployee(@Body() body: any, @Request() req: any) {
     const tenantId = req.user.tenantId;
@@ -90,6 +94,7 @@ export class EmployeesController {
 
   @Put(':id')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('employee.update')
   @ApiOperation({ summary: 'Update employee profile and availability' })
   async updateEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const actor = {
@@ -104,6 +109,7 @@ export class EmployeesController {
   @Post(':id/promote')
   @Patch(':id/promote')
   @Roles('ADMIN')
+  @RequirePermissions('employee.update')
   @ApiOperation({ summary: 'Promote employee to a specific tier or next tier' })
   async promoteEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const actor = {
@@ -118,6 +124,7 @@ export class EmployeesController {
   @Post(':id/demote')
   @Patch(':id/demote')
   @Roles('ADMIN')
+  @RequirePermissions('employee.update')
   @ApiOperation({ summary: 'Demote employee to a specific tier or lower tier' })
   async demoteEmployee(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const actor = {
@@ -139,12 +146,38 @@ export class EmployeesController {
       role: req.user?.role as UserRole,
     };
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+
+    // Verify dynamic activate vs deactivate permission for non-admins
+    const isSuperOrAdmin =
+      req.user.role === 'ADMIN' ||
+      req.user.role === 'SUPER_ADMIN' ||
+      req.user.role === 'PLATFORM_INCHARGE' ||
+      req.user.isPlatformIncharge;
+
+    if (!isSuperOrAdmin) {
+      const targetEmp = await this.employeesService.getEmployeeById(id, tenantId);
+      if (!targetEmp) {
+        throw new NotFoundException('Employee not found');
+      }
+      const userPerms = req.user.effectivePermissions || [];
+      if (targetEmp.status === 'ACTIVE') {
+        if (!userPerms.includes('employee.deactivate')) {
+          throw new ForbiddenException("Access denied. You lack the required permission: 'employee.deactivate'");
+        }
+      } else {
+        if (!userPerms.includes('employee.activate')) {
+          throw new ForbiddenException("Access denied. You lack the required permission: 'employee.activate'");
+        }
+      }
+    }
+
     const updated = await this.employeesService.toggleEmployeeStatus(id, actor, tenantId);
     return { success: true, employee: updated, message: `Employee status set to ${updated?.status}` };
   }
 
   @Delete(':id')
   @Roles('ADMIN')
+  @RequirePermissions('employee.delete')
   @ApiOperation({ summary: 'Deactivate / delete employee profile' })
   async deleteEmployee(@Param('id') id: string, @Request() req: any) {
     const actor = {

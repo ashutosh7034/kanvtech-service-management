@@ -13,6 +13,7 @@ import { AssignmentsService } from './assignments.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Task Allotment')
 @ApiBearerAuth()
@@ -22,7 +23,8 @@ export class AssignmentsController {
   constructor(private readonly assignmentsService: AssignmentsService) {}
 
   @Get('queue')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('ticket.assign')
   @ApiOperation({ summary: 'Get active ticket queue for task allotment' })
   async getQueue(@Query() query: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin && query.tenantId ? query.tenantId : req.user.tenantId || 'KANVTECH';
@@ -39,7 +41,8 @@ export class AssignmentsController {
   }
 
   @Get('eligible-employees')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('ticket.assign')
   @ApiOperation({ summary: 'Get active eligible employees with current workload' })
   async getEligibleEmployees(@Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
@@ -48,7 +51,8 @@ export class AssignmentsController {
   }
 
   @Get('stats')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('ticket.assign')
   @ApiOperation({ summary: 'Get task allotment summary stats' })
   async getStats(@Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
@@ -57,7 +61,8 @@ export class AssignmentsController {
   }
 
   @Post('assign')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('ticket.assign')
   @ApiOperation({ summary: 'Direct task allotment or reassignment to employee' })
   async assignTicket(@Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';

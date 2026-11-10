@@ -21,6 +21,7 @@ import {
   Mail,
   Bell,
   X,
+  KeyRound,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { BrandLogo } from '../common/BrandLogo';
@@ -33,7 +34,7 @@ interface Props {
 }
 
 export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile = false, onCloseMobile }) => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const role = user?.role || 'CUSTOMER';
 
   const isAccessible = (allowed: string[]) => {
@@ -120,7 +121,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </button>
         )}
 
-        {isAccessible(['MANAGER']) && (
+        {(isAccessible(['MANAGER']) || hasPermission('company.view')) && (
           <button
             className={`nav-item ${currentView === 'companies' ? 'active' : ''}`}
             onClick={() => handleNav('companies')}
@@ -140,7 +141,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </button>
         )}
 
-        {isAccessible(['MANAGER']) && (
+        {(isAccessible(['MANAGER']) || hasPermission('department.view')) && (
           <button
             className={`nav-item ${currentView === 'departments' ? 'active' : ''}`}
             onClick={() => handleNav('departments')}
@@ -150,7 +151,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </button>
         )}
 
-        {isAccessible(['MANAGER']) && (
+        {(isAccessible(['MANAGER']) || hasPermission('employee.view')) && (
           <button
             className={`nav-item ${currentView === 'employees' ? 'active' : ''}`}
             onClick={() => handleNav('employees')}
@@ -198,7 +199,7 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </button>
         )}
 
-        {isAccessible(['MANAGER']) && (
+        {(isAccessible(['MANAGER']) || hasPermission('reports.view')) && (
           <button
             className={`nav-item ${currentView === 'reports' ? 'active' : ''}`}
             onClick={() => handleNav('reports')}
@@ -208,67 +209,89 @@ export const Sidebar: React.FC<Props> = ({ currentView, onNavigate, isOpenMobile
           </button>
         )}
 
-        {isAccessible(['MANAGER']) && (
+        {(isAccessible(['MANAGER']) || hasPermission('product.view') || hasPermission('implementation.view') || hasPermission('amc.view')) && (
           <>
             <div className="nav-section-title" style={{ marginTop: 10 }}>Business Management</div>
 
-            <button
-              className={`nav-item ${currentView === 'products' ? 'active' : ''}`}
-              onClick={() => handleNav('products')}
-            >
-              <Package size={16} />
-              <span>Product Master</span>
-            </button>
+            {(isAccessible(['MANAGER']) || hasPermission('product.view')) && (
+              <button
+                className={`nav-item ${currentView === 'products' ? 'active' : ''}`}
+                onClick={() => handleNav('products')}
+              >
+                <Package size={16} />
+                <span>Product Master</span>
+              </button>
+            )}
 
-            <button
-              className={`nav-item ${currentView === 'implementations' ? 'active' : ''}`}
-              onClick={() => handleNav('implementations')}
-            >
-              <Rocket size={16} />
-              <span>New Implementations</span>
-            </button>
+            {(isAccessible(['MANAGER']) || hasPermission('implementation.view')) && (
+              <button
+                className={`nav-item ${currentView === 'implementations' ? 'active' : ''}`}
+                onClick={() => handleNav('implementations')}
+              >
+                <Rocket size={16} />
+                <span>New Implementations</span>
+              </button>
+            )}
 
-            <button
-              className={`nav-item ${currentView === 'maintenance' ? 'active' : ''}`}
-              onClick={() => handleNav('maintenance')}
-            >
-              <ShieldCheck size={16} />
-              <span>Annual Maintenance</span>
-            </button>
+            {(isAccessible(['MANAGER']) || hasPermission('amc.view')) && (
+              <button
+                className={`nav-item ${currentView === 'maintenance' ? 'active' : ''}`}
+                onClick={() => handleNav('maintenance')}
+              >
+                <ShieldCheck size={16} />
+                <span>Annual Maintenance</span>
+              </button>
+            )}
           </>
         )}
 
-        {isAccessible(['MANAGER']) && (
+        {(role === 'ADMIN' || role === 'SUPER_ADMIN' || isAccessible(['MANAGER']) || hasPermission('employee.assign_permissions')) && (
           <>
             <div className="nav-section-title" style={{ marginTop: 10 }}>Administration</div>
 
-            <button
-              className={`nav-item ${currentView === 'import' ? 'active' : ''}`}
-              onClick={() => handleNav('import')}
-            >
-              <FileSpreadsheet size={16} />
-              <span>Import & Export Data</span>
-            </button>
+            {(role === 'ADMIN' || role === 'SUPER_ADMIN' || hasPermission('employee.assign_permissions')) && (
+              <button
+                className={`nav-item ${currentView === 'employee_permissions' ? 'active' : ''}`}
+                onClick={() => handleNav('employee_permissions')}
+              >
+                <KeyRound size={16} />
+                <span>Employee Permissions</span>
+              </button>
+            )}
+
+            {isAccessible(['MANAGER']) && (
+              <button
+                className={`nav-item ${currentView === 'import' ? 'active' : ''}`}
+                onClick={() => handleNav('import')}
+              >
+                <FileSpreadsheet size={16} />
+                <span>Import & Export Data</span>
+              </button>
+            )}
           </>
         )}
 
-        {(role === 'ADMIN' || role === 'SUPER_ADMIN') && (
+        {(role === 'ADMIN' || role === 'SUPER_ADMIN' || hasPermission('sla.view') || hasPermission('audit_logs.view')) && (
           <>
-            <button
-              className={`nav-item ${currentView === 'sla_settings' ? 'active' : ''}`}
-              onClick={() => handleNav('sla_settings')}
-            >
-              <Settings size={16} />
-              <span>System & SLA Settings</span>
-            </button>
+            {(role === 'ADMIN' || role === 'SUPER_ADMIN' || hasPermission('sla.view')) && (
+              <button
+                className={`nav-item ${currentView === 'sla_settings' ? 'active' : ''}`}
+                onClick={() => handleNav('sla_settings')}
+              >
+                <Settings size={16} />
+                <span>System & SLA Settings</span>
+              </button>
+            )}
 
-            <button
-              className={`nav-item ${currentView === 'audit_logs' ? 'active' : ''}`}
-              onClick={() => handleNav('audit_logs')}
-            >
-              <ShieldAlert size={16} />
-              <span>Audit Logs</span>
-            </button>
+            {(role === 'ADMIN' || role === 'SUPER_ADMIN' || hasPermission('audit_logs.view')) && (
+              <button
+                className={`nav-item ${currentView === 'audit_logs' ? 'active' : ''}`}
+                onClick={() => handleNav('audit_logs')}
+              >
+                <ShieldAlert size={16} />
+                <span>Audit Logs</span>
+              </button>
+            )}
           </>
         )}
 

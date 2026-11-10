@@ -506,4 +506,32 @@ export class SubscriptionsService {
       renewed,
     };
   }
+
+  async deleteSubscription(id: string, actorUserId: number, tenantId?: string) {
+    const sub = await this.prisma.subscription.findFirst({
+      where: { id, ...(tenantId ? { tenantId } : {}) },
+      include: { company: true, product: true },
+    });
+    if (!sub) throw new NotFoundException('Subscription not found');
+
+    await this.prisma.subscription.delete({
+      where: { id },
+    });
+
+    await this.auditService.log({
+      actorUserId,
+      action: 'SUBSCRIPTION_DELETED',
+      entityType: 'SUBSCRIPTION',
+      entityId: id,
+      oldValues: {
+        id,
+        companyName: sub.company?.companyName,
+        productName: sub.product?.name,
+        planName: sub.planName,
+        status: sub.status,
+      },
+    });
+
+    return { success: true, message: `Subscription '${id}' deleted successfully.` };
+  }
 }

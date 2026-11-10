@@ -11,6 +11,7 @@ interface AuthContextType {
   login: (email: string, passwordPlain: string, rememberMe?: boolean, selectedTenantId?: string) => Promise<any>;
   switchTenant: (tenantId: string) => Promise<void>;
   logout: () => Promise<void>;
+  hasPermission: (permissionCode: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -83,6 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           employeeId: res.user.employeeId || res.user.employee?.id,
           companyId: res.user.companyId || res.user.companyContact?.companyId,
           contactId: res.user.contactId || res.user.companyContact?.id,
+          effectivePermissions: res.user.effectivePermissions || res.user.permissions || [],
         };
         setUser(userData);
         if (typeof window !== 'undefined') {
@@ -193,6 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         employeeId: res.user.employeeId,
         companyId: res.user.companyId,
         contactId: res.user.contactId,
+        effectivePermissions: res.user.effectivePermissions || res.user.permissions || [],
       };
 
       if (typeof window !== 'undefined') {
@@ -227,6 +230,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         tenantId: res.user.tenantId,
         tenantName: res.user.tenantName,
         role: res.user.role,
+        effectivePermissions: res.user.effectivePermissions || res.user.permissions || [],
       };
       if (typeof window !== 'undefined') {
         if (isRemembered) {
@@ -243,6 +247,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         window.location.reload();
       }
     }
+  };
+
+  const hasPermission = (permissionCode: string): boolean => {
+    if (!user) return false;
+    if (user.role === 'PLATFORM_INCHARGE' || user.isPlatformIncharge) return true;
+    if (user.role === 'SUPER_ADMIN' || user.role === 'ADMIN') return true;
+    return (user.effectivePermissions || []).includes(permissionCode);
   };
 
   const logout = async () => {
@@ -264,7 +275,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, switchTenant, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, switchTenant, logout, hasPermission }}>
       <NotificationProvider>
         {children}
       </NotificationProvider>

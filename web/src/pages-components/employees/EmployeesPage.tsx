@@ -7,8 +7,13 @@ import { isValidEmail, isValidPhone, validatePhoneDetailed } from '../../utils/v
 import { PhoneInput } from '../../components/common/PhoneInput';
 
 export const EmployeesPage: React.FC = () => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
+  const { user, hasPermission } = useAuth();
+  const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN';
+  const canCreateEmployee = isAdmin || hasPermission('employee.create');
+  const canUpdateEmployee = isAdmin || hasPermission('employee.update');
+  const canDeleteEmployee = isAdmin || hasPermission('employee.delete');
+  const canActivateEmployee = isAdmin || hasPermission('employee.activate');
+  const hasAnyEmployeeAction = isAdmin || canUpdateEmployee || canDeleteEmployee || canActivateEmployee;
 
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -372,9 +377,11 @@ export const EmployeesPage: React.FC = () => {
               {levelMgmtEnabled ? 'Disable Promotions' : 'Enable Promotions'}
             </button>
           )}
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-            <Plus size={15} /> Add Specialist Employee
-          </button>
+          {canCreateEmployee && (
+            <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
+              <Plus size={15} /> Add Specialist Employee
+            </button>
+          )}
         </div>
       </div>
 
@@ -458,13 +465,13 @@ export const EmployeesPage: React.FC = () => {
               <th>Email & Phone</th>
               <th>Active Workload</th>
               <th>Availability</th>
-              {isAdmin && <th style={{ textAlign: 'right' }}>Actions</th>}
+              {hasAnyEmployeeAction && <th style={{ textAlign: 'right' }}>Actions</th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <td colSpan={isAdmin ? 9 : 8} style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>
+                <td colSpan={hasAnyEmployeeAction ? 9 : 8} style={{ textAlign: 'center', padding: 24, color: '#94a3b8' }}>
                   Loading employees...
                 </td>
               </tr>
@@ -587,19 +594,21 @@ export const EmployeesPage: React.FC = () => {
                       {emp.availability}
                     </span>
                   </td>
-                  {isAdmin && (
+                  {hasAnyEmployeeAction && (
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                         {/* Edit Employee Button */}
-                        <button
-                          className="btn btn-outline btn-xs"
-                          style={{ borderColor: '#3b82f6', color: '#1d4ed8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                          onClick={() => handleOpenEdit(emp)}
-                          title={`Edit ${emp.name}'s profile`}
-                        >
-                          <Edit2 size={12} color="#2563eb" />
-                          <span>Edit</span>
-                        </button>
+                        {canUpdateEmployee && (
+                          <button
+                            className="btn btn-outline btn-xs"
+                            style={{ borderColor: '#3b82f6', color: '#1d4ed8', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                            onClick={() => handleOpenEdit(emp)}
+                            title={`Edit ${emp.name}'s profile`}
+                          >
+                            <Edit2 size={12} color="#2563eb" />
+                            <span>Edit</span>
+                          </button>
+                        )}
 
                         {/* Reset Password Button */}
                         <button
@@ -688,23 +697,25 @@ export const EmployeesPage: React.FC = () => {
                         )}
 
                         {/* Status Toggle (Deactivate / Activate) */}
-                        <button
-                          className="btn btn-outline btn-xs"
-                          style={{
-                            borderColor: emp.status === 'ACTIVE' ? '#f87171' : '#4ade80',
-                            color: emp.status === 'ACTIVE' ? '#b91c1c' : '#15803d',
-                            fontWeight: 600,
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 3,
-                          }}
-                          onClick={() => handleToggleStatus(emp)}
-                          disabled={actionLoadingId === emp.id}
-                          title={emp.status === 'ACTIVE' ? 'Deactivate Employee' : 'Activate Employee'}
-                        >
-                          <Power size={11} />
-                          <span>{emp.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
-                        </button>
+                        {canActivateEmployee && (
+                          <button
+                            className="btn btn-outline btn-xs"
+                            style={{
+                              borderColor: emp.status === 'ACTIVE' ? '#f87171' : '#4ade80',
+                              color: emp.status === 'ACTIVE' ? '#b91c1c' : '#15803d',
+                              fontWeight: 600,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                            }}
+                            onClick={() => handleToggleStatus(emp)}
+                            disabled={actionLoadingId === emp.id}
+                            title={emp.status === 'ACTIVE' ? 'Deactivate Employee' : 'Activate Employee'}
+                          >
+                            <Power size={11} />
+                            <span>{emp.status === 'ACTIVE' ? 'Deactivate' : 'Activate'}</span>
+                          </button>
+                        )}
                       </div>
                     </td>
                   )}

@@ -43,6 +43,7 @@ export interface User {
   employeeId?: string | null;
   companyId?: string | null;
   contactId?: number | null;
+  effectivePermissions?: string[];
 }
 
 export interface Ticket {

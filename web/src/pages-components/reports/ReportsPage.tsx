@@ -19,7 +19,8 @@ import {
 import { exportReportToExcel, exportReportToPdf } from '../../utils/reportExporter';
 
 export const ReportsPage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
+  const canExportReports = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN' || hasPermission('reports.export');
   const [resolutionByLevel, setResolutionByLevel] = useState<any[]>([]);
   const [workload, setWorkload] = useState<any[]>([]);
   const [escalations, setEscalations] = useState<any>(null);
@@ -130,6 +131,7 @@ export const ReportsPage: React.FC = () => {
         </div>
 
         {/* DOWNLOAD REPORT BUTTON & DROPDOWN */}
+        {canExportReports && (
         <div style={{ position: 'relative' }} ref={dropdownRef}>
           <button
             type="button"
@@ -228,6 +230,7 @@ export const ReportsPage: React.FC = () => {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* FEEDBACK TOAST / ALERT */}

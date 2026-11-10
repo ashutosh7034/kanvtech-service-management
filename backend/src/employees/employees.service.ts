@@ -473,8 +473,12 @@ export class EmployeesService {
       data.level === 'MANAGER' ||
       data.level === EmployeeLevel.MANAGER;
 
-    if (actorRole && actorRole === UserRole.MANAGER && requestedElevatedRole) {
-      throw new ForbiddenException('Managers are not permitted to create, promote, or assign the Manager or Super Admin role.');
+    if (actorRole && actorRole !== UserRole.ADMIN && requestedElevatedRole) {
+      throw new ForbiddenException('Non-admin accounts are not permitted to promote or assign the Manager or Tenant Admin role.');
+    }
+
+    if (actorRole && actorRole !== UserRole.ADMIN && (data.role !== undefined || data.level !== undefined)) {
+      throw new ForbiddenException('Only Tenant Admins are permitted to modify an employee role or seniority level.');
     }
 
     let departmentName = data.department !== undefined ? data.department.trim() : undefined;
@@ -935,8 +939,8 @@ export class EmployeesService {
       throw new ForbiddenException('Super Admin accounts cannot be deleted.');
     }
 
-    if (actorRole && actorRole !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only Super Admins can delete employee profiles.');
+    if (existing.userId && actorUserId && existing.userId === actorUserId) {
+      throw new ForbiddenException('You cannot delete or deactivate your own employee profile.');
     }
 
     const activeTickets = await this.prisma.ticket.count({

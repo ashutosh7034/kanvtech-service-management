@@ -17,6 +17,7 @@ import { CompaniesService } from './companies.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Companies')
 @ApiBearerAuth()
@@ -60,6 +61,7 @@ export class CompaniesController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('company.create')
   @ApiOperation({ summary: 'Create a new customer record' })
   async createCompany(@Body() body: any, @Request() req: any) {
     const tenantId = req.user.tenantId;
@@ -72,6 +74,7 @@ export class CompaniesController {
 
   @Put(':id')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('company.update')
   @ApiOperation({ summary: 'Update existing customer record' })
   async updateCompany(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
@@ -81,6 +84,7 @@ export class CompaniesController {
 
   @Post(':id/status')
   @Roles('ADMIN')
+  @RequirePermissions('company.update')
   @ApiOperation({ summary: 'Toggle customer active/inactive status' })
   async toggleStatus(@Param('id') id: string, @Body() body: { is_active?: boolean; isActive?: boolean }, @Request() req: any) {
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : Boolean(body.is_active);
@@ -89,10 +93,20 @@ export class CompaniesController {
     return { success: true, message: 'Customer status updated successfully' };
   }
 
+  @Delete(':id')
+  @Roles('ADMIN')
+  @RequirePermissions('company.delete')
+  @ApiOperation({ summary: 'Deactivate / delete customer record' })
+  async deleteCompany(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    return this.companiesService.deleteCompany(id, req.user?.id || req.user?.userId, tenantId);
+  }
+
   // --- Customer Products Endpoints ---
 
   @Post(':id/products')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('product.assign')
   @ApiOperation({ summary: 'Add a purchased product to customer' })
   async addProduct(@Param('id') id: string, @Body() body: { productId: string; notes?: string; purchaseType?: string; modules?: any[] }, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
@@ -102,6 +116,7 @@ export class CompaniesController {
 
   @Put(':id/products/:productId')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('product.assign')
   @ApiOperation({ summary: 'Update a customer product entitlement' })
   async updateProductEntitlement(
     @Param('id') id: string,

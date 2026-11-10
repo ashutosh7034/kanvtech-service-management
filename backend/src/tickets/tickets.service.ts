@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AssignmentsService } from '../assignments/assignments.service';
 import { SlaService } from '../sla/sla.service';
@@ -1032,5 +1032,37 @@ export class TicketsService {
       if (comp) return { companyId: comp.id, id: null };
     }
     return null;
+  }
+
+  async deleteTicket(id: string, actorUserId?: number, tenantId?: string) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id },
+      include: { company: true },
+    });
+    if (!ticket) throw new NotFoundException('Ticket not found');
+    if (tenantId && ticket.company?.tenantId !== tenantId) {
+      throw new ForbiddenException('Unauthorized ticket access');
+    }
+
+    await this.prisma.ticket.delete({
+      where: { id },
+    });
+
+    if (this.auditService) {
+      await this.auditService.log({
+        actorUserId: actorUserId || 1,
+        action: 'TICKET_DELETED',
+        entityType: 'TICKET',
+        entityId: id,
+        oldValues: {
+          id: ticket.id,
+          companyId: ticket.companyId,
+          problemType: ticket.problemType,
+          status: ticket.status,
+        },
+      });
+    }
+
+    return { success: true, message: `Ticket '${id}' has been permanently deleted.` };
   }
 }

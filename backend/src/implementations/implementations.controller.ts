@@ -17,6 +17,7 @@ import { ImplementationsService } from './implementations.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Implementations')
 @ApiBearerAuth()
@@ -81,6 +82,7 @@ export class ImplementationsController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('implementation.create')
   @ApiOperation({ summary: 'Create a new customer implementation project' })
   async createImplementation(@Body() body: any, @Request() req: any) {
     const imp = await this.implementationsService.createImplementation(body, req.user.userId || req.user.id, req.user?.tenantId);
@@ -89,6 +91,7 @@ export class ImplementationsController {
 
   @Put(':id')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('implementation.update')
   @ApiOperation({ summary: 'Update implementation status, milestones, or team progress' })
   async updateImplementation(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const imp = await this.implementationsService.updateImplementation(id, body, req.user.userId || req.user.id, req.user?.tenantId);
@@ -158,6 +161,14 @@ export class ImplementationsController {
   async reorderTasks(@Param('id') id: string, @Body() body: { taskIds: string[] }, @Request() req: any) {
     const tasks = await this.implementationsService.reorderTasks(id, body.taskIds || [], req.user.userId || req.user.id, req.user?.tenantId);
     return { success: true, tasks, message: 'Tasks reordered successfully' };
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @RequirePermissions('implementation.delete')
+  @ApiOperation({ summary: 'Delete implementation project' })
+  async deleteImplementation(@Param('id') id: string, @Request() req: any) {
+    return this.implementationsService.deleteImplementation(id, req.user.userId || req.user.id, req.user?.tenantId);
   }
 }
 

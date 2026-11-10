@@ -16,6 +16,7 @@ import { ProductsService } from './products.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Products')
 @ApiBearerAuth()
@@ -60,6 +61,7 @@ export class ProductsController {
 
   @Post()
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('product.create')
   @ApiOperation({ summary: 'Create a new product' })
   async createProduct(@Body() body: any, @Request() req: any) {
     const tenantId = req.user.tenantId;
@@ -72,6 +74,7 @@ export class ProductsController {
 
   @Put(':id')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('product.update')
   @ApiOperation({ summary: 'Update existing product details' })
   async updateProduct(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
@@ -81,6 +84,7 @@ export class ProductsController {
 
   @Post(':id/status')
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('product.update')
   @ApiOperation({ summary: 'Toggle product active/inactive status' })
   async toggleStatus(
     @Param('id') id: string,
@@ -95,6 +99,7 @@ export class ProductsController {
 
   @Delete(':id')
   @Roles('ADMIN')
+  @RequirePermissions('product.delete')
   @ApiOperation({ summary: 'Delete a product' })
   async deleteProduct(@Param('id') id: string, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';

@@ -19,6 +19,7 @@ import { ResolveInboundEmailDto } from './dto/inbound-email.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
 @ApiTags('Inbound Email Engine')
 @Controller('inbound-email')
@@ -77,6 +78,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER')
+  @RequirePermissions('configuration.view')
   @ApiOperation({ summary: 'Get Inbound Email Engine Settings & Metrics' })
   async getSettings() {
     return this.inboundEmailService.getSettings();
@@ -86,6 +88,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
+  @RequirePermissions('configuration.manage')
   @ApiOperation({ summary: 'Update Inbound Email Engine Settings' })
   async updateSettings(@Body() dto: any) {
     return this.inboundEmailService.updateSettings(dto);
@@ -95,6 +98,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER')
+  @RequirePermissions('configuration.view')
   @ApiOperation({ summary: 'List Inbound Email Processing Logs' })
   async getLogs(
     @Query('page') page?: string,
@@ -114,6 +118,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('configuration.view')
   @ApiOperation({ summary: 'Get Single Inbound Email Log' })
   async getLogById(@Param('id') id: string) {
     return this.inboundEmailService.getLogById(parseInt(id, 10));
@@ -123,6 +128,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('configuration.manage')
   @ApiOperation({ summary: 'Retry Processing for a Log' })
   async retryLog(@Param('id') id: string, @Req() req: any) {
     return this.inboundEmailService.retryLog(parseInt(id, 10), req.user?.id);
@@ -132,6 +138,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'MANAGER')
+  @RequirePermissions('configuration.manage')
   @ApiOperation({ summary: 'Manually Resolve / Create Ticket from Pending Inbound Email' })
   async resolveLog(
     @Param('id') id: string,
@@ -145,6 +152,7 @@ export class InboundEmailController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SUPER_ADMIN', 'ADMIN')
+  @RequirePermissions('configuration.manage')
   @ApiOperation({ summary: 'Simulate Inbound Email Processing' })
   async simulateEmail(@Body() payload: any) {
     return this.inboundEmailService.processInboundEmail(payload, 'GENERIC', {

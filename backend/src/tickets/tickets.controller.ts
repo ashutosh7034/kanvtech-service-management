@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Delete,
   Body,
   Param,
   Query,
@@ -23,6 +24,7 @@ import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 import { CustomerSanitizerInterceptor } from '../common/interceptors/customer-sanitizer.interceptor';
 import { TicketLevel, CommentType } from '@prisma/client';
 
@@ -119,6 +121,8 @@ export class TicketsController {
   }
 
   @Post()
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE', 'CUSTOMER')
+  @RequirePermissions('ticket.create')
   @ApiOperation({ summary: 'Open a new support ticket' })
   async createTicket(@Body() body: any, @Request() req: any) {
     const tenantId = req.user.tenantId;
@@ -289,7 +293,8 @@ export class TicketsController {
   }
 
   @Post(':id/reopen')
-  @Roles('ADMIN', 'MANAGER', 'CUSTOMER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE', 'CUSTOMER')
+  @RequirePermissions('ticket.reopen')
   @ApiOperation({ summary: 'Customer or Manager reopens ticket sending back to active support workflow' })
   async reopenTicket(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId;
@@ -333,7 +338,8 @@ export class TicketsController {
   }
 
   @Post(':id/close')
-  @Roles('ADMIN', 'MANAGER', 'CUSTOMER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE', 'CUSTOMER')
+  @RequirePermissions('ticket.close')
   @ApiOperation({ summary: 'Explicit ticket closure by customer, manager or admin' })
   async closeTicket(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId;
@@ -430,5 +436,14 @@ export class TicketsController {
       uploadedByUserId: req.user.userId,
     });
     return { success: true, attachment: uploaded };
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @RequirePermissions('ticket.delete')
+  @ApiOperation({ summary: 'Delete a ticket (Admin or permitted role only)' })
+  async deleteTicket(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId;
+    return this.ticketsService.deleteTicket(id, req.user.userId || req.user.id, tenantId);
   }
 }
