@@ -269,6 +269,10 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
   const [extensionReason, setExtensionReason] = useState('');
   const [submittingExtension, setSubmittingExtension] = useState(false);
 
+  // Extension Review Decision
+  const [extensionDecisionComment, setExtensionDecisionComment] = useState('');
+  const [submittingExtensionDecision, setSubmittingExtensionDecision] = useState(false);
+
   // Cancellation modal
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
@@ -639,6 +643,32 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
       showToast(`Extension request failed: ${err.message}`, 'danger');
     } finally {
       setSubmittingExtension(false);
+    }
+  };
+
+  // Decide Extension Request (Assignor / Admin action)
+  const handleDecideExtension = async (action: 'APPROVE' | 'REJECT') => {
+    if (!viewingTask) return;
+    setSubmittingExtensionDecision(true);
+    try {
+      const res = await api.decideTaskExtension(viewingTask.id, {
+        action,
+        decisionComment: extensionDecisionComment.trim() || undefined,
+      });
+      if (res.task) {
+        setViewingTask(res.task);
+        setViewingActivities(res.task.activities || []);
+        setExtensionDecisionComment('');
+        showToast(
+          action === 'APPROVE' ? 'Deadline extension approved!' : 'Deadline extension rejected.',
+          action === 'APPROVE' ? 'success' : 'info',
+        );
+        loadTasks();
+      }
+    } catch (err: any) {
+      showToast(`Decision failed: ${err.message}`, 'danger');
+    } finally {
+      setSubmittingExtensionDecision(false);
     }
   };
 
@@ -1875,6 +1905,102 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
                 </div>
               </div>
 
+              {/* Pending Deadline Extension Request Banner / Review Section */}
+              {viewingTask.extension_requested_at && (() => {
+                const isAssignee =
+                  viewingTask.assigned_to === user?.employeeId ||
+                  (user as any)?.employee?.id === viewingTask.assigned_to ||
+                  (!!user?.email && viewingTask.assignee_email === user.email);
+                const isAssignor =
+                  viewingTask.created_by === user?.employeeId ||
+                  (user as any)?.employee?.id === viewingTask.created_by ||
+                  (!!user?.email && viewingTask.creator_email === user.email);
+                const isTenantAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+                const canReview = (isAssignor || isTenantAdmin) && !isAssignee;
+
+                return (
+                  <div
+                    style={{
+                      padding: 16,
+                      background: '#fffbeb',
+                      borderRadius: 8,
+                      border: '1px solid #fde68a',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#92400e', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Clock size={16} color="#d97706" /> Pending Deadline Extension Request
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 12, background: '#fef3c7', color: '#b45309' }}>
+                        Awaiting Review
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: 12, color: '#78350f', lineHeight: 1.6 }}>
+                      <div>
+                        <strong>Proposed Deadline:</strong>{' '}
+                        <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                          {formatDate(viewingTask.extension_requested_date)}
+                        </span>
+                      </div>
+                      <div>
+                        <strong>Reason:</strong> {viewingTask.extension_reason || 'No reason specified'}
+                      </div>
+                      <div style={{ fontSize: 11, color: '#a16207', marginTop: 4 }}>
+                        Requested on {new Date(viewingTask.extension_requested_at).toLocaleString()} by {viewingTask.assignee_name || 'Assignee'}
+                      </div>
+                    </div>
+
+                    {/* Review Controls for Assignor / Admin */}
+                    {canReview && (
+                      <div style={{ borderTop: '1px solid #fef08a', paddingTop: 12, marginTop: 10 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#92400e', marginBottom: 6 }}>
+                          Review Decision:
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Decision comment (optional)..."
+                            value={extensionDecisionComment}
+                            onChange={(e) => setExtensionDecisionComment(e.target.value)}
+                            style={{ fontSize: 12 }}
+                            disabled={submittingExtensionDecision}
+                          />
+                        </div>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={() => handleDecideExtension('APPROVE')}
+                            disabled={submittingExtensionDecision}
+                            style={{ background: '#16a34a', color: '#ffffff', border: 'none', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}
+                          >
+                            <Check size={14} /> Approve Extension
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            onClick={() => handleDecideExtension('REJECT')}
+                            disabled={submittingExtensionDecision}
+                            style={{ background: '#ffffff', color: '#dc2626', border: '1px solid #dc2626', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}
+                          >
+                            <X size={14} /> Reject Extension
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Assignee Notice */}
+                    {isAssignee && !canReview && (
+                      <div style={{ fontSize: 11, color: '#b45309', fontStyle: 'italic', marginTop: 6 }}>
+                        Your extension request is currently under review by {viewingTask.creator_name || 'Assignor'}.
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Description */}
               {viewingTask.description && (
                 <div style={{ padding: 14, background: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0' }}>
@@ -1923,9 +2049,8 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
                 const isAssignee =
                   viewingTask.assigned_to === user?.employeeId ||
                   (user as any)?.employee?.id === viewingTask.assigned_to ||
-                  viewingTask.assignee_email === user?.email;
-                const isTenantAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
-                const canEditProgress = isAssignee || isTenantAdmin;
+                  (!!user?.email && viewingTask.assignee_email === user.email);
+                const canEditProgress = isAssignee;
 
                 return (
                   <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
@@ -1968,7 +2093,7 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
                           <div style={{ width: `${progressVal}%`, height: '100%', background: '#0284c7', transition: 'width 0.3s ease' }} />
                         </div>
                         <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, fontStyle: 'italic' }}>
-                          Progress updates are managed by the assigned team member ({viewingTask.assignee_name || 'Assignee'}) or Tenant Administrator.
+                          Progress updates are managed exclusively by the assigned team member ({viewingTask.assignee_name || 'Assignee'}).
                         </div>
                       </div>
                     )}
@@ -2027,79 +2152,104 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
             </div>
 
             {/* Footer with Actions */}
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: '14px 24px',
-                borderTop: '1px solid #e2e8f0',
-                background: '#f8fafc',
-              }}
-            >
-              <div style={{ display: 'flex', gap: 8 }}>
-                {viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => handleMarkCompleted(viewingTask)}
-                    style={{ background: '#16a34a', borderColor: '#16a34a', display: 'flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <Check size={14} /> Mark Completed
-                  </button>
-                )}
+            {(() => {
+              const isAssignee =
+                viewingTask.assigned_to === user?.employeeId ||
+                (user as any)?.employee?.id === viewingTask.assigned_to ||
+                (!!user?.email && viewingTask.assignee_email === user.email);
 
-                {/* Assignor: Send Follow-up Reminder */}
-                {viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => setShowReminderPrompt(true)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
-                  >
-                    <Bell size={14} color="#d97706" /> Send Reminder
-                  </button>
-                )}
+              const isAssignor =
+                viewingTask.created_by === user?.employeeId ||
+                (user as any)?.employee?.id === viewingTask.created_by ||
+                (!!user?.email && viewingTask.creator_email === user.email);
 
-                {/* Assignee: Request Extension */}
-                {viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => setShowExtensionModal(true)}
-                  >
-                    Request Extension
-                  </button>
-                )}
+              const isTenantAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
 
-                {/* Reopen if completed */}
-                {viewingTask.status === 'COMPLETED' && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => handleReopenTask(viewingTask)}
-                  >
-                    <RotateCcw size={14} style={{ marginRight: 4 }} /> Reopen Task
-                  </button>
-                )}
+              const canMarkCompleted = isAssignee;
+              const hasPendingExtension = !!viewingTask.extension_requested_at;
+              const canRequestExtension = isAssignee && !hasPendingExtension;
+              const canSendReminder = (isAssignor || isTenantAdmin) && !isAssignee;
+              const canCancelTask = isAssignor || isTenantAdmin;
+              const canReopenTask = isAssignor || isTenantAdmin;
 
-                {/* Cancel Task */}
-                {viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={() => setShowCancelModal(true)}
-                    style={{ color: '#dc2626' }}
-                  >
-                    Cancel Task
-                  </button>
-                )}
-              </div>
+              return (
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '14px 24px',
+                    borderTop: '1px solid #e2e8f0',
+                    background: '#f8fafc',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {/* Assignee: Mark Completed */}
+                    {canMarkCompleted && viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
+                      <button
+                        type="button"
+                        className="btn btn-primary"
+                        onClick={() => handleMarkCompleted(viewingTask)}
+                        style={{ background: '#16a34a', borderColor: '#16a34a', display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Check size={14} /> Mark Completed
+                      </button>
+                    )}
 
-              <button type="button" className="btn btn-secondary" onClick={() => setViewingTask(null)}>
-                Close
-              </button>
-            </div>
+                    {/* Assignor / Admin: Send Follow-up Reminder */}
+                    {canSendReminder && viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => setShowReminderPrompt(true)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Bell size={14} color="#d97706" /> Send Reminder
+                      </button>
+                    )}
+
+                    {/* Assignee: Request Extension */}
+                    {canRequestExtension && viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => setShowExtensionModal(true)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                      >
+                        <Clock size={14} /> Request Extension
+                      </button>
+                    )}
+
+                    {/* Reopen if completed */}
+                    {canReopenTask && viewingTask.status === 'COMPLETED' && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => handleReopenTask(viewingTask)}
+                      >
+                        <RotateCcw size={14} style={{ marginRight: 4 }} /> Reopen Task
+                      </button>
+                    )}
+
+                    {/* Cancel Task */}
+                    {canCancelTask && viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        onClick={() => setShowCancelModal(true)}
+                        style={{ color: '#dc2626' }}
+                      >
+                        Cancel Task
+                      </button>
+                    )}
+                  </div>
+
+                  <button type="button" className="btn btn-secondary" onClick={() => setViewingTask(null)}>
+                    Close
+                  </button>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

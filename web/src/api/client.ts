@@ -427,6 +427,12 @@ export const api = {
     request(`/employee-tasks/${id}/send-reminder`, { method: 'POST', body: JSON.stringify({ message }) }),
   requestTaskExtension: (id: string, data: { proposedDate: string; reason: string }) =>
     request(`/employee-tasks/${id}/request-extension`, { method: 'POST', body: JSON.stringify(data) }),
+  decideTaskExtension: (id: string, data: { action: 'APPROVE' | 'REJECT'; decisionComment?: string }) =>
+    request(`/employee-tasks/${id}/decide-extension`, { method: 'POST', body: JSON.stringify(data) }),
+  approveTaskExtension: (id: string, decisionComment?: string) =>
+    request(`/employee-tasks/${id}/approve-extension`, { method: 'POST', body: JSON.stringify({ decisionComment }) }),
+  rejectTaskExtension: (id: string, decisionComment?: string) =>
+    request(`/employee-tasks/${id}/reject-extension`, { method: 'POST', body: JSON.stringify({ decisionComment }) }),
   addTaskComment: (id: string, comment: string) =>
     request(`/employee-tasks/${id}/comments`, { method: 'POST', body: JSON.stringify({ comment }) }),
   cancelTask: (id: string, reason?: string) =>

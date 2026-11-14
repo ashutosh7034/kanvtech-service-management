@@ -292,6 +292,76 @@ export class EmployeeTasksController {
     return { success: true, task, message: 'Extension requested successfully.' };
   }
 
+  @Post(':id/decide-extension')
+  @ApiOperation({ summary: 'Assignor or Administrator decides (approves/rejects) deadline extension' })
+  async decideExtension(
+    @Param('id') id: string,
+    @Body() body: { action: 'APPROVE' | 'REJECT'; decisionComment?: string },
+    @Request() req: any,
+  ) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.decideExtension(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body,
+      req.user,
+    );
+    return {
+      success: true,
+      task,
+      message: body.action === 'APPROVE' ? 'Deadline extension approved.' : 'Deadline extension rejected.',
+    };
+  }
+
+  @Post(':id/approve-extension')
+  @ApiOperation({ summary: 'Assignor approves deadline extension' })
+  async approveExtension(
+    @Param('id') id: string,
+    @Body() body: { decisionComment?: string },
+    @Request() req: any,
+  ) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.decideExtension(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      { action: 'APPROVE', decisionComment: body?.decisionComment },
+      req.user,
+    );
+    return { success: true, task, message: 'Deadline extension approved.' };
+  }
+
+  @Post(':id/reject-extension')
+  @ApiOperation({ summary: 'Assignor rejects deadline extension' })
+  async rejectExtension(
+    @Param('id') id: string,
+    @Body() body: { decisionComment?: string },
+    @Request() req: any,
+  ) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.decideExtension(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      { action: 'REJECT', decisionComment: body?.decisionComment },
+      req.user,
+    );
+    return { success: true, task, message: 'Deadline extension rejected.' };
+  }
+
   @Post(':id/comments')
   @ApiOperation({ summary: 'Add discussion comment to task' })
   async addComment(@Param('id') id: string, @Body() body: { comment: string }, @Request() req: any) {

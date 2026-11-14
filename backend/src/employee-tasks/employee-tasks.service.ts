@@ -684,15 +684,13 @@ export class EmployeeTasksService {
       task.tenantId === effectiveUserTenant;
 
     // Authorization evaluation:
-    // 1. Assignee can update progress.
-    // 2. Tenant Super Admin can manage tasks within their own tenant.
-    // 3. Assignor (if distinct from assignee) is explicitly rejected from modifying assignee progress.
-    // 4. Other employees are rejected.
-    if (!isAssignee && !isTenantAdmin) {
+    // Only the assigned employee can update task progress!
+    // Assignors and administrators who are not the assigned employee cannot modify assignee progress.
+    if (!isAssignee) {
       if (task.createdBy === requestingEmployeeId) {
         throw new ForbiddenException('You are not authorized to update progress for this task. Assignors cannot modify assignee progress.');
       }
-      throw new ForbiddenException('You are not authorized to update progress for this task.');
+      throw new ForbiddenException('You are not authorized to update progress for this task. Only the assigned employee can update task progress.');
     }
 
     const [currExtra]: any[] = await this.prisma.$queryRawUnsafe(
@@ -861,12 +859,14 @@ export class EmployeeTasksService {
     const isAssignee =
       task.assignedTo === requestingEmployeeId ||
       (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
-    const isTenantAdmin =
-      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
-      task.tenantId === (user?.tenantId || tId);
 
-    if (!isAssignee && !isTenantAdmin) {
-      throw new ForbiddenException('Only the assigned employee or Tenant Administrator can complete this task.');
+    // Only the assigned employee can mark their assigned task as completed.
+    // Assignors and non-assignee administrators cannot mark completion on behalf of the assignee.
+    if (!isAssignee) {
+      if (task.createdBy === requestingEmployeeId) {
+        throw new ForbiddenException('You are not authorized to complete this task. Assignors cannot mark tasks completed on behalf of the assignee.');
+      }
+      throw new ForbiddenException('You are not authorized to complete this task. Only the assigned employee can mark the task completed.');
     }
 
     const [currExtra]: any[] = await this.prisma.$queryRawUnsafe(
@@ -1042,6 +1042,10 @@ export class EmployeeTasksService {
       (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
       task.tenantId === (user?.tenantId || tId);
 
+    if (task.assignedTo === requestingEmployeeId && !isAssignor) {
+      throw new ForbiddenException('Assignees cannot send reminders to themselves.');
+    }
+
     if (!isAssignor && !isTenantAdmin) {
       throw new ForbiddenException('Only the task assignor or Tenant Administrator can dispatch follow-up reminders.');
     }
@@ -1128,7 +1132,18 @@ export class EmployeeTasksService {
       (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
 
     if (!isAssignee) {
+      if (task.createdBy === requestingEmployeeId) {
+        throw new ForbiddenException('You are not authorized to request an extension for this task. Only the assigned employee can request a deadline extension.');
+      }
       throw new ForbiddenException('Only the assignee can request a deadline extension.');
+    }
+
+    const [existingExtra]: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT extension_requested_at FROM employee_tasks WHERE id = $1`,
+      id,
+    );
+    if (existingExtra?.extension_requested_at) {
+      throw new BadRequestException('A deadline extension request is already pending review for this task.');
     }
 
     const proposed = new Date(data.proposedDate);
@@ -1173,6 +1188,174 @@ export class EmployeeTasksService {
         'EXTENSION_REQUESTED',
         `/task-reminders?taskId=${task.id}`,
       );
+    }
+
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
+  }
+
+  /**
+   * Decide (Approve or Reject) deadline extension request.
+   * Only the task assignor or authorized Tenant Administrator can decide.
+   * Self-approval by the assignee is strictly prohibited.
+   */
+  async decideExtension(
+    id: string,
+    requestingEmployeeId: string,
+    requestingUserId: number | undefined,
+    requestingUserName: string | undefined,
+    tenantId: string | undefined,
+    data: { action: 'APPROVE' | 'REJECT'; decisionComment?: string },
+    user?: any,
+  ) {
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
+    const task = await this.prisma.employeeTask.findFirst({
+      where: { id, tenantId: tId },
+      include: {
+        creator: { select: { id: true, name: true, userId: true, email: true } },
+        assignee: { select: { id: true, name: true, userId: true, email: true } },
+      },
+    });
+
+    if (!task) throw new NotFoundException('Task not found.');
+
+    const [extra]: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT extension_requested_at, extension_requested_date, extension_reason, reminder_offset_minutes
+       FROM employee_tasks WHERE id = $1`,
+      id,
+    );
+
+    if (!extra?.extension_requested_at || !extra?.extension_requested_date) {
+      throw new BadRequestException('No pending deadline extension request found for this task.');
+    }
+
+    const isAssignee =
+      task.assignedTo === requestingEmployeeId ||
+      (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
+
+    const isAssignor =
+      task.createdBy === requestingEmployeeId ||
+      (task.creator?.userId && requestingUserId && task.creator.userId === requestingUserId);
+
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    // Prevent self-approval of extension requests:
+    if (isAssignee && !isAssignor) {
+      throw new ForbiddenException('Assignees cannot approve or reject their own extension requests.');
+    }
+
+    if (!isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('Only the task assignor or authorized Tenant Administrator can decide extension requests.');
+    }
+
+    const action = data.action?.toUpperCase();
+    if (action !== 'APPROVE' && action !== 'REJECT') {
+      throw new BadRequestException("Action must be either 'APPROVE' or 'REJECT'.");
+    }
+
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      task.creator?.name ||
+      'Task Assignor';
+
+    if (action === 'APPROVE') {
+      const requestedDate = new Date(extra.extension_requested_date);
+      const originalDueDate = task.dueDate;
+      const originalDueTime = task.dueTime;
+      const offsetMinutes = extra.reminder_offset_minutes ?? 20;
+
+      // Recalculate automatic reminder for new due date
+      const newDueDateStr = requestedDate.toISOString().split('T')[0];
+      const reminderDateTime = this.computeReminderTime(newDueDateStr, task.dueTime || '06:00 PM', offsetMinutes);
+
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE employee_tasks SET
+          due_date = $1,
+          reminder_time = $2,
+          reminder_status = 'SCHEDULED',
+          extension_requested_at = NULL,
+          extension_requested_date = NULL,
+          extension_reason = NULL,
+          updated_at = now()
+         WHERE id = $3`,
+        requestedDate,
+        reminderDateTime,
+        id,
+      );
+
+      const decisionNote = data.decisionComment?.trim();
+      const comment = decisionNote
+        ? `Deadline extension approved to ${requestedDate.toLocaleDateString()}: ${decisionNote}`
+        : `Deadline extension approved to ${requestedDate.toLocaleDateString()}`;
+
+      await this.logActivity({
+        taskId: id,
+        tenantId: tId,
+        actorEmployeeId: requestingEmployeeId,
+        actorUserId: requestingUserId,
+        actorName,
+        activityType: 'EXTENSION_APPROVED',
+        comment,
+        metadata: {
+          originalDueDate,
+          originalDueTime,
+          newDueDate: requestedDate,
+          decisionComment: decisionNote || null,
+        },
+      });
+
+      if (task.assignee?.userId) {
+        await this.notificationsService.createInAppNotification(
+          task.assignee.userId,
+          'EXTENSION REQUEST APPROVED',
+          `Your deadline extension for "${task.title}" was approved until ${requestedDate.toLocaleDateString()}.${decisionNote ? ' Note: ' + decisionNote : ''}`,
+          'EXTENSION_APPROVED',
+          `/task-reminders?taskId=${task.id}`,
+        );
+      }
+    } else {
+      // REJECT: Preserve original deadline, clear pending request
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE employee_tasks SET
+          extension_requested_at = NULL,
+          extension_requested_date = NULL,
+          extension_reason = NULL,
+          updated_at = now()
+         WHERE id = $1`,
+        id,
+      );
+
+      const decisionNote = data.decisionComment?.trim();
+      const comment = decisionNote
+        ? `Deadline extension rejected: ${decisionNote}`
+        : 'Deadline extension request was rejected. Original deadline remains unchanged.';
+
+      await this.logActivity({
+        taskId: id,
+        tenantId: tId,
+        actorEmployeeId: requestingEmployeeId,
+        actorUserId: requestingUserId,
+        actorName,
+        activityType: 'EXTENSION_REJECTED',
+        comment,
+        metadata: {
+          requestedDate: extra.extension_requested_date,
+          reason: extra.extension_reason,
+          decisionComment: decisionNote || null,
+        },
+      });
+
+      if (task.assignee?.userId) {
+        await this.notificationsService.createInAppNotification(
+          task.assignee.userId,
+          'EXTENSION REQUEST REJECTED',
+          `Your deadline extension for "${task.title}" was rejected.${decisionNote ? ' Reason: ' + decisionNote : ''}`,
+          'EXTENSION_REJECTED',
+          `/task-reminders?taskId=${task.id}`,
+        );
+      }
     }
 
     return this.getTaskById(id, requestingEmployeeId, tId, user);
