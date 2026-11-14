@@ -46,7 +46,20 @@ export class AuditService {
       orderBy: { createdAt: 'desc' },
       include: {
         actor: {
-          select: { id: true, email: true, role: true },
+          select: {
+            id: true,
+            email: true,
+            role: true,
+            isSuperAdmin: true,
+            employee: {
+              select: {
+                id: true,
+                name: true,
+                designation: true,
+                level: true,
+              },
+            },
+          },
         },
       },
     });

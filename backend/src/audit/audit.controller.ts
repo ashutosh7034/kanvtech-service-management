@@ -5,37 +5,51 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
 import { RequirePermissions } from '../permissions/permissions.decorator';
+import { formatAuditRecord } from './audit-formatter.util';
 
 @ApiTags('Audit Logs')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@Roles('ADMIN', 'MANAGER', 'EMPLOYEE')
 @RequirePermissions('audit_logs.view')
 @Controller('audit-logs')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
 
   @Get()
-  @ApiOperation({ summary: 'Retrieve security and operational audit logs (Admin only)' })
-  async getAuditLogs(@Query('limit') limit?: string, @Request() req?: any) {
-    const parsedLimit = Math.min(500, Math.max(1, Number(limit) || 100));
-    const tenantId = req?.user?.isSuperAdmin ? undefined : (req?.user?.tenantId || 'KANVTECH');
-    const logs = await this.auditService.getLogs(parsedLimit, tenantId);
+  @ApiOperation({ summary: 'Retrieve human-readable security and operational audit trail' })
+  async getAuditLogs(
+    @Query('limit') limit?: string,
+    @Query('tenantId') queryTenantId?: string,
+    @Query('include_raw') includeRaw?: string,
+    @Request() req?: any,
+  ) {
+    const user = req?.user;
+    const isPlatformSecurityAdmin = Boolean(
+      user?.isSuperAdmin ||
+        user?.role === 'SUPER_ADMIN' ||
+        user?.role === 'PLATFORM_INCHARGE' ||
+        user?.isPlatformIncharge,
+    );
+
+    // Tenant Isolation: Non-platform administrators are strictly locked to their own tenant workspace
+    const effectiveTenantId = isPlatformSecurityAdmin
+      ? queryTenantId || (user?.defaultTenantId ?? user?.tenantId ?? undefined)
+      : (user?.tenantId || 'KANVTECH');
+
+    const parsedLimit = Math.min(500, Math.max(1, Number(limit) || 150));
+    const logs = await this.auditService.getLogs(parsedLimit, effectiveTenantId);
+
+    // Format logs into sanitized, human-readable records
+    const formattedLogs = logs.map((l) =>
+      formatAuditRecord(l, {
+        allowRawJson: isPlatformSecurityAdmin && includeRaw === 'true',
+      }),
+    );
 
     return {
       success: true,
-      logs: logs.map((l) => ({
-        id: l.id,
-        created_at: l.createdAt,
-        actor_email: l.actor?.email || 'System',
-        actor_role: l.actor?.role || 'SYSTEM',
-        action: l.action,
-        entity_type: l.entityType,
-        entity_id: l.entityId,
-        old_values_json: l.oldValuesJson,
-        new_values_json: l.newValuesJson,
-        ip_address: l.ipAddress,
-      })),
+      logs: formattedLogs,
     };
   }
 }

@@ -447,7 +447,7 @@ export class EmployeeTasksService {
       if (creatorUserId) {
         await this.auditService.log({
           actorUserId: creatorUserId,
-          action: 'TASK_CREATED',
+          action: isSelf ? 'TASK_CREATED' : 'TASK_ASSIGNED',
           entityType: 'EMPLOYEE_TASK',
           entityId: task.id,
           newValues: {
@@ -769,6 +769,18 @@ export class EmployeeTasksService {
       );
     }
 
+    if (requestingUserId) {
+      await this.auditService.log({
+        actorUserId: requestingUserId,
+        action: 'TASK_PROGRESS_UPDATED',
+        entityType: 'EMPLOYEE_TASK',
+        entityId: task.id,
+        oldValues: { progress: oldProgress, status: task.status, title: task.title },
+        newValues: { progress: newProgress, status: newStatus, title: task.title },
+        tenantId: tId,
+      });
+    }
+
     return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
@@ -927,6 +939,18 @@ export class EmployeeTasksService {
         'TASK_COMPLETED',
         `/task-reminders?taskId=${task.id}`,
       );
+    }
+
+    if (requestingUserId) {
+      await this.auditService.log({
+        actorUserId: requestingUserId,
+        action: 'TASK_COMPLETED',
+        entityType: 'EMPLOYEE_TASK',
+        entityId: task.id,
+        oldValues: { progress: oldProgress, status: task.status, title: task.title },
+        newValues: { progress: 100, status: 'COMPLETED', title: task.title },
+        tenantId: tId,
+      });
     }
 
     return this.getTaskById(id, requestingEmployeeId, tId, user);
