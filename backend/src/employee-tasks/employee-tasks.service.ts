@@ -584,8 +584,8 @@ export class EmployeeTasksService {
   /**
    * Get specific task with full activities and metadata.
    */
-  async getTaskById(id: string, requestingEmployeeId: string, tenantId?: string) {
-    const tId = tenantId || 'KANVTECH';
+  async getTaskById(id: string, requestingEmployeeId: string, tenantId?: string, user?: any) {
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -594,7 +594,16 @@ export class EmployeeTasksService {
       },
     });
 
-    if (!task) throw new NotFoundException('Task not found.');
+    if (!task) {
+      const existsElsewhere = await this.prisma.employeeTask.findFirst({
+        where: { id },
+        select: { id: true, tenantId: true },
+      });
+      if (existsElsewhere) {
+        throw new ForbiddenException('Cross-tenant task access is not permitted.');
+      }
+      throw new NotFoundException('Task not found.');
+    }
 
     const [extras]: any[] = await this.prisma.$queryRawUnsafe(
       `SELECT progress, accepted_at, cancelled_at, cancellation_reason, last_reminder_sent_at, reminder_count, extension_requested_at, extension_requested_date, extension_reason,
@@ -613,7 +622,7 @@ export class EmployeeTasksService {
   }
 
   /**
-   * Update task progress (Assignee action).
+   * Update task progress (Assignee or Tenant Administrator action).
    */
   async updateProgress(
     id: string,
@@ -622,8 +631,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     data: { progress: number; comment?: string },
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -632,14 +642,58 @@ export class EmployeeTasksService {
       },
     });
 
-    if (!task) throw new NotFoundException('Task not found.');
-
-    // Only assignee or creator can update progress
-    if (task.assignedTo !== requestingEmployeeId && task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('You are not authorized to update progress for this task.');
+    if (!task) {
+      // Check if task exists in another tenant for explicit cross-tenant rejection
+      const existsElsewhere = await this.prisma.employeeTask.findFirst({
+        where: { id },
+        select: { id: true, tenantId: true },
+      });
+      if (existsElsewhere) {
+        throw new ForbiddenException('Cross-tenant task modifications are not permitted.');
+      }
+      throw new NotFoundException('Task not found.');
     }
 
-    const newProgress = Math.max(0, Math.min(100, Number(data.progress ?? 0)));
+    const effectiveUserTenant = user?.tenantId || tId;
+    if (task.tenantId !== effectiveUserTenant) {
+      throw new ForbiddenException('Cross-tenant task modifications are not permitted.');
+    }
+
+    // Platform roles operate at the platform layer; tenant isolation applies
+    if (user?.isPlatformIncharge && !user?.tenantId) {
+      throw new ForbiddenException('Platform administrator cannot modify tenant-level tasks without tenant context.');
+    }
+
+    // Progress validation: must be a valid number between 0 and 100
+    if (data?.progress === undefined || data?.progress === null || isNaN(Number(data.progress))) {
+      throw new BadRequestException('Progress must be a valid number between 0 and 100.');
+    }
+    const rawProgress = Number(data.progress);
+    if (rawProgress < 0 || rawProgress > 100) {
+      throw new BadRequestException('Progress must be between 0 and 100.');
+    }
+    const newProgress = Math.round(rawProgress);
+
+    // Identify participant relationship
+    const isAssignee =
+      task.assignedTo === requestingEmployeeId ||
+      (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
+
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === effectiveUserTenant;
+
+    // Authorization evaluation:
+    // 1. Assignee can update progress.
+    // 2. Tenant Super Admin can manage tasks within their own tenant.
+    // 3. Assignor (if distinct from assignee) is explicitly rejected from modifying assignee progress.
+    // 4. Other employees are rejected.
+    if (!isAssignee && !isTenantAdmin) {
+      if (task.createdBy === requestingEmployeeId) {
+        throw new ForbiddenException('You are not authorized to update progress for this task. Assignors cannot modify assignee progress.');
+      }
+      throw new ForbiddenException('You are not authorized to update progress for this task.');
+    }
 
     const [currExtra]: any[] = await this.prisma.$queryRawUnsafe(
       `SELECT progress FROM employee_tasks WHERE id = $1`,
@@ -647,18 +701,48 @@ export class EmployeeTasksService {
     );
     const oldProgress = currExtra?.progress ?? 0;
 
-    // Automatic status progression: If PENDING and progress > 0, moves to IN_PROGRESS
+    // Automatic status progression:
+    // If PENDING and progress > 0, moves to IN_PROGRESS.
+    // If progress reaches 100, moves to COMPLETED.
+    // If completed and progress goes below 100, moves to IN_PROGRESS.
     let newStatus = task.status;
+    let completedAt = task.completedAt;
     if (task.status === 'PENDING' && newProgress > 0) {
       newStatus = 'IN_PROGRESS';
+    } else if (newProgress === 100 && task.status !== 'COMPLETED') {
+      newStatus = 'COMPLETED';
+      completedAt = new Date();
+    } else if (newProgress < 100 && task.status === 'COMPLETED') {
+      newStatus = 'IN_PROGRESS';
+      completedAt = null;
     }
 
     await this.prisma.$executeRawUnsafe(
-      `UPDATE employee_tasks SET progress = $1, status = $2, updated_at = now() WHERE id = $3`,
+      `UPDATE employee_tasks SET progress = $1, status = $2, completed_at = $3, updated_at = now() WHERE id = $4`,
       newProgress,
       newStatus,
+      completedAt,
       id,
     );
+
+    // If completed, cancel any pending reminder
+    if (newStatus === 'COMPLETED') {
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE employee_tasks SET reminder_status = 'CANCELLED' WHERE id = $1`,
+        id,
+      );
+    }
+
+    // Resolve actor name accurately
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      (await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { name: true },
+      }))?.name ||
+      user?.email ||
+      (isAssignee ? task.assignee?.name : 'System Administrator');
 
     // Activity log
     await this.logActivity({
@@ -666,29 +750,28 @@ export class EmployeeTasksService {
       tenantId: tId,
       actorEmployeeId: requestingEmployeeId,
       actorUserId: requestingUserId,
-      actorName: requestingUserName || task.assignee?.name,
+      actorName,
       activityType: 'PROGRESS_UPDATE',
-      comment: data.comment || `Updated progress to ${newProgress}%`,
+      comment: data.comment?.trim() || `Updated progress to ${newProgress}%`,
       oldProgress,
       newProgress,
       oldStatus: task.status,
       newStatus,
     });
 
-    // Notify assignor if assignee updated progress
+    // Notify assignor if assignee updated progress (and not self-assigned)
     if (task.createdBy !== requestingEmployeeId && task.creator?.userId) {
-      const updaterName = requestingUserName || task.assignee?.name || 'Assignee';
-      const commentSnippet = data.comment ? ` ("${data.comment}")` : '';
+      const commentSnippet = data.comment?.trim() ? ` ("${data.comment.trim()}")` : '';
       await this.notificationsService.createInAppNotification(
         task.creator.userId,
         'TASK PROGRESS UPDATED',
-        `${updaterName} updated progress on "${task.title}" to ${newProgress}%${commentSnippet}.`,
+        `${actorName} updated progress on "${task.title}" to ${newProgress}%${commentSnippet}.`,
         'TASK_PROGRESS',
         `/task-reminders?taskId=${task.id}`,
       );
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
@@ -700,8 +783,9 @@ export class EmployeeTasksService {
     requestingUserId: number | undefined,
     requestingUserName: string | undefined,
     tenantId: string | undefined,
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -712,7 +796,11 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.assignedTo !== requestingEmployeeId) {
+    const isAssignee =
+      task.assignedTo === requestingEmployeeId ||
+      (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
+
+    if (!isAssignee) {
       throw new ForbiddenException('Only the assigned employee can accept this task.');
     }
 
@@ -744,7 +832,7 @@ export class EmployeeTasksService {
       );
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
@@ -757,8 +845,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     comment?: string,
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -769,8 +858,15 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.assignedTo !== requestingEmployeeId && task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('You cannot complete this task.');
+    const isAssignee =
+      task.assignedTo === requestingEmployeeId ||
+      (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignee && !isTenantAdmin) {
+      throw new ForbiddenException('Only the assigned employee or Tenant Administrator can complete this task.');
     }
 
     const [currExtra]: any[] = await this.prisma.$queryRawUnsafe(
@@ -792,12 +888,28 @@ export class EmployeeTasksService {
       id,
     );
 
+    // Cancel pending reminders upon completion
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE employee_tasks SET reminder_status = 'CANCELLED' WHERE id = $1`,
+      id,
+    );
+
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      (await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { name: true },
+      }))?.name ||
+      user?.email ||
+      (isAssignee ? task.assignee?.name : 'System Administrator');
+
     await this.logActivity({
       taskId: id,
       tenantId: tId,
       actorEmployeeId: requestingEmployeeId,
       actorUserId: requestingUserId,
-      actorName: requestingUserName || task.assignee?.name,
+      actorName,
       activityType: 'TASK_COMPLETED',
       comment: comment || 'Task confirmed as completed',
       oldProgress,
@@ -811,17 +923,17 @@ export class EmployeeTasksService {
       await this.notificationsService.createInAppNotification(
         task.creator.userId,
         'TASK COMPLETED',
-        `${task.assignee?.name || 'Assignee'} marked task "${task.title}" as Completed.`,
+        `${actorName} marked task "${task.title}" as Completed.`,
         'TASK_COMPLETED',
         `/task-reminders?taskId=${task.id}`,
       );
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
-   * Reopen task (Assignor / Manager action).
+   * Reopen task (Assignor / Tenant Administrator action).
    */
   async reopenTask(
     id: string,
@@ -830,8 +942,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     reason?: string,
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -842,8 +955,13 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('Only the assignor can reopen this task.');
+    const isAssignor = task.createdBy === requestingEmployeeId;
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('Only the assignor or Tenant Administrator can reopen this task.');
     }
 
     await this.prisma.employeeTask.update({
@@ -859,12 +977,23 @@ export class EmployeeTasksService {
       id,
     );
 
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      (await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { name: true },
+      }))?.name ||
+      user?.email ||
+      task.creator?.name ||
+      'System Administrator';
+
     await this.logActivity({
       taskId: id,
       tenantId: tId,
       actorEmployeeId: requestingEmployeeId,
       actorUserId: requestingUserId,
-      actorName: requestingUserName || task.creator?.name,
+      actorName,
       activityType: 'TASK_REOPENED',
       comment: reason || 'Task reopened for further review',
       oldStatus: task.status,
@@ -876,17 +1005,17 @@ export class EmployeeTasksService {
       await this.notificationsService.createInAppNotification(
         task.assignee.userId,
         'TASK REOPENED',
-        `${task.creator?.name || 'Assignor'} reopened task "${task.title}": ${reason || 'Action required.'}`,
+        `${actorName} reopened task "${task.title}": ${reason || 'Action required.'}`,
         'TASK_REOPENED',
         `/task-reminders?taskId=${task.id}`,
       );
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
-   * Send Manual Reminder (Assignor action with rate limiting).
+   * Send Manual Reminder (Assignor / Tenant Administrator action with rate limiting).
    */
   async sendManualReminder(
     id: string,
@@ -895,8 +1024,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     customMessage?: string,
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -907,8 +1037,13 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('Only the task assignor can dispatch follow-up reminders.');
+    const isAssignor = task.createdBy === requestingEmployeeId;
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('Only the task assignor or Tenant Administrator can dispatch follow-up reminders.');
     }
 
     if (task.status === 'COMPLETED' || task.status === 'CANCELLED') {
@@ -975,8 +1110,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     data: { proposedDate: string; reason: string },
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -987,7 +1123,11 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.assignedTo !== requestingEmployeeId) {
+    const isAssignee =
+      task.assignedTo === requestingEmployeeId ||
+      (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
+
+    if (!isAssignee) {
       throw new ForbiddenException('Only the assignee can request a deadline extension.');
     }
 
@@ -1008,12 +1148,18 @@ export class EmployeeTasksService {
       id,
     );
 
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      task.assignee?.name ||
+      'Assignee';
+
     await this.logActivity({
       taskId: id,
       tenantId: tId,
       actorEmployeeId: requestingEmployeeId,
       actorUserId: requestingUserId,
-      actorName: requestingUserName || task.assignee?.name,
+      actorName,
       activityType: 'EXTENSION_REQUESTED',
       comment: `Requested extension to ${proposed.toLocaleDateString()}: ${data.reason}`,
       metadata: { proposedDate: proposed, reason: data.reason },
@@ -1023,17 +1169,17 @@ export class EmployeeTasksService {
       await this.notificationsService.createInAppNotification(
         task.creator.userId,
         'DEADLINE EXTENSION REQUESTED',
-        `${task.assignee?.name || 'Assignee'} requested extension for "${task.title}" to ${proposed.toLocaleDateString()}: ${data.reason}`,
+        `${actorName} requested extension for "${task.title}" to ${proposed.toLocaleDateString()}: ${data.reason}`,
         'EXTENSION_REQUESTED',
         `/task-reminders?taskId=${task.id}`,
       );
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
-   * Cancel task (Assignor action).
+   * Cancel task (Assignor or Tenant Administrator action).
    */
   async cancelTask(
     id: string,
@@ -1042,8 +1188,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     reason?: string,
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -1054,8 +1201,13 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('Only the task assignor can cancel this task.');
+    const isAssignor = task.createdBy === requestingEmployeeId;
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('Only the task assignor or Tenant Administrator can cancel this task.');
     }
 
     await this.prisma.employeeTask.update({
@@ -1064,17 +1216,28 @@ export class EmployeeTasksService {
     });
 
     await this.prisma.$executeRawUnsafe(
-      `UPDATE employee_tasks SET cancelled_at = now(), cancellation_reason = $1, updated_at = now() WHERE id = $2`,
-      reason?.trim() || 'Cancelled by assignor',
+      `UPDATE employee_tasks SET cancelled_at = now(), cancellation_reason = $1, reminder_status = 'CANCELLED', updated_at = now() WHERE id = $2`,
+      reason?.trim() || 'Cancelled',
       id,
     );
+
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      (await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { name: true },
+      }))?.name ||
+      user?.email ||
+      task.creator?.name ||
+      'System Administrator';
 
     await this.logActivity({
       taskId: id,
       tenantId: tId,
       actorEmployeeId: requestingEmployeeId,
       actorUserId: requestingUserId,
-      actorName: requestingUserName || task.creator?.name,
+      actorName,
       activityType: 'TASK_CANCELLED',
       comment: reason || 'Task cancelled',
       oldStatus: task.status,
@@ -1085,17 +1248,17 @@ export class EmployeeTasksService {
       await this.notificationsService.createInAppNotification(
         task.assignee.userId,
         'TASK CANCELLED',
-        `Task "${task.title}" was cancelled by ${task.creator?.name || 'Assignor'}: ${reason || ''}`,
+        `Task "${task.title}" was cancelled by ${actorName}: ${reason || ''}`,
         'TASK_CANCELLED',
         `/task-reminders?taskId=${task.id}`,
       );
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
-   * Add comment to task (Either party).
+   * Add comment to task (Assignee, Assignor or Tenant Administrator).
    */
   async addComment(
     id: string,
@@ -1104,8 +1267,9 @@ export class EmployeeTasksService {
     requestingUserName: string | undefined,
     tenantId: string | undefined,
     commentText: string,
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     if (!commentText?.trim()) {
       throw new BadRequestException('Comment text is required.');
     }
@@ -1120,29 +1284,47 @@ export class EmployeeTasksService {
 
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.assignedTo !== requestingEmployeeId && task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('You cannot comment on this task.');
+    const isAssignee =
+      task.assignedTo === requestingEmployeeId ||
+      (task.assignee?.userId && requestingUserId && task.assignee.userId === requestingUserId);
+    const isAssignor = task.createdBy === requestingEmployeeId;
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignee && !isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('You are not authorized to comment on this task.');
     }
+
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      (await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { name: true },
+      }))?.name ||
+      user?.email ||
+      (isAssignee ? task.assignee?.name : task.creator?.name) ||
+      'Team Member';
 
     await this.logActivity({
       taskId: id,
       tenantId: tId,
       actorEmployeeId: requestingEmployeeId,
       actorUserId: requestingUserId,
-      actorName: requestingUserName,
+      actorName,
       activityType: 'COMMENT',
       comment: commentText.trim(),
     });
 
     // Notify the other party
-    const isAssignee = task.assignedTo === requestingEmployeeId;
     const recipientUserId = isAssignee ? task.creator?.userId : task.assignee?.userId;
 
     if (recipientUserId) {
       await this.notificationsService.createInAppNotification(
         recipientUserId,
         'NEW TASK COMMENT',
-        `${requestingUserName || 'Team member'} commented on "${task.title}": ${commentText.trim()}`,
+        `${actorName} commented on "${task.title}": ${commentText.trim()}`,
         'TASK_COMMENT',
         `/task-reminders?taskId=${task.id}`,
       );
@@ -1152,7 +1334,7 @@ export class EmployeeTasksService {
   }
 
   /**
-   * Update task details (Assignor or permitted editor).
+   * Update task details (Assignor or Tenant Administrator).
    */
   async updateTask(
     id: string,
@@ -1170,8 +1352,9 @@ export class EmployeeTasksService {
       priority?: string;
       status?: string;
     },
+    user?: any,
   ) {
-    const tId = tenantId || 'KANVTECH';
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
       include: {
@@ -1181,8 +1364,13 @@ export class EmployeeTasksService {
     });
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.assignedTo !== requestingEmployeeId && task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('You cannot edit this task.');
+    const isAssignor = task.createdBy === requestingEmployeeId;
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('Only the task assignor or Tenant Administrator can edit this task.');
     }
 
     const [existingExtra]: any[] = await this.prisma.$queryRawUnsafe(
@@ -1267,13 +1455,24 @@ export class EmployeeTasksService {
       id,
     );
 
+    const actorName =
+      requestingUserName ||
+      user?.name ||
+      (await this.prisma.employee.findUnique({
+        where: { id: requestingEmployeeId },
+        select: { name: true },
+      }))?.name ||
+      user?.email ||
+      task.creator?.name ||
+      'System Administrator';
+
     if (resetReminder) {
       await this.logActivity({
         taskId: id,
         tenantId: tId,
         actorEmployeeId: requestingEmployeeId,
         actorUserId: requestingUserId,
-        actorName: requestingUserName,
+        actorName,
         activityType: 'DEADLINE_CHANGED',
         comment: `Rescheduled deadline to ${dueDateTime ? dueDateTime.toLocaleDateString() : 'N/A'} at ${dueTime} (Reminder: ${offsetMinutes}m offset)`,
         metadata: {
@@ -1297,21 +1496,26 @@ export class EmployeeTasksService {
       }
     }
 
-    return this.getTaskById(id, requestingEmployeeId, tId);
+    return this.getTaskById(id, requestingEmployeeId, tId, user);
   }
 
   /**
    * Delete task.
    */
-  async deleteTask(id: string, requestingEmployeeId: string, requestingUserId?: number, tenantId?: string) {
-    const tId = tenantId || 'KANVTECH';
+  async deleteTask(id: string, requestingEmployeeId: string, requestingUserId?: number, tenantId?: string, user?: any) {
+    const tId = tenantId || user?.tenantId || 'KANVTECH';
     const task = await this.prisma.employeeTask.findFirst({
       where: { id, tenantId: tId },
     });
     if (!task) throw new NotFoundException('Task not found.');
 
-    if (task.assignedTo !== requestingEmployeeId && task.createdBy !== requestingEmployeeId) {
-      throw new ForbiddenException('Only the task owner or assignor can delete it.');
+    const isAssignor = task.createdBy === requestingEmployeeId;
+    const isTenantAdmin =
+      (user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') &&
+      task.tenantId === (user?.tenantId || tId);
+
+    if (!isAssignor && !isTenantAdmin) {
+      throw new ForbiddenException('Only the task assignor or Tenant Administrator can delete it.');
     }
 
     await this.prisma.employeeTask.delete({ where: { id } });

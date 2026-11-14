@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
 import {
   Bell,
   Plus,
@@ -198,6 +199,7 @@ const computeReminderDisplay = (
 
 export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
   const { user, hasPermission } = useAuth();
+  const { showToast } = useNotifications();
 
   const isManagerOrAdmin =
     user?.role === 'ADMIN' ||
@@ -511,7 +513,7 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
     }
   };
 
-  // Progress submission (Assignee action)
+  // Progress submission (Assignee or Tenant Administrator action)
   const handleUpdateProgress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!viewingTask) return;
@@ -523,12 +525,14 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
       });
       if (res.task) {
         setViewingTask(res.task);
+        setProgressVal(res.task.progress || 0);
         setViewingActivities(res.task.activities || []);
         setProgressComment('');
+        showToast('Task progress updated successfully!', 'success');
         loadTasks();
       }
     } catch (err: any) {
-      alert(`Failed to update progress: ${err.message}`);
+      showToast(`Failed to update progress: ${err.message}`, 'danger');
     } finally {
       setSubmittingProgress(false);
     }
@@ -542,12 +546,14 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
       if (res.task) {
         if (viewingTask?.id === task.id) {
           setViewingTask(res.task);
+          setProgressVal(100);
           setViewingActivities(res.task.activities || []);
         }
+        showToast('Task marked as completed!', 'success');
         loadTasks();
       }
     } catch (err: any) {
-      alert(`Error completing task: ${err.message}`);
+      showToast(`Error completing task: ${err.message}`, 'danger');
     }
   };
 
@@ -560,10 +566,11 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
           setViewingTask(res.task);
           setViewingActivities(res.task.activities || []);
         }
+        showToast('Task accepted!', 'success');
         loadTasks();
       }
     } catch (err: any) {
-      alert(`Error accepting task: ${err.message}`);
+      showToast(`Error accepting task: ${err.message}`, 'danger');
     }
   };
 
@@ -578,10 +585,11 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
           setViewingTask(res.task);
           setViewingActivities(res.task.activities || []);
         }
+        showToast('Task reopened successfully!', 'success');
         loadTasks();
       }
     } catch (err: any) {
-      alert(`Error reopening task: ${err.message}`);
+      showToast(`Error reopening task: ${err.message}`, 'danger');
     }
   };
 
@@ -596,10 +604,10 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
         setShowReminderPrompt(false);
         setReminderMessage('');
         handleOpenTaskDetail(viewingTask.id);
-        alert(res.message || 'Reminder sent successfully!');
+        showToast(res.message || 'Reminder sent successfully!', 'success');
       }
     } catch (err: any) {
-      alert(`Reminder failed: ${err.message}`);
+      showToast(`Reminder failed: ${err.message}`, 'danger');
     } finally {
       setSendingReminder(false);
     }
@@ -610,7 +618,7 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
     e.preventDefault();
     if (!viewingTask) return;
     if (!proposedExtensionDate || !extensionReason.trim()) {
-      alert('Proposed date and reason are required.');
+      showToast('Proposed date and reason are required.', 'warning');
       return;
     }
     setSubmittingExtension(true);
@@ -624,10 +632,11 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
         setViewingActivities(res.task.activities || []);
         setShowExtensionModal(false);
         setExtensionReason('');
+        showToast('Extension requested successfully!', 'success');
         loadTasks();
       }
     } catch (err: any) {
-      alert(`Extension request failed: ${err.message}`);
+      showToast(`Extension request failed: ${err.message}`, 'danger');
     } finally {
       setSubmittingExtension(false);
     }
@@ -645,10 +654,11 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
         setViewingActivities(res.task.activities || []);
         setShowCancelModal(false);
         setCancelReason('');
+        showToast('Task cancelled successfully.', 'info');
         loadTasks();
       }
     } catch (err: any) {
-      alert(`Cancellation failed: ${err.message}`);
+      showToast(`Cancellation failed: ${err.message}`, 'danger');
     } finally {
       setSubmittingCancel(false);
     }
@@ -664,9 +674,10 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
       if (res.activities) {
         setViewingActivities(res.activities);
         setCommentText('');
+        showToast('Comment posted.', 'success');
       }
     } catch (err: any) {
-      alert(`Failed to add comment: ${err.message}`);
+      showToast(`Failed to add comment: ${err.message}`, 'danger');
     } finally {
       setSubmittingComment(false);
     }
@@ -1908,42 +1919,62 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
               )}
 
               {/* Progress Update Widget */}
-              {viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (
-                <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <TrendingUp size={16} color="#0284c7" /> Update Task Progress
+              {viewingTask.status !== 'COMPLETED' && viewingTask.status !== 'CANCELLED' && (() => {
+                const isAssignee =
+                  viewingTask.assigned_to === user?.employeeId ||
+                  (user as any)?.employee?.id === viewingTask.assigned_to ||
+                  viewingTask.assignee_email === user?.email;
+                const isTenantAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN';
+                const canEditProgress = isAssignee || isTenantAdmin;
+
+                return (
+                  <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <TrendingUp size={16} color="#0284c7" /> {canEditProgress ? 'Update Task Progress' : 'Task Progress'}
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: '#0284c7' }}>{progressVal}%</span>
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#0284c7' }}>{progressVal}%</span>
+
+                    {canEditProgress ? (
+                      <form onSubmit={handleUpdateProgress} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          step="5"
+                          value={progressVal}
+                          onChange={(e) => setProgressVal(Number(e.target.value))}
+                          style={{ width: '100%', cursor: 'pointer' }}
+                        />
+
+                        <div style={{ display: 'flex', gap: 10 }}>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Progress comment (e.g. Customer contacted. Awaiting confirmation)..."
+                            value={progressComment}
+                            onChange={(e) => setProgressComment(e.target.value)}
+                            style={{ fontSize: 12 }}
+                          />
+                          <button type="submit" className="btn btn-primary btn-sm" disabled={submittingProgress}>
+                            {submittingProgress ? 'Updating...' : 'Update Progress'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div>
+                        <div style={{ width: '100%', height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden', marginTop: 4 }}>
+                          <div style={{ width: `${progressVal}%`, height: '100%', background: '#0284c7', transition: 'width 0.3s ease' }} />
+                        </div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 6, fontStyle: 'italic' }}>
+                          Progress updates are managed by the assigned team member ({viewingTask.assignee_name || 'Assignee'}) or Tenant Administrator.
+                        </div>
+                      </div>
+                    )}
                   </div>
-
-                  <form onSubmit={handleUpdateProgress} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    <input
-                      type="range"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={progressVal}
-                      onChange={(e) => setProgressVal(Number(e.target.value))}
-                      style={{ width: '100%', cursor: 'pointer' }}
-                    />
-
-                    <div style={{ display: 'flex', gap: 10 }}>
-                      <input
-                        type="text"
-                        className="form-control"
-                        placeholder="Progress comment (e.g. Customer contacted. Awaiting confirmation)..."
-                        value={progressComment}
-                        onChange={(e) => setProgressComment(e.target.value)}
-                        style={{ fontSize: 12 }}
-                      />
-                      <button type="submit" className="btn btn-primary btn-sm" disabled={submittingProgress}>
-                        {submittingProgress ? 'Updating...' : 'Update Progress'}
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Activity Timeline & Discussion Comments */}
               <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>

@@ -92,7 +92,7 @@ export class EmployeeTasksController {
   @ApiOperation({ summary: 'Get specific task details by ID' })
   async getTask(@Param('id') id: string, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
-    const task = await this.employeeTasksService.getTaskById(id, employeeId, req.user?.tenantId);
+    const task = await this.employeeTasksService.getTaskById(id, employeeId, req.user?.tenantId, req.user);
     return { success: true, task };
   }
 
@@ -170,6 +170,7 @@ export class EmployeeTasksController {
         priority: body.priority,
         status: body.status,
       },
+      req.user,
     );
     return { success: true, task, message: 'Task updated successfully.' };
   }
@@ -186,6 +187,7 @@ export class EmployeeTasksController {
       userId,
       userName,
       req.user?.tenantId,
+      req.user,
     );
     return { success: true, task, message: 'Task accepted.' };
   }
@@ -207,6 +209,7 @@ export class EmployeeTasksController {
         progress: Number(body.progress),
         comment: body.comment,
       },
+      req.user,
     );
     return { success: true, task, message: 'Progress updated successfully.' };
   }
@@ -225,6 +228,7 @@ export class EmployeeTasksController {
       userName,
       req.user?.tenantId,
       body?.comment,
+      req.user,
     );
     return { success: true, task, message: 'Task completed successfully.' };
   }
@@ -242,6 +246,7 @@ export class EmployeeTasksController {
       userName,
       req.user?.tenantId,
       body?.reason,
+      req.user,
     );
     return { success: true, task, message: 'Task reopened successfully.' };
   }
@@ -260,6 +265,7 @@ export class EmployeeTasksController {
       userName,
       req.user?.tenantId,
       body?.message,
+      req.user,
     );
     return result;
   }
@@ -281,6 +287,7 @@ export class EmployeeTasksController {
       userName,
       req.user?.tenantId,
       body,
+      req.user,
     );
     return { success: true, task, message: 'Extension requested successfully.' };
   }
@@ -298,6 +305,7 @@ export class EmployeeTasksController {
       userName,
       req.user?.tenantId,
       body?.comment,
+      req.user,
     );
     return { success: true, activities, message: 'Comment added.' };
   }
@@ -316,6 +324,7 @@ export class EmployeeTasksController {
       userName,
       req.user?.tenantId,
       body?.reason,
+      req.user,
     );
     return { success: true, task, message: 'Task cancelled.' };
   }
@@ -325,6 +334,6 @@ export class EmployeeTasksController {
   async deleteTask(@Param('id') id: string, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
     const userId = req.user?.userId || req.user?.id;
-    return this.employeeTasksService.deleteTask(id, employeeId, userId, req.user?.tenantId);
+    return this.employeeTasksService.deleteTask(id, employeeId, userId, req.user?.tenantId, req.user);
   }
 }
