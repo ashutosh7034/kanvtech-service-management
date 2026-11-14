@@ -23,6 +23,18 @@ import {
   AlertCircle,
   Save,
   Sliders,
+  Clock,
+  Calendar,
+  ShieldCheck,
+  AlertTriangle,
+  TrendingUp,
+  RotateCcw,
+  FileText,
+  Check,
+  Activity,
+  Info,
+  CreditCard,
+  ArrowUpRight,
 } from 'lucide-react';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { isValidEmail, isValidPhone, isValidGSTN, validatePhoneDetailed } from '../../utils/validation';
@@ -42,6 +54,32 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
   const [selectedCompany, setSelectedCompany] = useState<any | null>(null);
   const [companyBranches, setCompanyBranches] = useState<Branch[]>([]);
   const [loadingBranches, setLoadingBranches] = useState(false);
+
+  // Customer Profile 7-Tabs State
+  const [customerModalTab, setCustomerModalTab] = useState<
+    'overview' | 'user_licences' | 'company_licences' | 'subscription' | 'entitlement_history' | 'licence_usage' | 'audit_history'
+  >('overview');
+  const [entitlementSummary, setEntitlementSummary] = useState<any | null>(null);
+  const [loadingEntitlement, setLoadingEntitlement] = useState(false);
+  const [entitlementHistoryList, setEntitlementHistoryList] = useState<any[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // Licence Expansion Modal State
+  const [showExpansionModal, setShowExpansionModal] = useState<null | 'USER' | 'COMPANY'>(null);
+  const [expansionQuantity, setExpansionQuantity] = useState<number>(50);
+  const [expansionReason, setExpansionReason] = useState<string>('');
+  const [savingExpansion, setSavingExpansion] = useState(false);
+  const [expansionError, setExpansionError] = useState<string | null>(null);
+
+  // Subscription Renewal Modal State
+  const [showRenewalModal, setShowRenewalModal] = useState(false);
+  const [renewalMonths, setRenewalMonths] = useState<number>(12);
+  const [renewalUserQty, setRenewalUserQty] = useState<number>(50);
+  const [renewalCompQty, setRenewalCompQty] = useState<number>(3);
+  const [renewalRef, setRenewalRef] = useState<string>('');
+  const [renewalNotes, setRenewalNotes] = useState<string>('');
+  const [savingRenewal, setSavingRenewal] = useState(false);
+  const [renewalError, setRenewalError] = useState<string | null>(null);
 
   // Registration Modal State
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -197,9 +235,87 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
     try {
       const res = await api.getCompany(id);
       setSelectedCompany(res.company);
+      setCustomerModalTab('overview');
       loadBranchesForCompany(id);
+      loadEntitlementsForCustomer(id);
+      loadHistoryForCustomer(id);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const loadEntitlementsForCustomer = async (compId: string) => {
+    setLoadingEntitlement(true);
+    try {
+      const res = await api.getCustomerEntitlement(compId);
+      if (res?.entitlement) {
+        setEntitlementSummary(res.entitlement);
+        setExpansionQuantity(res.entitlement.userLicences.purchased);
+        setRenewalUserQty(res.entitlement.userLicences.purchased);
+        setRenewalCompQty(res.entitlement.companyLicences.purchased);
+      }
+    } catch (err) {
+      console.warn('Failed to load entitlement summary:', err);
+    } finally {
+      setLoadingEntitlement(false);
+    }
+  };
+
+  const loadHistoryForCustomer = async (compId: string) => {
+    setLoadingHistory(true);
+    try {
+      const res = await api.getEntitlementHistory({ customerId: compId });
+      setEntitlementHistoryList(res?.history || []);
+    } catch (err) {
+      console.warn('Failed to load entitlement history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleExecuteExpansion = async () => {
+    if (!selectedCompany || !showExpansionModal) return;
+    setSavingExpansion(true);
+    setExpansionError(null);
+    try {
+      if (showExpansionModal === 'USER') {
+        const res = await api.increaseUserLicences(selectedCompany.id, expansionQuantity, expansionReason);
+        if (res?.entitlement) setEntitlementSummary(res.entitlement);
+      } else {
+        const res = await api.increaseCompanyLicences(selectedCompany.id, expansionQuantity, expansionReason);
+        if (res?.entitlement) setEntitlementSummary(res.entitlement);
+      }
+      await loadHistoryForCustomer(selectedCompany.id);
+      setShowExpansionModal(null);
+      setExpansionReason('');
+    } catch (err: any) {
+      setExpansionError(err.message || 'Failed to update licences');
+    } finally {
+      setSavingExpansion(false);
+    }
+  };
+
+  const handleExecuteRenewal = async () => {
+    if (!selectedCompany) return;
+    setSavingRenewal(true);
+    setRenewalError(null);
+    try {
+      const res = await api.directRenewSubscription(selectedCompany.id, {
+        renewalMonths,
+        userLicences: renewalUserQty,
+        companyLicences: renewalCompQty,
+        paymentReference: renewalRef,
+        notes: renewalNotes,
+      });
+      if (res?.entitlement) setEntitlementSummary(res.entitlement);
+      await loadHistoryForCustomer(selectedCompany.id);
+      setShowRenewalModal(false);
+      setRenewalRef('');
+      setRenewalNotes('');
+    } catch (err: any) {
+      setRenewalError(err.message || 'Failed to renew subscription');
+    } finally {
+      setSavingRenewal(false);
     }
   };
 
@@ -938,18 +1054,18 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
       {/* Customer Detail Modal / View */}
       {selectedCompany && (
         <div className="modal-backdrop">
-          <div className="modal-content" style={{ maxWidth: 850, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div className="modal-header">
+          <div className="modal-content" style={{ maxWidth: 960, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Building2 size={22} color="#0b3b60" />
                 <div>
                   <div className="modal-title">{selectedCompany.company_name}</div>
                   <div style={{ fontSize: 12, color: '#64748b' }}>
-                    Customer ID: {selectedCompany.id} • {selectedCompany.is_active ? 'Active Account' : 'Inactive Account'}
+                    Customer ID: {selectedCompany.id} • {selectedCompany.is_active ? 'Active Account' : 'Inactive Account'} • Tenant: {selectedCompany.tenant_id || selectedCompany.tenantId || 'KANVTECH'}
                   </div>
                 </div>
               </div>
-              <div style={{ display: 'flex', gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                 <button
                   className="btn btn-secondary btn-sm"
                   onClick={() => { setSelectedCompany(null); handleOpenEdit(selectedCompany); }}
@@ -959,16 +1075,176 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                 </button>
                 <button
                   onClick={() => setSelectedCompany(null)}
-                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}
+                  style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', padding: '0 4px' }}
                 >
                   ✕
                 </button>
               </div>
             </div>
 
-            <div className="modal-body">
-              {/* Company Information */}
-              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, marginBottom: 18, border: '1px solid #e2e8f0' }}>
+            {/* 7 Interactive Sections / Tabs */}
+            <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', background: '#f8fafc', padding: '0 8px', gap: 2, overflowX: 'auto', flexShrink: 0 }}>
+              {[
+                { id: 'overview', label: '1. Overview', icon: Building2 },
+                { id: 'user_licences', label: `2. User Licences (${entitlementSummary?.userLicences?.available ?? '—'})`, icon: Users },
+                { id: 'company_licences', label: `3. Company Licences (${entitlementSummary?.companyLicences?.available ?? '—'})`, icon: Layers },
+                { id: 'subscription', label: '4. Subscription & Validity', icon: Calendar },
+                { id: 'entitlement_history', label: '5. Entitlement History', icon: Clock },
+                { id: 'licence_usage', label: '6. Licence Usage', icon: TrendingUp },
+                { id: 'audit_history', label: '7. Audit History', icon: FileText },
+              ].map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setCustomerModalTab(t.id as any)}
+                  style={{
+                    padding: '10px 12px',
+                    border: 'none',
+                    background: 'none',
+                    borderBottom: customerModalTab === t.id ? '2px solid #2563eb' : '2px solid transparent',
+                    color: customerModalTab === t.id ? '#1d4ed8' : '#64748b',
+                    fontWeight: customerModalTab === t.id ? 700 : 500,
+                    fontSize: 12,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <t.icon size={13} color={customerModalTab === t.id ? '#2563eb' : '#64748b'} />
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="modal-body" style={{ overflowY: 'auto', flex: 1, padding: 18 }}>
+              {/* TAB 1: OVERVIEW */}
+              {customerModalTab === 'overview' && (
+                <>
+                  {/* Commercial Entitlement Overview Cards */}
+                  {entitlementSummary && (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 18 }}>
+                      {/* Subscription Status Card */}
+                      <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+                          Subscription
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                          <span
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              background: entitlementSummary.subscription.isExpired
+                                ? '#fee2e2'
+                                : entitlementSummary.subscription.status === 'EXPIRING_SOON'
+                                ? '#fef3c7'
+                                : '#dcfce7',
+                              color: entitlementSummary.subscription.isExpired
+                                ? '#991b1b'
+                                : entitlementSummary.subscription.status === 'EXPIRING_SOON'
+                                ? '#92400e'
+                                : '#166534',
+                            }}
+                          >
+                            {entitlementSummary.subscription.status}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 11, color: '#475569' }}>
+                          Expires: {new Date(entitlementSummary.subscription.expiryDate).toLocaleDateString()}
+                        </div>
+                        <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>
+                          {entitlementSummary.subscription.daysRemaining} days remaining
+                        </div>
+                      </div>
+
+                      {/* User Licences Card */}
+                      <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>User Licences</span>
+                          <span style={{ fontSize: 10, color: '#2563eb', fontWeight: 600 }}>{entitlementSummary.userLicences.usagePercentage}%</span>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                          {entitlementSummary.userLicences.used} / {entitlementSummary.userLicences.purchased}
+                        </div>
+                        <div style={{ height: 5, background: '#e2e8f0', borderRadius: 3, margin: '6px 0', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              height: '100%',
+                              width: `${Math.min(100, entitlementSummary.userLicences.usagePercentage)}%`,
+                              background: entitlementSummary.userLicences.available === 0 ? '#ef4444' : '#2563eb',
+                            }}
+                          />
+                        </div>
+                        <div style={{ fontSize: 11, color: entitlementSummary.userLicences.available > 0 ? '#166534' : '#b91c1c', fontWeight: 600 }}>
+                          {entitlementSummary.userLicences.available} Available
+                        </div>
+                      </div>
+
+                      {/* Company Licences Card */}
+                      <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Company Licences</span>
+                          <span style={{ fontSize: 10, color: '#0284c7', fontWeight: 600 }}>{entitlementSummary.companyLicences.usagePercentage}%</span>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                          {entitlementSummary.companyLicences.used} / {entitlementSummary.companyLicences.purchased}
+                        </div>
+                        <div style={{ height: 5, background: '#e2e8f0', borderRadius: 3, margin: '6px 0', overflow: 'hidden' }}>
+                          <div
+                            style={{
+                              height: '100%',
+                              width: `${Math.min(100, entitlementSummary.companyLicences.usagePercentage)}%`,
+                              background: entitlementSummary.companyLicences.available === 0 ? '#ef4444' : '#0284c7',
+                            }}
+                          />
+                        </div>
+                        <div style={{ fontSize: 11, color: entitlementSummary.companyLicences.available > 0 ? '#166534' : '#b91c1c', fontWeight: 600 }}>
+                          {entitlementSummary.companyLicences.available} Available
+                        </div>
+                      </div>
+
+                      {/* Renewal & Actions Card */}
+                      <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                        <div>
+                          <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', marginBottom: 4 }}>
+                            Renewal Status
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                            {entitlementSummary.subscription.renewalStatus}
+                          </div>
+                          <div style={{ fontSize: 10, color: '#64748b', marginTop: 2 }}>
+                            Modified: {new Date(entitlementSummary.lastModified).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setShowRenewalModal(true)}
+                          style={{ marginTop: 6, fontSize: 11, padding: '3px 8px' }}
+                        >
+                          <RotateCcw size={12} /> Renew / Expand
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Warnings Alert Banner */}
+                  {entitlementSummary?.warnings && entitlementSummary.warnings.length > 0 && (
+                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: 10, marginBottom: 16 }}>
+                      {entitlementSummary.warnings.map((w: string, idx: number) => (
+                        <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#92400e', marginBottom: idx < entitlementSummary.warnings.length - 1 ? 4 : 0 }}>
+                          <AlertTriangle size={14} color="#d97706" />
+                          <span>{w}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Company Information */}
+                  <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, marginBottom: 18, border: '1px solid #e2e8f0' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginBottom: 10 }}>
                   Company Information
                 </div>
@@ -1289,16 +1565,624 @@ export const CompaniesPage: React.FC<{ onNavigateTicket: (id: string) => void }>
                   </div>
                 </div>
               </div>
-            </div>
+            </>
+          )}
 
-            <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setSelectedCompany(null)}>
-                Close
-              </button>
+          {/* TAB 2: USER LICENCES */}
+          {customerModalTab === 'user_licences' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                    User Licences &amp; Employee Account Capacity
+                  </h4>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    User Licences determine the maximum number of active employee/user accounts allowed under this customer subscription.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setExpansionQuantity(entitlementSummary?.userLicences?.purchased || 50);
+                    setExpansionError(null);
+                    setShowExpansionModal('USER');
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Plus size={14} /> Increase User Licences
+                </button>
+              </div>
+
+              {entitlementSummary && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>PURCHASED USER LICENCES</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                      {entitlementSummary.userLicences.purchased}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>ACTIVE LICENSED USERS</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#2563eb', marginTop: 4 }}>
+                      {entitlementSummary.userLicences.used}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>AVAILABLE USER LICENCES</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: entitlementSummary.userLicences.available > 0 ? '#166534' : '#dc2626', marginTop: 4 }}>
+                      {entitlementSummary.userLicences.available}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>CAPACITY UTILIZATION</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                      {entitlementSummary.userLicences.usagePercentage}%
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress bar */}
+              {entitlementSummary && (
+                <div style={{ background: 'white', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, color: '#334155' }}>
+                      Active Users: {entitlementSummary.userLicences.used} of {entitlementSummary.userLicences.purchased} licences used
+                    </span>
+                    <span style={{ fontWeight: 700, color: entitlementSummary.userLicences.available > 0 ? '#166534' : '#dc2626' }}>
+                      {entitlementSummary.userLicences.available} Available
+                    </span>
+                  </div>
+                  <div style={{ height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, entitlementSummary.userLicences.usagePercentage)}%`,
+                        background: entitlementSummary.userLicences.available === 0 ? '#ef4444' : '#2563eb',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Governance Rules Alert */}
+              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={16} color="#2563eb" /> Commercial Licensing &amp; Deactivation Rules
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                  <li><strong>Employee Capacity:</strong> Determined strictly by purchased User Licences. Creation of new active employees is blocked when available capacity reaches 0.</li>
+                  <li><strong>Expansion Before Expiry:</strong> User Licence quantity can increase before expiry, but cannot decrease.</li>
+                  <li><strong>Deactivation &amp; Licence Release:</strong> Only the Tenant Super Admin can deactivate employees and release their User Licence for immediate reuse. Ordinary employees cannot deactivate users.</li>
+                  <li><strong>Data Preservation:</strong> Deactivated employee records are permanently preserved and never deleted to release capacity.</li>
+                </ul>
+              </div>
             </div>
+          )}
+
+          {/* TAB 3: COMPANY LICENCES */}
+          {customerModalTab === 'company_licences' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                    Company Licences &amp; Organization Capacity
+                  </h4>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    Company Licences control how many registered customer companies are allowed under this tenant workspace.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    setExpansionQuantity(entitlementSummary?.companyLicences?.purchased || 3);
+                    setExpansionError(null);
+                    setShowExpansionModal('COMPANY');
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <Plus size={14} /> Increase Company Licences
+                </button>
+              </div>
+
+              {entitlementSummary && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>PURCHASED COMPANY LICENCES</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                      {entitlementSummary.companyLicences.purchased}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>REGISTERED COMPANIES</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#0284c7', marginTop: 4 }}>
+                      {entitlementSummary.companyLicences.used}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>AVAILABLE COMPANY LICENCES</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: entitlementSummary.companyLicences.available > 0 ? '#166534' : '#dc2626', marginTop: 4 }}>
+                      {entitlementSummary.companyLicences.available}
+                    </div>
+                  </div>
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                    <div style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>CAPACITY UTILIZATION</div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', marginTop: 4 }}>
+                      {entitlementSummary.companyLicences.usagePercentage}%
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Progress bar */}
+              {entitlementSummary && (
+                <div style={{ background: 'white', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0', marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, color: '#334155' }}>
+                      Registered Companies: {entitlementSummary.companyLicences.used} of {entitlementSummary.companyLicences.purchased} licences used
+                    </span>
+                    <span style={{ fontWeight: 700, color: entitlementSummary.companyLicences.available > 0 ? '#166534' : '#dc2626' }}>
+                      {entitlementSummary.companyLicences.available} Available
+                    </span>
+                  </div>
+                  <div style={{ height: 10, background: '#f1f5f9', borderRadius: 5, overflow: 'hidden' }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, entitlementSummary.companyLicences.usagePercentage)}%`,
+                        background: entitlementSummary.companyLicences.available === 0 ? '#ef4444' : '#0284c7',
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Rules Alert */}
+              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <ShieldCheck size={16} color="#0284c7" /> Company Licensing Governance
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                  <li><strong>Company Registration Limit:</strong> When available Company Licences reach 0, creating or registering additional customer companies is blocked.</li>
+                  <li><strong>No Reductions Before Expiry:</strong> Company Licence quantity can increase before expiry, but cannot decrease.</li>
+                  <li><strong>Branch Isolation:</strong> Branches are separately managed entities and do not consume Company Licence capacity.</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 4: SUBSCRIPTION & VALIDITY */}
+          {customerModalTab === 'subscription' && entitlementSummary && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                    Subscription &amp; Entitlement Validity
+                  </h4>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    Centralized subscription governance, renewal workflows, and access boundaries.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => setShowRenewalModal(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                  <RotateCcw size={14} /> Renew Subscription
+                </button>
+              </div>
+
+              <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, fontSize: 13 }}>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>SUBSCRIPTION STATUS</div>
+                    <div style={{ marginTop: 4 }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: 4,
+                          background: entitlementSummary.subscription.isExpired
+                            ? '#fee2e2'
+                            : entitlementSummary.subscription.status === 'EXPIRING_SOON'
+                            ? '#fef3c7'
+                            : '#dcfce7',
+                          color: entitlementSummary.subscription.isExpired
+                            ? '#991b1b'
+                            : entitlementSummary.subscription.status === 'EXPIRING_SOON'
+                            ? '#92400e'
+                            : '#166534',
+                        }}
+                      >
+                        {entitlementSummary.subscription.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>START DATE</div>
+                    <div style={{ fontWeight: 600, marginTop: 4 }}>
+                      {new Date(entitlementSummary.subscription.startDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>EXPIRY DATE</div>
+                    <div style={{ fontWeight: 600, marginTop: 4, color: entitlementSummary.subscription.isExpired ? '#dc2626' : '#0f172a' }}>
+                      {new Date(entitlementSummary.subscription.expiryDate).toLocaleDateString()} ({entitlementSummary.subscription.daysRemaining} days left)
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>RENEWAL STATUS</div>
+                    <div style={{ fontWeight: 600, marginTop: 4 }}>{entitlementSummary.subscription.renewalStatus}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>PURCHASE REFERENCE</div>
+                    <div style={{ fontWeight: 600, marginTop: 4 }}>{entitlementSummary.purchaseReference || 'PO-DIRECT-ALLOCATION'}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>LAST ENTITLEMENT MODIFIED</div>
+                    <div style={{ fontWeight: 600, marginTop: 4 }}>{new Date(entitlementSummary.lastModified).toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expiry Governance Box */}
+              <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: 8, padding: 14 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <AlertCircle size={16} color="#d97706" /> Subscription Expiry &amp; Restricted Access Policy
+                </div>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: 12, color: '#475569', lineHeight: 1.6 }}>
+                  <li><strong>Employee Access:</strong> When the subscription expires, normal employee access is blocked. Ordinary employees cannot perform operations or create tickets.</li>
+                  <li><strong>Tenant Super Admin Access:</strong> The Tenant Super Admin retains restricted access solely to the renewal workspace to renew the subscription and purchase additional licences.</li>
+                  <li><strong>Zero Data Loss:</strong> Historical tickets, companies, employee profiles, and audit records are never deleted upon expiry.</li>
+                  <li><strong>Renewal Restoration:</strong> Upon successful renewal, normal employee access is immediately restored. Manually deactivated employees remain inactive.</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: ENTITLEMENT HISTORY */}
+          {customerModalTab === 'entitlement_history' && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                <div>
+                  <h4 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                    Permanent Append-Only Entitlement History
+                  </h4>
+                  <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                    Immutable audit ledger of all commercial licence allocations, renewals, activations, and releases.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => loadHistoryForCustomer(selectedCompany.id)}
+                  disabled={loadingHistory}
+                >
+                  <RotateCcw size={12} /> Refresh
+                </button>
+              </div>
+
+              {loadingHistory ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: 12 }}>Loading history...</div>
+              ) : entitlementHistoryList.length === 0 ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#64748b', fontSize: 12, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  No historical entitlement events found for this customer.
+                </div>
+              ) : (
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, textAlign: 'left' }}>
+                    <thead style={{ background: '#f1f5f9', color: '#475569', borderBottom: '1px solid #cbd5e1' }}>
+                      <tr>
+                        <th style={{ padding: '8px 10px' }}>Date</th>
+                        <th style={{ padding: '8px 10px' }}>Action</th>
+                        <th style={{ padding: '8px 10px' }}>Category</th>
+                        <th style={{ padding: '8px 10px', textAlign: 'center' }}>Change</th>
+                        <th style={{ padding: '8px 10px' }}>Period</th>
+                        <th style={{ padding: '8px 10px' }}>Reason / Notes</th>
+                        <th style={{ padding: '8px 10px' }}>Performed By</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entitlementHistoryList.map((h, i) => (
+                        <tr key={h.id || i} style={{ borderBottom: '1px solid #f1f5f9', background: i % 2 === 0 ? 'white' : '#fafafa' }}>
+                          <td style={{ padding: '8px 10px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                            {new Date(h.createdAt).toLocaleDateString()} {new Date(h.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            <span
+                              style={{
+                                fontSize: 10,
+                                fontWeight: 700,
+                                padding: '2px 6px',
+                                borderRadius: 4,
+                                background: h.actionType?.includes('ADDITIONAL') || h.actionType?.includes('RENEWAL')
+                                  ? '#dbeafe'
+                                  : h.actionType?.includes('RELEASE') || h.actionType?.includes('DEACTIVATION')
+                                  ? '#fef3c7'
+                                  : '#f1f5f9',
+                                color: h.actionType?.includes('ADDITIONAL') || h.actionType?.includes('RENEWAL')
+                                  ? '#1d4ed8'
+                                  : h.actionType?.includes('RELEASE') || h.actionType?.includes('DEACTIVATION')
+                                  ? '#b45309'
+                                  : '#475569',
+                              }}
+                            >
+                              {h.actionType}
+                            </span>
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#334155' }}>{h.licenceCategory}</td>
+                          <td style={{ padding: '8px 10px', textAlign: 'center', fontWeight: 700 }}>
+                            {h.quantityDifference !== undefined && h.quantityDifference !== null ? (
+                              <span style={{ color: h.quantityDifference > 0 ? '#166534' : h.quantityDifference < 0 ? '#d97706' : '#64748b' }}>
+                                {h.quantityDifference > 0 ? `+${h.quantityDifference}` : h.quantityDifference}
+                              </span>
+                            ) : (
+                              '—'
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#64748b' }}>{h.newPeriod || 'Current'}</td>
+                          <td style={{ padding: '8px 10px', color: '#334155', maxWidth: 220 }}>{h.reason || '—'}</td>
+                          <td style={{ padding: '8px 10px', color: '#64748b' }}>
+                            {h.performedBy || 'System Admin'} ({h.performedByRole || 'SUPER_ADMIN'})
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 6: LICENCE USAGE DASHBOARD */}
+          {customerModalTab === 'licence_usage' && entitlementSummary && (
+            <div>
+              <h4 style={{ margin: '0 0 16px 0', fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                Authoritative Licence Usage Dashboard
+              </h4>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+                {/* User Licence Gauge */}
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Users size={18} color="#2563eb" />
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>User Licences Gauge</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#2563eb' }}>
+                      {entitlementSummary.userLicences.usagePercentage}%
+                    </span>
+                  </div>
+                  <div style={{ height: 14, background: '#f1f5f9', borderRadius: 7, overflow: 'hidden', marginBottom: 10 }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, entitlementSummary.userLicences.usagePercentage)}%`,
+                        background: entitlementSummary.userLicences.available === 0 ? '#ef4444' : '#2563eb',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                    <span>Used: <strong>{entitlementSummary.userLicences.used}</strong> active users</span>
+                    <span>Purchased: <strong>{entitlementSummary.userLicences.purchased}</strong></span>
+                    <span style={{ color: entitlementSummary.userLicences.available > 0 ? '#166534' : '#dc2626', fontWeight: 700 }}>
+                      {entitlementSummary.userLicences.available} Available
+                    </span>
+                  </div>
+                </div>
+
+                {/* Company Licence Gauge */}
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: 8, padding: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <Layers size={18} color="#0284c7" />
+                      <span style={{ fontWeight: 700, color: '#0f172a' }}>Company Licences Gauge</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#0284c7' }}>
+                      {entitlementSummary.companyLicences.usagePercentage}%
+                    </span>
+                  </div>
+                  <div style={{ height: 14, background: '#f1f5f9', borderRadius: 7, overflow: 'hidden', marginBottom: 10 }}>
+                    <div
+                      style={{
+                        height: '100%',
+                        width: `${Math.min(100, entitlementSummary.companyLicences.usagePercentage)}%`,
+                        background: entitlementSummary.companyLicences.available === 0 ? '#ef4444' : '#0284c7',
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#64748b' }}>
+                    <span>Used: <strong>{entitlementSummary.companyLicences.used}</strong> companies</span>
+                    <span>Purchased: <strong>{entitlementSummary.companyLicences.purchased}</strong></span>
+                    <span style={{ color: entitlementSummary.companyLicences.available > 0 ? '#166534' : '#dc2626', fontWeight: 700 }}>
+                      {entitlementSummary.companyLicences.available} Available
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: AUDIT HISTORY */}
+          {customerModalTab === 'audit_history' && (
+            <div>
+              <h4 style={{ margin: '0 0 14px 0', fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                Customer Administrative Audit Stream
+              </h4>
+              <div style={{ background: '#f8fafc', padding: 14, borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                <div style={{ fontSize: 12, color: '#475569' }}>
+                  All administrative changes, licence expansions, deactivations, and renewals are tracked with permanent server-side timestamps and actor user IDs.
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer" style={{ flexShrink: 0 }}>
+          <button className="btn btn-secondary" onClick={() => setSelectedCompany(null)}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* LICENCE EXPANSION MODAL */}
+  {showExpansionModal && entitlementSummary && (
+    <div className="modal-backdrop">
+      <div className="modal-content" style={{ maxWidth: 480 }}>
+        <div className="modal-header">
+          <div className="modal-title">
+            Increase {showExpansionModal === 'USER' ? 'User Licences' : 'Company Licences'}
+          </div>
+          <button onClick={() => setShowExpansionModal(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body" style={{ padding: 16 }}>
+          {expansionError && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: 10, color: '#991b1b', fontSize: 12, marginBottom: 12 }}>
+              {expansionError}
+            </div>
+          )}
+          <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: 10, fontSize: 12, color: '#1e40af', marginBottom: 14 }}>
+            <strong>Current Allocation:</strong> {showExpansionModal === 'USER' ? entitlementSummary.userLicences.purchased : entitlementSummary.companyLicences.purchased} licences.
+            <div style={{ marginTop: 4 }}>Notice: Before expiry, licences can increase, but cannot decrease.</div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+              New Total Quantity *
+            </label>
+            <input
+              type="number"
+              className="form-control"
+              value={expansionQuantity}
+              min={showExpansionModal === 'USER' ? entitlementSummary.userLicences.purchased : entitlementSummary.companyLicences.purchased}
+              onChange={(e) => setExpansionQuantity(Number(e.target.value))}
+            />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+              Reason / PO Reference (Optional)
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="e.g. Q4 Team Expansion, PO-9921"
+              value={expansionReason}
+              onChange={(e) => setExpansionReason(e.target.value)}
+            />
           </div>
         </div>
-      )}
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => setShowExpansionModal(null)} disabled={savingExpansion}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={handleExecuteExpansion} disabled={savingExpansion}>
+            {savingExpansion ? 'Expanding...' : 'Confirm Expansion'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
+
+  {/* SUBSCRIPTION RENEWAL MODAL */}
+  {showRenewalModal && entitlementSummary && (
+    <div className="modal-backdrop">
+      <div className="modal-content" style={{ maxWidth: 520 }}>
+        <div className="modal-header">
+          <div className="modal-title">Renew Customer Subscription</div>
+          <button onClick={() => setShowRenewalModal(false)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer' }}>
+            ✕
+          </button>
+        </div>
+        <div className="modal-body" style={{ padding: 16 }}>
+          {renewalError && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: 10, color: '#991b1b', fontSize: 12, marginBottom: 12 }}>
+              {renewalError}
+            </div>
+          )}
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+              Renewal Validity Period *
+            </label>
+            <select
+              className="form-control"
+              value={renewalMonths}
+              onChange={(e) => setRenewalMonths(Number(e.target.value))}
+            >
+              <option value={12}>12 Months (1 Year Standard)</option>
+              <option value={24}>24 Months (2 Years Enterprise)</option>
+              <option value={36}>36 Months (3 Years Long Term)</option>
+              <option value={6}>6 Months (Semi-Annual)</option>
+            </select>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                User Licences Quantity
+              </label>
+              <input
+                type="number"
+                className="form-control"
+                value={renewalUserQty}
+                min={entitlementSummary.userLicences.purchased}
+                onChange={(e) => setRenewalUserQty(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+                Company Licences Quantity
+              </label>
+              <input
+                type="number"
+                className="form-control"
+                value={renewalCompQty}
+                min={entitlementSummary.companyLicences.purchased}
+                onChange={(e) => setRenewalCompQty(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+              Payment / Invoice Reference
+            </label>
+            <input
+              type="text"
+              className="form-control"
+              placeholder="e.g. INV-2027-0091"
+              value={renewalRef}
+              onChange={(e) => setRenewalRef(e.target.value)}
+            />
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: '#334155', marginBottom: 4 }}>
+              Renewal Notes
+            </label>
+            <textarea
+              className="form-control"
+              rows={2}
+              placeholder="Annual SLA and software entitlement renewal"
+              value={renewalNotes}
+              onChange={(e) => setRenewalNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={() => setShowRenewalModal(false)} disabled={savingRenewal}>
+            Cancel
+          </button>
+          <button className="btn btn-primary" onClick={handleExecuteRenewal} disabled={savingRenewal}>
+            {savingRenewal ? 'Executing Renewal...' : 'Execute Renewal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )}
 
       {/* EDIT CUSTOMER MODAL */}
       {showEditModal && editingCompany && (

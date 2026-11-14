@@ -21,6 +21,52 @@ export class ImplementationsService {
     }
   }
 
+  async getCustomerProducts(companyId: string, tenantId?: string) {
+    if (!companyId) return [];
+    const where: any = { companyId, isActive: true };
+    if (tenantId) {
+      where.company = { tenantId };
+    }
+    const companyProducts = await this.prisma.companyProduct.findMany({
+      where,
+      include: {
+        product: {
+          select: {
+            id: true,
+            code: true,
+            name: true,
+            category: true,
+            description: true,
+            isActive: true,
+          },
+        },
+        modules: {
+          include: {
+            module: {
+              select: {
+                id: true,
+                name: true,
+                description: true,
+                isActive: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return companyProducts.map((cp) => ({
+      id: cp.id,
+      companyId: cp.companyId,
+      productId: cp.productId,
+      purchaseType: cp.purchaseType,
+      purchasedAt: cp.purchasedAt,
+      product: cp.product,
+      modulesCount: cp.modules?.length || 0,
+    }));
+  }
+
   async getEntitledModules(companyId: string, productId: string) {
     if (!companyId || !productId) return [];
 
@@ -361,52 +407,92 @@ export class ImplementationsService {
       targetGoLiveDate?: string | Date;
       target_go_live_date?: string | Date;
       status?: ImplementationStatus;
+      priority?: string;
       progressPercentage?: number;
       progress_percentage?: number;
       pendingActivities?: string;
       pending_activities?: string;
       notes?: string;
+      description?: string;
       tasks?: any[];
       modules?: any[];
     },
     actorUserId: number,
     tenantId?: string,
   ) {
+    const effectiveTenantId = tenantId || 'KANVTECH';
     const companyId = data.companyId || data.company_id;
     let productId = data.productId || data.product_id;
-    if (!productId) {
-      const defaultProd = await this.prisma.product.findFirst({
-        where: { isActive: true, ...(tenantId ? { tenantId } : {}) },
-      });
-      productId = defaultProd?.id || (await this.prisma.product.findFirst({ where: tenantId ? { tenantId } : {} }))?.id;
-    }
     const subscriptionId = data.subscriptionId || data.subscription_id || null;
     let ownerEmployeeId = data.ownerEmployeeId || data.owner_employee_id || (data as any).leadSpecialistId || null;
     if (ownerEmployeeId && !String(ownerEmployeeId).startsWith('EMP-')) {
-      const emp = await this.prisma.employee.findFirst({ where: { userId: Number(ownerEmployeeId), ...(tenantId ? { tenantId } : {}) } });
+      const emp = await this.prisma.employee.findFirst({ where: { userId: Number(ownerEmployeeId), tenantId: effectiveTenantId } });
       if (emp) ownerEmployeeId = emp.id;
     }
     const rawStartDate = data.startDate || data.start_date || new Date().toISOString();
     const rawTargetDate = data.targetGoLiveDate || data.target_go_live_date;
 
     if (!companyId || !productId || !rawStartDate || !rawTargetDate) {
-      throw new BadRequestException('Company, Product, Start Date, and Target Go-Live Date are required');
+      throw new BadRequestException('Customer Company, Product, Start Date, and Target Go-Live Date are required');
     }
 
-    if (tenantId) {
-      const company = await this.prisma.company.findFirst({
-        where: { id: companyId, tenantId },
+    // 1. Verify Company belongs to active tenant
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, tenantId: effectiveTenantId },
+    });
+    if (!company) {
+      throw new BadRequestException('Referenced customer company does not exist or does not belong to active tenant');
+    }
+
+    // 2. Verify Product belongs to active tenant
+    const product = await this.prisma.product.findFirst({
+      where: { id: productId, tenantId: effectiveTenantId },
+    });
+    if (!product) {
+      throw new BadRequestException('Referenced product does not exist or does not belong to active tenant');
+    }
+
+    // 3. Verify Customer / Product Mapping
+    const companyProduct = await this.prisma.companyProduct.findFirst({
+      where: { companyId, productId, isActive: true },
+    });
+    if (!companyProduct) {
+      throw new BadRequestException(`Selected product (${product.name}) is not mapped or entitled to customer '${company.companyName}'`);
+    }
+
+    // 4. Verify Project Lead employee eligibility
+    if (ownerEmployeeId) {
+      const leadEmp = await this.prisma.employee.findFirst({
+        where: { id: ownerEmployeeId, tenantId: effectiveTenantId, status: 'ACTIVE' },
       });
-      if (!company) {
-        throw new BadRequestException('Referenced company does not belong to active tenant');
+      if (!leadEmp) {
+        throw new BadRequestException('Project Lead must be an active employee belonging to active tenant');
       }
     }
 
+    // 5. Dates validation
     const startDate = new Date(rawStartDate);
     const targetGoLiveDate = new Date(rawTargetDate);
-
     if (isNaN(startDate.getTime()) || isNaN(targetGoLiveDate.getTime())) {
       throw new BadRequestException('Invalid date provided for Start Date or Target Go-Live Date');
+    }
+    if (targetGoLiveDate < startDate) {
+      throw new BadRequestException('Target Go-Live Date cannot be earlier than Start Date');
+    }
+
+    // 6. Duplicate constraint: prevent multiple ongoing active implementations for same company + product
+    const existingActive = await this.prisma.implementation.findFirst({
+      where: {
+        companyId,
+        productId,
+        tenantId: effectiveTenantId,
+        status: {
+          notIn: [ImplementationStatus.COMPLETED],
+        },
+      },
+    });
+    if (existingActive) {
+      throw new BadRequestException(`An ongoing implementation project (${existingActive.id}) already exists for customer '${company.companyName}' with product '${product.name}'`);
     }
 
     let teamMembersJson: string | null = null;
@@ -430,11 +516,11 @@ export class ImplementationsService {
         teamMembersJson,
         startDate,
         targetGoLiveDate,
-        status: data.status || ImplementationStatus.NEW,
+        status: data.status || ImplementationStatus.PLANNING,
         progressPercentage: Math.min(100, Math.max(0, progress)),
         pendingActivities: data.pendingActivities || data.pending_activities || null,
-        notes: data.notes || null,
-        tenantId: tenantId || 'KANVTECH',
+        notes: data.notes || data.description || null,
+        tenantId: effectiveTenantId,
       },
       include: {
         company: true,
@@ -456,6 +542,42 @@ export class ImplementationsService {
             });
           }
         }
+      }
+    }
+
+    // Auto-generate checklist items based on configured product modules if no explicit tasks passed
+    if (initialTasks.length === 0) {
+      const entitled = await this.getEntitledModules(companyId, productId);
+      for (const m of entitled) {
+        if (m.submodules && m.submodules.length > 0) {
+          for (const s of m.submodules) {
+            initialTasks.push({
+              moduleId: m.id,
+              taskName: `${s.name} Configuration`,
+              description: `Onboarding checklist task for ${s.name} under ${m.name}`,
+              priority: data.priority || 'MEDIUM',
+              assignedEmployeeId: ownerEmployeeId || null,
+            });
+          }
+        } else {
+          initialTasks.push({
+            moduleId: m.id,
+            taskName: `${m.name} Rollout & Setup`,
+            description: `Initial rollout and setup for ${m.name}`,
+            priority: data.priority || 'MEDIUM',
+            assignedEmployeeId: ownerEmployeeId || null,
+          });
+        }
+      }
+
+      if (initialTasks.length === 0) {
+        initialTasks.push({
+          moduleId: null,
+          taskName: `${product.name} Onboarding Setup`,
+          description: `Initial implementation checklist for ${company.companyName}`,
+          priority: data.priority || 'MEDIUM',
+          assignedEmployeeId: ownerEmployeeId || null,
+        });
       }
     }
 

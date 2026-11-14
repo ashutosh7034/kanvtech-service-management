@@ -53,6 +53,22 @@ export class ImplementationsController {
     return { success: true, ...result };
   }
 
+  @Get('customer-products/:companyId')
+  @ApiOperation({ summary: 'Get products mapped to a customer company' })
+  async getCustomerProducts(
+    @Param('companyId') companyId: string,
+    @Request() req: any,
+  ) {
+    if (req?.user?.role === 'CUSTOMER' && req?.user?.companyId && req.user.companyId !== companyId) {
+      throw new ForbiddenException('Unauthorized access to customer company products');
+    }
+    const products = await this.implementationsService.getCustomerProducts(
+      companyId,
+      req.user?.tenantId,
+    );
+    return { success: true, products, data: products };
+  }
+
   @Get('entitled-modules')
   @ApiOperation({ summary: 'Get entitled modules for customer and product' })
   async getEntitledModules(
@@ -81,7 +97,7 @@ export class ImplementationsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @RequirePermissions('implementation.create')
   @ApiOperation({ summary: 'Create a new customer implementation project' })
   async createImplementation(@Body() body: any, @Request() req: any) {

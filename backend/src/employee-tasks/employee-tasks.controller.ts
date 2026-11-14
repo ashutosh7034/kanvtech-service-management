@@ -19,8 +19,9 @@ import { EmployeeTasksService } from './employee-tasks.service';
 import { StorageService } from '../storage/storage.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
+import { RequirePermissions } from '../permissions/permissions.decorator';
 
-@ApiTags('Employee Tasks / My Tasks')
+@ApiTags('Employee Tasks / Two-Way Task Management')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller(['employee-tasks', 'my-tasks'])
@@ -47,10 +48,11 @@ export class EmployeeTasksController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'Get personal task reminders with filters and search' })
-  async getMyTasks(@Query() query: any, @Request() req: any) {
+  @ApiOperation({ summary: 'List tasks with two-way views (my_tasks, sent_tasks, team_tasks)' })
+  async getTasks(@Query() query: any, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
-    const result = await this.employeeTasksService.getMyTasks(employeeId, {
+    const result = await this.employeeTasksService.getTasks(employeeId, {
+      view: query.view || 'my_tasks',
       status: query.status,
       filter: query.filter,
       priority: query.priority,
@@ -58,98 +60,259 @@ export class EmployeeTasksController {
       search: query.search,
       page: query.page,
       limit: query.limit,
+      tenantId: req.user?.tenantId,
     });
     return { success: true, ...result };
   }
 
   @Get('summary')
-  @ApiOperation({ summary: 'Get personal task summary metrics for dashboard widget' })
+  @ApiOperation({ summary: 'Get summary metrics for My Tasks, Sent Tasks, and Team Tasks' })
   async getDashboardSummary(@Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
-    const summary = await this.employeeTasksService.getDashboardSummary(employeeId);
+    const summary = await this.employeeTasksService.getDashboardSummary(employeeId, req.user?.tenantId);
     return { success: true, ...summary };
   }
 
   @Get('eligible-assignees')
-  @ApiOperation({ summary: 'Get employees the current user is authorized to assign tasks to' })
+  @ApiOperation({ summary: 'Get active employees within tenant authorized for task assignment' })
   async getEligibleAssignees(@Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
-    const userId = req.user?.userId || req.user?.id;
-    const userRole = req.user?.role;
-    const employees = await this.employeeTasksService.getEligibleAssignees(employeeId, userId, userRole);
+    const employees = await this.employeeTasksService.getEligibleAssignees(employeeId, req.user?.tenantId);
     return { success: true, employees };
   }
 
   @Get('process-reminders')
-  @ApiOperation({ summary: 'Trigger reminder sweep immediately (scheduler / test endpoint)' })
+  @ApiOperation({ summary: 'Trigger automatic reminder sweep (20 minutes before deadline)' })
   async triggerReminderSweep() {
     const result = await this.employeeTasksService.processDueReminders();
     return { success: true, ...result };
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a specific personal task by ID' })
+  @ApiOperation({ summary: 'Get specific task details by ID' })
   async getTask(@Param('id') id: string, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
-    const task = await this.employeeTasksService.getTaskById(id, employeeId);
+    const task = await this.employeeTasksService.getTaskById(id, employeeId, req.user?.tenantId);
     return { success: true, task };
   }
 
+  @Get(':id/activities')
+  @ApiOperation({ summary: 'Get activity timeline and history for task' })
+  async getActivities(@Param('id') id: string, @Request() req: any) {
+    const activities = await this.employeeTasksService.getTaskActivities(id, req.user?.tenantId);
+    return { success: true, activities };
+  }
+
   @Post()
-  @ApiOperation({ summary: 'Create a personal or assigned task reminder' })
+  @RequirePermissions('task.assign')
+  @ApiOperation({ summary: 'Create and assign a task to eligible employee' })
   async createTask(@Body() body: any, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
     const userId = req.user?.userId || req.user?.id;
-    const userRole = req.user?.role;
-    const task = await this.employeeTasksService.createTask(employeeId, userId, userRole, {
-      title: body.title,
-      description: body.description,
-      category: body.category,
-      dueDate: body.due_date || body.dueDate,
-      dueTime: body.due_time || body.dueTime,
-      priority: body.priority,
-      reminderTime: body.reminder_time || body.reminderTime,
-      taskType: body.task_type || body.taskType,
-      assignedToIds: body.assigned_to_ids || body.assignedToIds || (body.assigned_to ? [body.assigned_to] : undefined),
-      attachments: body.attachments,
-    });
-    return { success: true, task, message: 'Task created successfully.' };
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.createTask(
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      {
+        title: body.title,
+        description: body.description,
+        category: body.category,
+        dueDate: body.due_date || body.dueDate,
+        dueTime: body.due_time || body.dueTime,
+        priority: body.priority,
+        taskType: body.task_type || body.taskType,
+        assignedToIds:
+          body.assigned_to_ids ||
+          body.assignedToIds ||
+          (body.assigned_to ? [body.assigned_to] : undefined) ||
+          (body.assignedTo ? [body.assignedTo] : undefined) ||
+          (body.assignedToId ? [body.assignedToId] : undefined) ||
+          (body.assigned_to_id ? [body.assigned_to_id] : undefined),
+        attachments: body.attachments,
+      },
+    );
+    return { success: true, task, message: 'Task created and assigned successfully.' };
   }
 
   @Put(':id')
-  @ApiOperation({ summary: 'Update a personal task reminder' })
+  @RequirePermissions('task.edit')
+  @ApiOperation({ summary: 'Update task details and reschedule deadline' })
   async updateTask(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
     const userId = req.user?.userId || req.user?.id;
-    const task = await this.employeeTasksService.updateTask(id, employeeId, userId, {
-      title: body.title,
-      description: body.description,
-      category: body.category,
-      dueDate: body.due_date || body.dueDate,
-      dueTime: body.due_time || body.dueTime,
-      priority: body.priority,
-      reminderTime: body.reminder_time || body.reminderTime,
-      status: body.status,
-      taskType: body.task_type || body.taskType,
-    });
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.updateTask(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      {
+        title: body.title,
+        description: body.description,
+        category: body.category,
+        dueDate: body.due_date || body.dueDate,
+        dueTime: body.due_time || body.dueTime,
+        priority: body.priority,
+        status: body.status,
+      },
+    );
     return { success: true, task, message: 'Task updated successfully.' };
   }
 
-  @Post(':id/complete')
-  @ApiOperation({ summary: 'Mark a personal task as completed' })
-  async completeTask(@Param('id') id: string, @Request() req: any) {
+  @Post(':id/accept')
+  @ApiOperation({ summary: 'Assignee accepts assigned task' })
+  async acceptTask(@Param('id') id: string, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
     const userId = req.user?.userId || req.user?.id;
-    const task = await this.employeeTasksService.completeTask(id, employeeId, userId);
-    return { success: true, task, message: 'Task marked as completed.' };
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.acceptTask(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+    );
+    return { success: true, task, message: 'Task accepted.' };
+  }
+
+  @Post(':id/progress')
+  @RequirePermissions('task.update_progress')
+  @ApiOperation({ summary: 'Update task progress percentage (0-100%) and add progress comment' })
+  async updateProgress(@Param('id') id: string, @Body() body: { progress: number; comment?: string }, @Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.updateProgress(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      {
+        progress: Number(body.progress),
+        comment: body.comment,
+      },
+    );
+    return { success: true, task, message: 'Progress updated successfully.' };
+  }
+
+  @Post(':id/complete')
+  @RequirePermissions('task.complete')
+  @ApiOperation({ summary: 'Confirm and mark assigned task as completed' })
+  async completeTask(@Param('id') id: string, @Body() body: { comment?: string }, @Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.completeTask(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body?.comment,
+    );
+    return { success: true, task, message: 'Task completed successfully.' };
+  }
+
+  @Post(':id/reopen')
+  @ApiOperation({ summary: 'Reopen completed or cancelled task' })
+  async reopenTask(@Param('id') id: string, @Body() body: { reason?: string }, @Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.reopenTask(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body?.reason,
+    );
+    return { success: true, task, message: 'Task reopened successfully.' };
+  }
+
+  @Post(':id/send-reminder')
+  @RequirePermissions('task.send_reminder')
+  @ApiOperation({ summary: 'Assignor dispatches manual follow-up reminder to assignee' })
+  async sendManualReminder(@Param('id') id: string, @Body() body: { message?: string }, @Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const result = await this.employeeTasksService.sendManualReminder(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body?.message,
+    );
+    return result;
+  }
+
+  @Post(':id/request-extension')
+  @ApiOperation({ summary: 'Assignee requests deadline extension' })
+  async requestExtension(
+    @Param('id') id: string,
+    @Body() body: { proposedDate: string; reason: string },
+    @Request() req: any,
+  ) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.requestExtension(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body,
+    );
+    return { success: true, task, message: 'Extension requested successfully.' };
+  }
+
+  @Post(':id/comments')
+  @ApiOperation({ summary: 'Add discussion comment to task' })
+  async addComment(@Param('id') id: string, @Body() body: { comment: string }, @Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const activities = await this.employeeTasksService.addComment(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body?.comment,
+    );
+    return { success: true, activities, message: 'Comment added.' };
+  }
+
+  @Post(':id/cancel')
+  @RequirePermissions('task.cancel')
+  @ApiOperation({ summary: 'Assignor cancels task' })
+  async cancelTask(@Param('id') id: string, @Body() body: { reason?: string }, @Request() req: any) {
+    const employeeId = await this.getEmployeeId(req);
+    const userId = req.user?.userId || req.user?.id;
+    const userName = req.user?.name || req.user?.displayName;
+    const task = await this.employeeTasksService.cancelTask(
+      id,
+      employeeId,
+      userId,
+      userName,
+      req.user?.tenantId,
+      body?.reason,
+    );
+    return { success: true, task, message: 'Task cancelled.' };
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a personal task' })
+  @ApiOperation({ summary: 'Delete a task' })
   async deleteTask(@Param('id') id: string, @Request() req: any) {
     const employeeId = await this.getEmployeeId(req);
     const userId = req.user?.userId || req.user?.id;
-    const result = await this.employeeTasksService.deleteTask(id, employeeId, userId);
-    return { success: true, ...result };
+    return this.employeeTasksService.deleteTask(id, employeeId, userId, req.user?.tenantId);
   }
 }

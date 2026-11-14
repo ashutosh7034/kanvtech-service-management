@@ -53,6 +53,22 @@ export const EmployeesPage: React.FC = () => {
   const [generatedTempPassword, setGeneratedTempPassword] = useState<string | null>(null);
 
   const [levelMgmtEnabled, setLevelMgmtEnabled] = useState(true);
+  const [tenantEntitlement, setTenantEntitlement] = useState<any | null>(null);
+
+  const loadTenantEntitlement = async () => {
+    try {
+      const res = await api.getTenantEntitlement();
+      if (res?.entitlement) {
+        setTenantEntitlement(res.entitlement);
+      }
+    } catch (err) {
+      console.warn('Failed to load tenant entitlement:', err);
+    }
+  };
+
+  useEffect(() => {
+    loadTenantEntitlement();
+  }, []);
 
   const handleToggleLevelMgmt = async () => {
     try {
@@ -166,15 +182,22 @@ export const EmployeesPage: React.FC = () => {
 
   const handleToggleStatus = async (emp: Employee) => {
     const isActivating = emp.status !== 'ACTIVE';
-    const action = isActivating ? 'Activate' : 'Deactivate';
-    if (!window.confirm(`${action} employee "${emp.name}" (${emp.id})?`)) return;
+    if (!isActivating && !isAdmin) {
+      showFeedback('Only Tenant Super Admin can deactivate employees and release User Licences.', true);
+      return;
+    }
+    const confirmMsg = isActivating
+      ? `Activate employee "${emp.name}" (${emp.id})? This will consume 1 User Licence.`
+      : `Deactivate employee "${emp.name}" (${emp.id})? This will immediately release 1 User Licence for reuse.`;
+    if (!window.confirm(confirmMsg)) return;
     setActionLoadingId(emp.id);
     try {
       await api.toggleEmployeeStatus(emp.id);
       await loadEmployees();
-      showFeedback(`Employee "${emp.name}" ${isActivating ? 'activated' : 'deactivated'} successfully.`);
+      await loadTenantEntitlement();
+      showFeedback(`Employee "${emp.name}" ${isActivating ? 'activated' : 'deactivated (1 User Licence released for reuse)'} successfully.`);
     } catch (err: any) {
-      showFeedback(`Failed to ${action.toLowerCase()} employee: ${err.message}`, true);
+      showFeedback(`Failed to ${isActivating ? 'activate' : 'deactivate'} employee: ${err.message}`, true);
     } finally {
       setActionLoadingId(null);
     }
@@ -327,7 +350,8 @@ export const EmployeesPage: React.FC = () => {
         manager_id: '',
         password: '',
       });
-      loadEmployees();
+      await loadEmployees();
+      await loadTenantEntitlement();
     } catch (err: any) {
       setFormError(err.message || 'Failed to create employee profile');
     } finally {
@@ -367,7 +391,24 @@ export const EmployeesPage: React.FC = () => {
           <h2 className="page-title">Specialist Employee Directory & Support Tiers</h2>
           <div className="page-subtitle">Product-specialized roster across Manager, L1, and L2 tiers with live workload allocation</div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {tenantEntitlement && (
+            <div style={{
+              background: tenantEntitlement.available_user_licences > 0 ? '#f0fdf4' : '#fef2f2',
+              border: `1px solid ${tenantEntitlement.available_user_licences > 0 ? '#86efac' : '#fca5a5'}`,
+              borderRadius: 8,
+              padding: '6px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              fontWeight: 600,
+              color: tenantEntitlement.available_user_licences > 0 ? '#15803d' : '#b91c1c'
+            }}>
+              <Users size={14} />
+              <span>User Licences: {tenantEntitlement.active_licensed_users} / {tenantEntitlement.user_licences_purchased} ({tenantEntitlement.available_user_licences} available)</span>
+            </div>
+          )}
           {isAdmin && (
             <button 
               className={`btn btn-sm ${levelMgmtEnabled ? 'btn-outline' : ''}`}
@@ -384,6 +425,25 @@ export const EmployeesPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {tenantEntitlement && tenantEntitlement.available_user_licences <= 0 && (
+        <div style={{
+          background: '#fff1f2',
+          border: '1px solid #fecdd3',
+          borderRadius: 8,
+          padding: '10px 16px',
+          marginBottom: 16,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          color: '#9f1239',
+          fontSize: 13,
+          fontWeight: 600
+        }}>
+          <AlertCircle size={18} />
+          <span>User Licence capacity reached. You have used all {tenantEntitlement.user_licences_purchased} active user licences. To add new team members, either deactivate an inactive employee or expand user licences in Customer Master.</span>
+        </div>
+      )}
 
       {/* Real Roster Summary Pills */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12, fontSize: 12, color: '#64748b' }}>
@@ -745,6 +805,24 @@ export const EmployeesPage: React.FC = () => {
 
             <form onSubmit={handleCreateSubmit}>
               <div className="modal-body">
+                {tenantEntitlement && (
+                  <div style={{
+                    background: tenantEntitlement.available_user_licences > 0 ? '#f0fdf4' : '#fff1f2',
+                    border: `1px solid ${tenantEntitlement.available_user_licences > 0 ? '#86efac' : '#fecdd3'}`,
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                    marginBottom: 12,
+                    fontSize: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    color: tenantEntitlement.available_user_licences > 0 ? '#15803d' : '#9f1239'
+                  }}>
+                    <span><strong>User Licence Quota:</strong> {tenantEntitlement.active_licensed_users} / {tenantEntitlement.user_licences_purchased} active</span>
+                    <span><strong>{tenantEntitlement.available_user_licences} licences available</strong></span>
+                  </div>
+                )}
+
                 {formError && (
                   <div
                     style={{

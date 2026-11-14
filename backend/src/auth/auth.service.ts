@@ -132,6 +132,38 @@ export class AuthService {
     const effectiveTenantName = chosenMembership?.tenant?.name || (isPlatformIncharge ? 'Platform Administration' : 'Kanvtech Technologies');
     const effectiveRole = isPlatformIncharge ? 'PLATFORM_INCHARGE' : (chosenMembership?.role || user.role);
 
+    // Section 8: Commercial Entitlement / Subscription Expiry check
+    let isSubscriptionExpired = false;
+    let subscriptionExpiryDate: string | null = null;
+    try {
+      const entRows: any[] = await this.prisma.$queryRawUnsafe(
+        `SELECT expiry_date, status FROM customer_entitlements 
+         WHERE tenant_id = $1 
+         ORDER BY CASE WHEN customer_id = 'KANVTECH_DEFAULT' THEN 0 ELSE 1 END, created_at ASC 
+         LIMIT 1`,
+        effectiveTenantId,
+      );
+      if (entRows.length > 0) {
+        const entExpiry = new Date(entRows[0].expiry_date);
+        subscriptionExpiryDate = entExpiry.toISOString();
+        if (Date.now() > entExpiry.getTime() || entRows[0].status === 'EXPIRED') {
+          isSubscriptionExpired = true;
+        }
+      }
+    } catch {}
+
+    // When subscription is expired:
+    // Restrict normal employee access to the tenant software. Block employee login.
+    // Tenant Super Admin retains restricted access to the subscription renewal workspace.
+    if (isSubscriptionExpired && !isPlatformIncharge) {
+      const isSuperAdminUser = effectiveRole === 'SUPER_ADMIN' || user.role === 'SUPER_ADMIN';
+      if (!isSuperAdminUser) {
+        throw new ForbiddenException(
+          `Your company workspace subscription expired on ${subscriptionExpiryDate ? new Date(subscriptionExpiryDate).toLocaleDateString() : 'earlier'}. Normal employee operational access is restricted. Please contact your Tenant Super Admin to renew.`,
+        );
+      }
+    }
+
     // Generate cryptographically random active session ID
     const sessionId = crypto.randomUUID();
 
@@ -241,6 +273,8 @@ export class AuthService {
         employeeId,
         companyId,
         contactId,
+        isSubscriptionExpired,
+        subscriptionExpiryDate,
         name: employee?.name || (user.companyContacts?.[0]?.name ?? (isPlatformIncharge ? 'Platform Incharge' : user.role === 'SUPER_ADMIN' ? 'Super Administrator' : user.role === 'ADMIN' ? 'Company Administrator' : user.email)),
         effectivePermissions,
         permissions: effectivePermissions,

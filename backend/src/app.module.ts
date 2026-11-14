@@ -29,6 +29,7 @@ import { InboundEmailModule } from './inbound-email/inbound-email.module';
 import { ExportModule } from './export/export.module';
 import { PlatformModule } from './platform/platform.module';
 import { PermissionsModule } from './permissions/permissions.module';
+import { EntitlementsModule } from './entitlements/entitlements.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { PermissionsModule } from './permissions/permissions.module';
     InboundEmailModule,
     ExportModule,
     PermissionsModule,
+    EntitlementsModule,
   ],
 })
 export class AppModule {}

@@ -4,6 +4,7 @@ import { AuditService } from '../audit/audit.service';
 import { TicketStatus, UserRole } from '@prisma/client';
 import { validateEmail, validateOptionalEmail, validatePhone, validateOptionalPhone, validateOptionalGSTN } from '../common/validation.util';
 import { EmailVerificationService } from '../email-verification/email-verification.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 
@@ -12,6 +13,7 @@ export class CompaniesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly entitlementsService: EntitlementsService,
     @Optional() private readonly emailVerificationService?: EmailVerificationService,
   ) {}
 
@@ -461,6 +463,10 @@ export class CompaniesService {
     }
 
     const targetTenantId = data.tenantId || 'KANVTECH';
+
+    // Commercial Entitlement check: enforce active subscription and available Company Licences
+    await this.entitlementsService.validateCompanyCreationCapacity(targetTenantId);
+
     const existingName = await this.prisma.company.findFirst({
       where: { companyName: { equals: companyName, mode: 'insensitive' }, tenantId: targetTenantId },
     });
@@ -594,6 +600,14 @@ export class CompaniesService {
       entityId: companyId,
       newValues: { id: companyId, companyName, primaryEmail, contactPerson, products: normalizedProds },
     });
+
+    // Record company registration in entitlement history
+    await this.entitlementsService.logCompanyRegistration(
+      companyId,
+      companyName,
+      { id: actorUserId, role: 'ADMIN' },
+      targetTenantId,
+    );
 
     return companyId;
   }

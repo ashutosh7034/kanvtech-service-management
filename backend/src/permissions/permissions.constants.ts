@@ -309,6 +309,85 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     description: 'Cancel or delete AMC contracts',
     moduleLabel: 'Annual Maintenance (AMC)',
   },
+  {
+    permissionCode: 'amc.renew',
+    module: 'amc',
+    action: 'renew',
+    description: 'Renew customer AMC contracts and extend SLA coverage terms',
+    moduleLabel: 'Annual Maintenance (AMC)',
+  },
+  {
+    permissionCode: 'amc.manage_plans',
+    module: 'amc',
+    action: 'manage_plans',
+    description: 'Create, modify, duplicate, and configure standardized AMC policy templates',
+    moduleLabel: 'Annual Maintenance (AMC)',
+  },
+
+  // Task & Assignment Management
+  {
+    permissionCode: 'task.view_assigned',
+    module: 'task',
+    action: 'view_assigned',
+    description: 'View tasks assigned to the employee',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.view_sent',
+    module: 'task',
+    action: 'view_sent',
+    description: 'View tasks created and assigned by the employee',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.assign',
+    module: 'task',
+    action: 'assign',
+    description: 'Assign tasks to eligible team members within tenant',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.update_progress',
+    module: 'task',
+    action: 'update_progress',
+    description: 'Update task progress and add progress comments',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.complete',
+    module: 'task',
+    action: 'complete',
+    description: 'Confirm and mark assigned task as completed',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.send_reminder',
+    module: 'task',
+    action: 'send_reminder',
+    description: 'Send follow-up reminders to assignee',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.edit',
+    module: 'task',
+    action: 'edit',
+    description: 'Modify task details and reschedule deadlines',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.cancel',
+    module: 'task',
+    action: 'cancel',
+    description: 'Cancel an assigned task with documented reason',
+    moduleLabel: 'Task Management',
+  },
+  {
+    permissionCode: 'task.view_team',
+    module: 'task',
+    action: 'view_team',
+    description: 'View team-wide task dashboard and workload overview',
+    moduleLabel: 'Task Management',
+  },
 
   // Configuration Management
   {
@@ -340,6 +419,50 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     action: 'export',
     description: 'Download and export audit log events',
     moduleLabel: 'Audit Logs',
+  },
+
+  // Commercial Entitlements & Licences
+  {
+    permissionCode: 'entitlement.view',
+    module: 'entitlement',
+    action: 'view',
+    description: 'View commercial licence allocations, usage, and validity',
+    moduleLabel: 'Commercial Entitlements',
+  },
+  {
+    permissionCode: 'entitlement.view_history',
+    module: 'entitlement',
+    action: 'view_history',
+    description: 'View audit trail of licence allocations and modifications',
+    moduleLabel: 'Commercial Entitlements',
+  },
+  {
+    permissionCode: 'entitlement.request_renewal',
+    module: 'entitlement',
+    action: 'request_renewal',
+    description: 'Initiate subscription renewal and licence expansion',
+    moduleLabel: 'Commercial Entitlements',
+  },
+  {
+    permissionCode: 'entitlement.manage',
+    module: 'entitlement',
+    action: 'manage',
+    description: 'Modify commercial entitlements and allocate licences',
+    moduleLabel: 'Commercial Entitlements',
+  },
+  {
+    permissionCode: 'entitlement.add_licences',
+    module: 'entitlement',
+    action: 'add_licences',
+    description: 'Expand User Licences and Company Licences before expiry',
+    moduleLabel: 'Commercial Entitlements',
+  },
+  {
+    permissionCode: 'subscription.renew',
+    module: 'subscription',
+    action: 'renew',
+    description: 'Approve renewal and extend subscription validity',
+    moduleLabel: 'Commercial Entitlements',
   },
 ];
 

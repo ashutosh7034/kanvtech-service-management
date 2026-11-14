@@ -99,8 +99,15 @@ interface Implementation {
 }
 
 export const ImplementationsPage: React.FC = () => {
-  const { user } = useAuth();
-  const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const { user, hasPermission } = useAuth();
+  const canCreate = hasPermission('implementation.create');
+  const isAdminOrManager =
+    user?.role === 'ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    user?.role === 'PLATFORM_INCHARGE' ||
+    user?.role === 'MANAGER' ||
+    hasPermission('implementation.update') ||
+    hasPermission('implementation.assign');
 
   const [implementations, setImplementations] = useState<Implementation[]>([]);
   const [companies, setCompanies] = useState<any[]>([]);
@@ -116,16 +123,20 @@ export const ImplementationsPage: React.FC = () => {
   // Add Project Modal State
   const [showAddModal, setShowAddModal] = useState(false);
   const [addCompanyId, setAddCompanyId] = useState('');
+  const [companyProducts, setCompanyProducts] = useState<any[]>([]);
+  const [loadingCompanyProducts, setLoadingCompanyProducts] = useState(false);
   const [addProductId, setAddProductId] = useState('');
   const [addOwnerEmployeeId, setAddOwnerEmployeeId] = useState('');
-  const [addTeamMembers, setAddTeamMembers] = useState('');
+  const [selectedTeamEmployeeIds, setSelectedTeamEmployeeIds] = useState<string[]>([]);
   const [addStartDate, setAddStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [addTargetGoLiveDate, setAddTargetGoLiveDate] = useState(
     new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
+  const [addPriority, setAddPriority] = useState('MEDIUM');
   const [addStatus, setAddStatus] = useState('PLANNING');
+  const [addDescription, setAddDescription] = useState('');
   const [addPendingActivities, setAddPendingActivities] = useState('');
-  const [addNotes, setAddNotes] = useState('');
+  const [addError, setAddError] = useState<string | null>(null);
 
   // Entitled Modules for Add Modal
   const [entitledModules, setEntitledModules] = useState<any[]>([]);
@@ -207,7 +218,53 @@ export const ImplementationsPage: React.FC = () => {
     fetchData();
   }, [statusFilter, companyFilter]);
 
-  // When Customer & Product change in Add Modal, load ONLY that customer's purchased/entitled modules
+  const handleOpenAddModal = () => {
+    const defaultComp = companies[0]?.id || '';
+    setAddCompanyId(defaultComp);
+    setAddProductId('');
+    setCompanyProducts([]);
+    setAddOwnerEmployeeId(employees[0]?.id || '');
+    setSelectedTeamEmployeeIds([]);
+    setAddStartDate(new Date().toISOString().split('T')[0]);
+    setAddTargetGoLiveDate(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    setAddPriority('MEDIUM');
+    setAddStatus('PLANNING');
+    setAddDescription('');
+    setAddPendingActivities('');
+    setAddError(null);
+    setShowAddModal(true);
+  };
+
+  // Dynamic Dependency 1: When Customer changes, fetch mapped products for that customer
+  useEffect(() => {
+    if (!addCompanyId) {
+      setCompanyProducts([]);
+      setAddProductId('');
+      return;
+    }
+
+    setLoadingCompanyProducts(true);
+    api.getCustomerImplementationProducts(addCompanyId)
+      .then((res: any) => {
+        const prods = res.products || res.data || [];
+        setCompanyProducts(prods);
+        if (prods.length > 0) {
+          setAddProductId(prods[0].productId);
+        } else {
+          setAddProductId('');
+        }
+      })
+      .catch((err) => {
+        console.error('Failed to load customer products:', err);
+        setCompanyProducts([]);
+        setAddProductId('');
+      })
+      .finally(() => {
+        setLoadingCompanyProducts(false);
+      });
+  }, [addCompanyId]);
+
+  // Dynamic Dependency 2: When Customer & Product change, load that customer's entitled modules & submodules
   useEffect(() => {
     if (!addCompanyId || !addProductId) {
       setEntitledModules([]);
@@ -221,11 +278,24 @@ export const ImplementationsPage: React.FC = () => {
       .then((res) => {
         const mods = res.modules || res.data || [];
         setEntitledModules(mods);
-        // By default, select all entitled modules for ease of onboarding
         setSelectedModuleIds(mods.map((m: any) => m.id));
         const initTasks: Record<string, any[]> = {};
         for (const m of mods) {
-          initTasks[m.id] = [];
+          if (m.submodules && m.submodules.length > 0) {
+            initTasks[m.id] = m.submodules.map((s: any) => ({
+              taskName: `${s.name} Configuration`,
+              priority: addPriority || 'MEDIUM',
+              assignedEmployeeId: addOwnerEmployeeId || '',
+            }));
+          } else {
+            initTasks[m.id] = [
+              {
+                taskName: `${m.name} Rollout & Setup`,
+                priority: addPriority || 'MEDIUM',
+                assignedEmployeeId: addOwnerEmployeeId || '',
+              },
+            ];
+          }
         }
         setInitialModuleTasks(initTasks);
       })
@@ -258,7 +328,7 @@ export const ImplementationsPage: React.FC = () => {
         ...(prev[moduleId] || []),
         {
           taskName: taskName.trim(),
-          priority: 'MEDIUM',
+          priority: addPriority || 'MEDIUM',
           assignedEmployeeId: addOwnerEmployeeId || '',
         },
       ],
@@ -272,10 +342,30 @@ export const ImplementationsPage: React.FC = () => {
     }));
   };
 
+  const handleToggleTeamEmployee = (empId: string) => {
+    setSelectedTeamEmployeeIds((prev) =>
+      prev.includes(empId) ? prev.filter((id) => id !== empId) : [...prev, empId]
+    );
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!addCompanyId || !addProductId || !addStartDate || !addTargetGoLiveDate) {
-      alert('Please select Customer Company, Product Suite, Start Date, and Target Go-Live Date');
+    setAddError(null);
+
+    if (!addCompanyId) {
+      setAddError('Please select a Customer Company.');
+      return;
+    }
+    if (!addProductId) {
+      setAddError('Please select a Product Suite mapped to this customer.');
+      return;
+    }
+    if (!addStartDate || !addTargetGoLiveDate) {
+      setAddError('Start Date and Target Go-Live Date are required.');
+      return;
+    }
+    if (new Date(addTargetGoLiveDate) < new Date(addStartDate)) {
+      setAddError('Target Go-Live Date cannot be earlier than the Start Date.');
       return;
     }
 
@@ -288,30 +378,39 @@ export const ImplementationsPage: React.FC = () => {
           tasksToCreate.push({
             moduleId: modId,
             taskName: t.taskName,
-            assignedEmployeeId: t.assignedEmployeeId || undefined,
-            priority: t.priority || 'MEDIUM',
-            dueDate: t.dueDate || undefined,
+            assignedEmployeeId: t.assignedEmployeeId || addOwnerEmployeeId || undefined,
+            priority: t.priority || addPriority || 'MEDIUM',
+            dueDate: t.dueDate || addTargetGoLiveDate || undefined,
           });
         }
       }
+
+      // Convert selected team employee IDs to employee names/IDs
+      const teamMemberNames = selectedTeamEmployeeIds
+        .map((id) => {
+          const emp = employees.find((e) => e.id === id);
+          return emp ? `${emp.name} (${emp.id})` : id;
+        });
 
       await api.createImplementation({
         companyId: addCompanyId,
         productId: addProductId,
         ownerEmployeeId: addOwnerEmployeeId || undefined,
-        teamMembers: addTeamMembers || undefined,
+        teamMembers: teamMemberNames.length > 0 ? teamMemberNames : undefined,
         startDate: addStartDate,
         targetGoLiveDate: addTargetGoLiveDate,
         status: addStatus,
+        priority: addPriority,
+        description: addDescription || undefined,
         pendingActivities: addPendingActivities || undefined,
-        notes: addNotes || undefined,
+        notes: addDescription || addPendingActivities || undefined,
         tasks: tasksToCreate,
       });
 
       setShowAddModal(false);
       fetchData();
     } catch (err: any) {
-      alert(`Error creating implementation project: ${err.message}`);
+      setAddError(err.message || 'Error creating implementation project.');
     } finally {
       setSubmitting(false);
     }
@@ -523,25 +622,24 @@ export const ImplementationsPage: React.FC = () => {
             Module-wise onboarding checklists, task allocations, progress tracking, and go-live milestone governance
           </p>
         </div>
-        {isAdminOrManager && (
+        {canCreate && (
           <button
             className="btn btn-primary"
-            onClick={() => {
-              setAddCompanyId(companies[0]?.id || '');
-              setAddProductId(products[0]?.id || '');
-              setAddOwnerEmployeeId(employees[0]?.id || '');
-              setAddTeamMembers('');
-              setAddStartDate(new Date().toISOString().split('T')[0]);
-              setAddTargetGoLiveDate(new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-              setAddStatus('PLANNING');
-              setAddPendingActivities('');
-              setAddNotes('');
-              setShowAddModal(true);
+            onClick={handleOpenAddModal}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '9px 18px',
+              fontWeight: 600,
+              fontSize: 13,
+              borderRadius: 6,
+              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              cursor: 'pointer',
             }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
             <Plus size={16} />
-            New Implementation
+            + Create New Implementation
           </button>
         )}
       </div>
@@ -715,36 +813,47 @@ export const ImplementationsPage: React.FC = () => {
       </div>
 
       {/* ========================================================= */}
-      {/* 1. ADD IMPLEMENTATION MODAL WITH MODULE ENTITLEMENT       */}
+      {/* 1. ADD IMPLEMENTATION MODAL WITH DYNAMIC DEPENDENCIES     */}
       {/* ========================================================= */}
       {showAddModal && (
         <div className="modal-overlay" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
-          <div className="card" style={{ width: '100%', maxWidth: 680, maxHeight: '90vh', overflowY: 'auto', padding: 24, background: 'white', borderRadius: 8 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <div className="card" style={{ width: '100%', maxWidth: 740, maxHeight: '92vh', overflowY: 'auto', padding: 24, background: 'white', borderRadius: 8, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, borderBottom: '1px solid #f1f5f9', paddingBottom: 14 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a' }}>
-                  Create New Customer Implementation
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Rocket size={20} className="text-primary" />
+                  Create New Client Implementation
                 </h3>
-                <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-                  Configure customer entitlement, module scope, and assign initial implementation tasks
+                <div style={{ fontSize: 12, color: '#64748b', marginTop: 3 }}>
+                  Initialize client rollout project, configure module scope, assign project lead & team, and generate onboarding checklists
                 </div>
               </div>
-              <button onClick={() => setShowAddModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer' }}>
+              <button onClick={() => setShowAddModal(false)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
                 <X size={20} color="#64748b" />
               </button>
             </div>
 
+            {addError && (
+              <div style={{ padding: '10px 14px', background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 6, color: '#991b1b', fontSize: 13, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <AlertCircle size={16} />
+                <span>{addError}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCreate}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              {/* Row 1: Customer Company & Product Suite (Dynamic Dependency) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Customer Company *</label>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Customer Company *
+                  </label>
                   <select
                     className="form-control"
                     value={addCompanyId}
                     onChange={(e) => setAddCompanyId(e.target.value)}
                     required
                   >
-                    <option value="">-- Choose Company --</option>
+                    <option value="">-- Select Customer Company --</option>
                     {companies.map((c) => (
                       <option key={c.id} value={c.id}>{c.company_name || c.companyName} ({c.id})</option>
                     ))}
@@ -752,45 +861,249 @@ export const ImplementationsPage: React.FC = () => {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Product Suite *</label>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Product Suite (Customer Mapped) *
+                  </label>
                   <select
                     className="form-control"
                     value={addProductId}
                     onChange={(e) => setAddProductId(e.target.value)}
                     required
+                    disabled={!addCompanyId || loadingCompanyProducts}
                   >
-                    <option value="">-- Choose Product --</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name} ({p.code})</option>
-                    ))}
+                    {!addCompanyId ? (
+                      <option value="">-- Select Customer First --</option>
+                    ) : loadingCompanyProducts ? (
+                      <option value="">Loading customer mapped products...</option>
+                    ) : companyProducts.length === 0 ? (
+                      <option value="">-- No products mapped to this customer --</option>
+                    ) : (
+                      <>
+                        <option value="">-- Select Mapped Product --</option>
+                        {companyProducts.map((cp) => (
+                          <option key={cp.productId} value={cp.productId}>
+                            {cp.product?.name || cp.productId} ({cp.product?.code || 'Product'})
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                  <div style={{ fontSize: 11, color: companyProducts.length === 0 && addCompanyId && !loadingCompanyProducts ? '#dc2626' : '#64748b', marginTop: 4 }}>
+                    {loadingCompanyProducts ? (
+                      'Checking client product assignments...'
+                    ) : addCompanyId && companyProducts.length === 0 ? (
+                      '⚠ This customer has no active assigned products. Please map products in Company Management first.'
+                    ) : addCompanyId && companyProducts.length > 0 ? (
+                      `✓ ${companyProducts.length} product(s) entitled to this customer`
+                    ) : (
+                      'Select a customer to display only their purchased products'
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Project Lead & Priority */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Project Lead (Eligible Employee)
+                  </label>
+                  <select
+                    className="form-control"
+                    value={addOwnerEmployeeId}
+                    onChange={(e) => setAddOwnerEmployeeId(e.target.value)}
+                  >
+                    <option value="">-- Choose Project Lead Specialist --</option>
+                    {employees
+                      .filter((emp) => !emp.status || emp.status === 'ACTIVE')
+                      .map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.name} ({emp.designation || emp.level || emp.id})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Priority
+                  </label>
+                  <select
+                    className="form-control"
+                    value={addPriority}
+                    onChange={(e) => setAddPriority(e.target.value)}
+                  >
+                    <option value="LOW">Low</option>
+                    <option value="MEDIUM">Medium</option>
+                    <option value="HIGH">High</option>
+                    <option value="CRITICAL">Critical</option>
                   </select>
                 </div>
               </div>
 
-              {/* Implementation Modules Section (Customer Entitlement) */}
-              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, marginBottom: 16 }}>
+              {/* Row 3: Initial Status, Start Date & Target Go-Live Date */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Initial Status
+                  </label>
+                  <select
+                    className="form-control"
+                    value={addStatus}
+                    onChange={(e) => setAddStatus(e.target.value)}
+                  >
+                    <option value="PLANNING">Planning & Scope</option>
+                    <option value="NEW">New Onboarding</option>
+                    <option value="CONFIGURATION">Configuration & Customization</option>
+                    <option value="IN_PROGRESS">In Progress</option>
+                    <option value="TESTING">Testing & Validation</option>
+                    <option value="READY_FOR_GO_LIVE">Ready for Go-Live</option>
+                  </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Start Date *
+                  </label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={addStartDate}
+                    onChange={(e) => setAddStartDate(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Target Go-Live Date *
+                  </label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={addTargetGoLiveDate}
+                    min={addStartDate}
+                    onChange={(e) => setAddTargetGoLiveDate(e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Row 4: Implementation Team (Multi-select active employees) */}
+              <div className="form-group" style={{ marginBottom: 14 }}>
+                <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b', display: 'flex', justifyContent: 'space-between' }}>
+                  <span>Implementation Team (Multi-Select Eligible Employees)</span>
+                  <span style={{ fontSize: 11, color: '#64748b' }}>{selectedTeamEmployeeIds.length} employee(s) selected</span>
+                </label>
+                
+                {/* Selected Team Members Badges */}
+                {selectedTeamEmployeeIds.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8, padding: 8, background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                    {selectedTeamEmployeeIds.map((id) => {
+                      const emp = employees.find((e) => e.id === id);
+                      return (
+                        <span
+                          key={id}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '3px 8px',
+                            background: '#e0f2fe',
+                            color: '#0369a1',
+                            borderRadius: 12,
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >
+                          <User size={12} />
+                          {emp ? emp.name : id}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleTeamEmployee(id)}
+                            style={{ background: 'transparent', border: 'none', color: '#0284c7', cursor: 'pointer', padding: 0, display: 'flex' }}
+                          >
+                            <X size={13} />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <select
+                  className="form-control"
+                  value=""
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      handleToggleTeamEmployee(e.target.value);
+                      e.target.value = '';
+                    }
+                  }}
+                >
+                  <option value="">+ Add Team Member to Implementation Project...</option>
+                  {employees
+                    .filter((emp) => (!emp.status || emp.status === 'ACTIVE') && !selectedTeamEmployeeIds.includes(emp.id) && emp.id !== addOwnerEmployeeId)
+                    .map((emp) => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.name} ({emp.designation || emp.level || emp.id})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {/* Row 5: Implementation Description & Scope Notes */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Implementation Description
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    placeholder="e.g. Full-scale client deployment, initial environment configuration..."
+                    value={addDescription}
+                    onChange={(e) => setAddDescription(e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12, color: '#1e293b' }}>
+                    Pending Activities & Scope Notes
+                  </label>
+                  <textarea
+                    className="form-control"
+                    rows={2}
+                    placeholder="e.g. Pending Active Directory integration, biometric device mapping..."
+                    value={addPendingActivities}
+                    onChange={(e) => setAddPendingActivities(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Row 6: Module and Task Initialization (Dynamic Dependency & Checklist) */}
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 14, marginBottom: 18 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
                     <Layers size={16} color="#0284c7" />
-                    Implementation Modules (Customer Purchased Entitlement)
+                    Product Modules & Auto-Generated Onboarding Tasks
                   </div>
                   <span style={{ fontSize: 11, color: '#64748b' }}>
-                    Select modules to include in this rollout
+                    {selectedModuleIds.length} module(s) selected
                   </span>
                 </div>
 
                 {loadingEntitledModules ? (
-                  <div style={{ padding: 12, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
+                  <div style={{ padding: 16, textAlign: 'center', color: '#64748b', fontSize: 12 }}>
                     <RefreshCw size={14} className="animate-spin" style={{ display: 'inline', marginRight: 6 }} />
-                    Loading entitled modules for customer...
+                    Loading entitled modules and generating checklist tasks...
                   </div>
                 ) : !addCompanyId || !addProductId ? (
-                  <div style={{ padding: 12, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
-                    Please select a Customer Company and Product to view purchased modules.
+                  <div style={{ padding: 14, textAlign: 'center', color: '#94a3b8', fontSize: 12 }}>
+                    Please select a Customer Company and Product Suite to preview modules and checklist tasks.
                   </div>
                 ) : entitledModules.length === 0 ? (
                   <div style={{ padding: 12, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, color: '#b45309', fontSize: 12 }}>
-                    No purchased modules found for this customer and product. Customer might own other products or no modules are allocated.
+                    No entitled modules found for this customer and product. A baseline setup task will be created automatically.
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -817,11 +1130,10 @@ export const ImplementationsPage: React.FC = () => {
                               {mod.name}
                             </label>
                             <span style={{ fontSize: 11, color: '#64748b' }}>
-                              {modTasks.length} initial tasks
+                              {modTasks.length} checklist item(s)
                             </span>
                           </div>
 
-                          {/* Quick checklist tasks for selected module */}
                           {isChecked && (
                             <div style={{ marginTop: 8, paddingLeft: 24, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
                               {modTasks.length > 0 && (
@@ -843,7 +1155,7 @@ export const ImplementationsPage: React.FC = () => {
                               <div style={{ display: 'flex', gap: 6 }}>
                                 <input
                                   type="text"
-                                  placeholder={`+ Add checklist task for ${mod.name} (e.g. Database Setup)`}
+                                  placeholder={`+ Add checklist task for ${mod.name} (e.g. Master Data Migration)`}
                                   className="form-control"
                                   style={{ fontSize: 12, padding: '4px 8px', height: 28 }}
                                   onKeyDown={(e) => {
@@ -864,85 +1176,28 @@ export const ImplementationsPage: React.FC = () => {
                 )}
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Implementation Lead</label>
-                  <select
-                    className="form-control"
-                    value={addOwnerEmployeeId}
-                    onChange={(e) => setAddOwnerEmployeeId(e.target.value)}
-                  >
-                    <option value="">-- Choose Lead Specialist --</option>
-                    {employees.map((emp) => (
-                      <option key={emp.id} value={emp.id}>{emp.name} ({emp.level})</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Initial Status</label>
-                  <select
-                    className="form-control"
-                    value={addStatus}
-                    onChange={(e) => setAddStatus(e.target.value)}
-                  >
-                    {statuses.map((s) => (
-                      <option key={s.value} value={s.value}>{s.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 14 }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Team Members (Comma separated)</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. Amit Sharma, Vikram Malhotra, Priya Nair"
-                  value={addTeamMembers}
-                  onChange={(e) => setAddTeamMembers(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Start Date *</label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={addStartDate}
-                    onChange={(e) => setAddStartDate(e.target.value)}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Target Go-Live Date *</label>
-                  <input
-                    type="date"
-                    className="form-control"
-                    value={addTargetGoLiveDate}
-                    onChange={(e) => setAddTargetGoLiveDate(e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="form-group" style={{ marginBottom: 20 }}>
-                <label className="form-label" style={{ fontWeight: 600, fontSize: 12 }}>Pending Activities & Scope Notes</label>
-                <textarea
-                  className="form-control"
-                  rows={2}
-                  placeholder="e.g. Database schema mapping, active directory integration..."
-                  value={addPendingActivities}
-                  onChange={(e) => setAddPendingActivities(e.target.value)}
-                />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              {/* Modal Actions */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #f1f5f9', paddingTop: 14 }}>
                 <button type="button" className="btn btn-secondary" onClick={() => setShowAddModal(false)}>
                   Cancel
                 </button>
-                <button type="submit" className="btn btn-primary" disabled={submitting}>
-                  {submitting ? 'Creating Project...' : 'Create Implementation Project'}
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={submitting || !addCompanyId || !addProductId || (companyProducts.length === 0 && !loadingCompanyProducts)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                >
+                  {submitting ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      Creating Implementation...
+                    </>
+                  ) : (
+                    <>
+                      <Plus size={16} />
+                      Create Implementation Project
+                    </>
+                  )}
                 </button>
               </div>
             </form>

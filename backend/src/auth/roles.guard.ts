@@ -40,6 +40,23 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User context is not authenticated');
     }
 
+    // Section 8: Subscription Expiry Operational Restriction
+    const req = context.switchToHttp().getRequest();
+    const reqPath = req.path || req.url || '';
+    if (user.isSubscriptionExpired && !user.isPlatformIncharge) {
+      const isRenewalPath =
+        reqPath.includes('/entitlements') ||
+        reqPath.includes('/subscriptions') ||
+        reqPath.includes('/auth') ||
+        reqPath.includes('/notifications');
+
+      if (!isRenewalPath) {
+        throw new ForbiddenException(
+          'Your tenant subscription has expired. Normal operational modules are blocked until renewal is completed.',
+        );
+      }
+    }
+
     // Platform Incharge and Super Admin operate with full platform administrative privileges
     if (user.role === 'PLATFORM_INCHARGE' || user.isPlatformIncharge) {
       return true;
@@ -99,11 +116,23 @@ export class RolesGuard implements CanActivate {
       // Baseline support role permissions
       grantedCodes.add('ticket.view');
       grantedCodes.add('ticket.update');
-      if (user.role === 'MANAGER') {
+
+      // Baseline task capabilities for all active tenant employees
+      grantedCodes.add('task.view_assigned');
+      grantedCodes.add('task.view_sent');
+      grantedCodes.add('task.assign');
+      grantedCodes.add('task.update_progress');
+      grantedCodes.add('task.complete');
+      grantedCodes.add('task.send_reminder');
+      grantedCodes.add('task.edit');
+      grantedCodes.add('task.cancel');
+
+      if (user.role === 'MANAGER' || employee.level === 'MANAGER') {
         grantedCodes.add('department.view');
         grantedCodes.add('employee.view');
         grantedCodes.add('ticket.assign');
         grantedCodes.add('ticket.create');
+        grantedCodes.add('task.view_team');
       }
 
       const hasAllRequiredPermissions = requiredPermissions.every((p) =>

@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { EntitlementsService } from '../entitlements/entitlements.service';
 import {
   EmployeeLevel,
   EmployeeAvailability,
@@ -34,6 +35,7 @@ export class EmployeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   async getEmployees(params: {
@@ -249,6 +251,9 @@ export class EmployeesService {
       throw new BadRequestException('Employee name is required.');
     }
 
+    // Commercial Entitlement check: enforce active subscription and available User Licences
+    await this.entitlementsService.validateEmployeeCreationCapacity(data.tenantId || 'KANVTECH');
+
     const existingUser = await this.prisma.user.findUnique({ where: { email } });
     if (existingUser) {
       throw new BadRequestException(`A user with email ${email} already exists.`);
@@ -391,6 +396,14 @@ export class EmployeesService {
         status: EmployeeStatus.ACTIVE,
       },
     });
+
+    // Record entitlement usage in history
+    await this.entitlementsService.logEmployeeActivation(
+      employeeId,
+      name,
+      { id: actorUserId, role: actorRole },
+      tenantId,
+    );
 
     await this.auditService.log({
       actorUserId,
@@ -890,6 +903,17 @@ export class EmployeesService {
       }
     }
 
+    const isDeactivating = existing.status === EmployeeStatus.ACTIVE;
+    if (isDeactivating) {
+      // Business Rule 5: Only the Tenant Super Admin can deactivate employees and release their User Licence
+      if (actorRole !== UserRole.ADMIN && actorRole !== 'SUPER_ADMIN') {
+        throw new ForbiddenException('Only the Tenant Super Admin can deactivate employees and release their User Licence.');
+      }
+    } else {
+      // Reactivation requires checking valid subscription and available licence capacity
+      await this.entitlementsService.validateEmployeeCreationCapacity(tenantId || existing.tenantId || 'KANVTECH');
+    }
+
     const newStatus = existing.status === EmployeeStatus.ACTIVE ? EmployeeStatus.INACTIVE : EmployeeStatus.ACTIVE;
     const newIsActive = newStatus === EmployeeStatus.ACTIVE;
 
@@ -910,6 +934,22 @@ export class EmployeesService {
         where: { id: existing.userId },
         data: { isActive: newIsActive },
       });
+    }
+
+    if (isDeactivating) {
+      await this.entitlementsService.logEmployeeDeactivation(
+        id,
+        existing.name,
+        { id: actorUserId, role: actorRole },
+        tenantId || existing.tenantId,
+      );
+    } else {
+      await this.entitlementsService.logEmployeeActivation(
+        id,
+        existing.name,
+        { id: actorUserId, role: actorRole },
+        tenantId || existing.tenantId,
+      );
     }
 
     await this.auditService.log({

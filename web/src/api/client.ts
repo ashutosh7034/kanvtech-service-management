@@ -345,15 +345,26 @@ export const api = {
   getSubscription: (id: string) => request(`/subscriptions/${id}`),
   createSubscription: (data: any) => request('/subscriptions', { method: 'POST', body: JSON.stringify(data) }),
   updateSubscription: (id: string, data: any) => request(`/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSubscription: (id: string) => request(`/subscriptions/${id}`, { method: 'DELETE' }),
   sendSubscriptionWarning: (id: string, message?: string) =>
     request(`/subscriptions/${id}/warning`, { method: 'POST', body: JSON.stringify({ message }) }),
   renewSubscription: (id: string, data: any) =>
     request(`/subscriptions/${id}/renew`, { method: 'POST', body: JSON.stringify(data) }),
   getSubscriptionStats: () => request('/subscriptions/stats'),
 
+  // AMC Plans Policy Management
+  getAmcPlans: () => request('/subscriptions/plans'),
+  getAmcPlan: (id: string) => request(`/subscriptions/plans/${id}`),
+  createAmcPlan: (data: any) => request('/subscriptions/plans', { method: 'POST', body: JSON.stringify(data) }),
+  updateAmcPlan: (id: string, data: any) => request(`/subscriptions/plans/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  duplicateAmcPlan: (id: string) => request(`/subscriptions/plans/${id}/duplicate`, { method: 'POST' }),
+  toggleAmcPlan: (id: string) => request(`/subscriptions/plans/${id}/toggle`, { method: 'PATCH' }),
+  deleteAmcPlan: (id: string) => request(`/subscriptions/plans/${id}`, { method: 'DELETE' }),
+
   // Implementations
   getImplementations: (params: any = {}) => request(`/implementations${toQueryString(params)}`),
   getImplementation: (id: string) => request(`/implementations/${id}`),
+  getCustomerImplementationProducts: (companyId: string) => request(`/implementations/customer-products/${companyId}`),
   getEntitledImplementationModules: (companyId: string, productId: string) =>
     request(`/implementations/entitled-modules?companyId=${encodeURIComponent(companyId)}&productId=${encodeURIComponent(productId)}`),
   createImplementation: (data: any) => request('/implementations', { method: 'POST', body: JSON.stringify(data) }),
@@ -394,16 +405,72 @@ export const api = {
       body: JSON.stringify({ permissionCodes }),
     }),
 
-  // Employee Tasks (Task Reminders)
+  // Employee Tasks & Two-Way Task Management
+  getTasks: (params: any = {}) => request(`/employee-tasks${toQueryString(params)}`),
   getMyTasks: (params: any = {}) => request(`/employee-tasks${toQueryString(params)}`),
   getMyTaskSummary: () => request('/employee-tasks/summary'),
   getEligibleTaskAssignees: () => request('/employee-tasks/eligible-assignees'),
   getTaskById: (id: string) => request(`/employee-tasks/${id}`),
+  getTaskActivities: (id: string) => request(`/employee-tasks/${id}/activities`),
   getDueReminders: () => request('/employee-tasks/reminders'),
   createTask: (data: any) => request('/employee-tasks', { method: 'POST', body: JSON.stringify(data) }),
   uploadTaskAttachment: (formData: FormData) => request('/employee-tasks/upload', { method: 'POST', body: formData }),
   updateTask: (id: string, data: any) => request(`/employee-tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  completeTask: (id: string) => request(`/employee-tasks/${id}/complete`, { method: 'POST' }),
+  updateTaskProgress: (id: string, data: { progress: number; comment?: string }) =>
+    request(`/employee-tasks/${id}/progress`, { method: 'POST', body: JSON.stringify(data) }),
+  acceptTask: (id: string) => request(`/employee-tasks/${id}/accept`, { method: 'POST' }),
+  completeTask: (id: string, comment?: string) =>
+    request(`/employee-tasks/${id}/complete`, { method: 'POST', body: JSON.stringify({ comment }) }),
+  reopenTask: (id: string, reason?: string) =>
+    request(`/employee-tasks/${id}/reopen`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  sendTaskReminder: (id: string, message?: string) =>
+    request(`/employee-tasks/${id}/send-reminder`, { method: 'POST', body: JSON.stringify({ message }) }),
+  requestTaskExtension: (id: string, data: { proposedDate: string; reason: string }) =>
+    request(`/employee-tasks/${id}/request-extension`, { method: 'POST', body: JSON.stringify(data) }),
+  addTaskComment: (id: string, comment: string) =>
+    request(`/employee-tasks/${id}/comments`, { method: 'POST', body: JSON.stringify({ comment }) }),
+  cancelTask: (id: string, reason?: string) =>
+    request(`/employee-tasks/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
   deleteTask: (id: string) => request(`/employee-tasks/${id}`, { method: 'DELETE' }),
+
+  // Commercial Entitlements & Licences
+  getTenantEntitlement: () => request('/entitlements/tenant'),
+  getCustomerEntitlement: (customerId: string) => request(`/entitlements/customer/${customerId}`),
+  increaseUserLicences: (customerId: string, quantity: number, reason?: string) =>
+    request(`/entitlements/customer/${customerId}/user-licences`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity, reason }),
+    }),
+  increaseCompanyLicences: (customerId: string, quantity: number, reason?: string) =>
+    request(`/entitlements/customer/${customerId}/company-licences`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity, reason }),
+    }),
+  directRenewSubscription: (customerId: string, data: any) =>
+    request(`/entitlements/customer/${customerId}/renew`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  createRenewalRequest: (data: any) =>
+    request('/entitlements/renewal-requests', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  approveRenewalRequest: (id: string) =>
+    request(`/entitlements/renewal-requests/${id}/approve`, {
+      method: 'POST',
+    }),
+  getEntitlementHistory: (params?: { customerId?: string; category?: string; action?: string; limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.customerId) q.set('customerId', params.customerId);
+    if (params?.category) q.set('category', params.category);
+    if (params?.action) q.set('action', params.action);
+    if (params?.limit) q.set('limit', String(params.limit));
+    if (params?.offset) q.set('offset', String(params.offset));
+    const qs = q.toString();
+    return request(`/entitlements/history${qs ? `?${qs}` : ''}`);
+  },
+  validateEmployeeCapacity: () => request('/entitlements/validate/employee'),
+  validateCompanyCapacity: () => request('/entitlements/validate/company'),
 };
 
