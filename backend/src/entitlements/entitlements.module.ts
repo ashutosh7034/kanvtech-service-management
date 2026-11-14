@@ -10,3 +10,4 @@ import { AuditModule } from '../audit/audit.module';
   exports: [EntitlementsService],
 })
 export class EntitlementsModule {}
+

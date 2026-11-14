@@ -71,6 +71,12 @@ export interface EmployeeTask {
   priority: string;
   reminder_time?: string | null;
   reminderTime?: string | null;
+  reminder_offset_minutes?: number;
+  reminderOffsetMinutes?: number;
+  reminder_status?: string;
+  reminderStatus?: string;
+  reminder_delivery_timestamp?: string | null;
+  reminderDeliveryTimestamp?: string | null;
   reminder_triggered_at?: string | null;
   status: 'PENDING' | 'ACCEPTED' | 'IN_PROGRESS' | 'ON_HOLD' | 'COMPLETED' | 'CANCELLED' | 'OVERDUE';
   progress: number;
@@ -130,10 +136,14 @@ const formatFileSize = (bytes?: number) => {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 };
 
-// Helper: compute reminder time string for UI (20 mins before)
-const computeReminderDisplay = (dueDateStr: string, dueTimeStr: string): string => {
-  if (!dueDateStr) return '';
-  const timePart = dueTimeStr ? dueTimeStr.trim() : '18:00';
+// Helper: compute reminder time string for UI with dynamic offset and cross-date support
+const computeReminderDisplay = (
+  dueDateStr: string,
+  dueTimeStr: string,
+  offsetMinutes: number = 20,
+): { text: string; isDifferentDate: boolean } => {
+  if (!dueDateStr) return { text: '', isDifferentDate: false };
+  const timePart = dueTimeStr ? dueTimeStr.trim() : '06:00 PM';
   let hours = 18;
   let minutes = 0;
 
@@ -146,10 +156,44 @@ const computeReminderDisplay = (dueDateStr: string, dueTimeStr: string): string 
     if (ampm === 'AM' && hours === 12) hours = 0;
   }
 
-  const d = new Date(`${dueDateStr}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
-  if (isNaN(d.getTime())) return '';
-  const reminderD = new Date(d.getTime() - 20 * 60 * 1000);
-  return reminderD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  let year: number;
+  let month: number;
+  let day: number;
+  const ymdMatch = dueDateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  const dmyMatch = dueDateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+
+  if (ymdMatch) {
+    year = parseInt(ymdMatch[1], 10);
+    month = parseInt(ymdMatch[2], 10) - 1;
+    day = parseInt(ymdMatch[3], 10);
+  } else if (dmyMatch) {
+    day = parseInt(dmyMatch[1], 10);
+    month = parseInt(dmyMatch[2], 10) - 1;
+    year = parseInt(dmyMatch[3], 10);
+  } else {
+    const parsed = new Date(dueDateStr);
+    if (isNaN(parsed.getTime())) return { text: '', isDifferentDate: false };
+    year = parsed.getFullYear();
+    month = parsed.getMonth();
+    day = parsed.getDate();
+  }
+
+  const dueD = new Date(year, month, day, hours, minutes, 0, 0);
+  if (isNaN(dueD.getTime())) return { text: '', isDifferentDate: false };
+
+  const reminderD = new Date(dueD.getTime() - offsetMinutes * 60 * 1000);
+  const isDifferentDate =
+    reminderD.getFullYear() !== dueD.getFullYear() ||
+    reminderD.getMonth() !== dueD.getMonth() ||
+    reminderD.getDate() !== dueD.getDate();
+
+  const timeFormatted = reminderD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+  if (isDifferentDate) {
+    const dateFormatted = reminderD.toLocaleDateString([], { day: 'numeric', month: 'short' });
+    return { text: `${dateFormatted}, ${timeFormatted}`, isDifferentDate: true };
+  }
+  return { text: timeFormatted, isDifferentDate: false };
 };
 
 export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
@@ -189,6 +233,7 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
   const [formCategory, setFormCategory] = useState('');
   const [formDueDate, setFormDueDate] = useState('');
   const [formDueTime, setFormDueTime] = useState('06:00 PM'); // Default EOD 6:00 PM
+  const [formReminderOffset, setFormReminderOffset] = useState<number>(20); // Default 20 mins before
   const [formPriority, setFormPriority] = useState('MEDIUM');
   const [formAssignedToIds, setFormAssignedToIds] = useState<string[]>([]);
   const [formAttachments, setFormAttachments] = useState<TaskAttachment[]>([]);
@@ -335,6 +380,7 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
     setFormCategory('');
     setFormDueDate(todayStr);
     setFormDueTime('06:00 PM'); // Default EOD
+    setFormReminderOffset(20); // Default 20 mins before
     setFormPriority('MEDIUM');
     setFormAssignedToIds(mode === 'PERSONAL' ? ['MYSELF'] : []);
     setFormAttachments([]);
@@ -353,6 +399,7 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
     setFormCategory(task.category || '');
     setFormDueDate(task.due_date ? task.due_date.split('T')[0] : '');
     setFormDueTime(task.due_time || '06:00 PM');
+    setFormReminderOffset(task.reminder_offset_minutes ?? (task as any).reminderOffsetMinutes ?? 20);
     setFormPriority(task.priority || 'MEDIUM');
     setFormAssignedToIds([task.assigned_to]);
     setFormAttachments(task.attachments || []);
@@ -400,6 +447,8 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
           category: formCategory,
           dueDate: formDueDate,
           dueTime: formDueTime,
+          reminder_offset_minutes: formReminderOffset,
+          reminderOffsetMinutes: formReminderOffset,
           priority: formPriority,
         });
       } else {
@@ -409,6 +458,8 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
           category: formCategory,
           dueDate: formDueDate,
           dueTime: formDueTime,
+          reminder_offset_minutes: formReminderOffset,
+          reminderOffsetMinutes: formReminderOffset,
           priority: formPriority,
           taskType: modalMode === 'PERSONAL' ? 'Personal' : 'Assigned Task',
           assignedToIds: modalMode === 'PERSONAL' ? ['MYSELF'] : formAssignedToIds,
@@ -1116,6 +1167,25 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: '#0284c7' }}>
                           <Bell size={12} /> Auto-Reminder:{' '}
                           {new Date(task.reminder_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {task.reminder_offset_minutes && task.reminder_offset_minutes !== 20 && (
+                            <span style={{ fontSize: 10, background: '#e0f2fe', padding: '1px 5px', borderRadius: 3, fontWeight: 700 }}>
+                              {task.reminder_offset_minutes}m offset
+                            </span>
+                          )}
+                          {task.reminder_status && task.reminder_status !== 'SCHEDULED' && (
+                            <span
+                              style={{
+                                fontSize: 10,
+                                background: task.reminder_status === 'TRIGGERED' ? '#dcfce7' : '#f1f5f9',
+                                color: task.reminder_status === 'TRIGGERED' ? '#15803d' : '#64748b',
+                                padding: '1px 5px',
+                                borderRadius: 3,
+                                fontWeight: 700,
+                              }}
+                            >
+                              {task.reminder_status}
+                            </span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -1308,29 +1378,69 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
                   </div>
 
                   {/* Automatic Reminder Display Banner */}
-                  <div
-                    style={{
-                      padding: '10px 12px',
-                      background: '#f0f9ff',
-                      borderRadius: 6,
-                      border: '1px solid #bae6fd',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      fontSize: 12,
-                      color: '#0369a1',
-                    }}
-                  >
-                    <Bell size={15} color="#0284c7" />
-                    <div>
-                      <strong>Auto-Reminder: </strong>
-                      {computeReminderDisplay(formDueDate, formDueTime) ? (
-                        <span>{computeReminderDisplay(formDueDate, formDueTime)} (20 minutes before deadline)</span>
-                      ) : (
-                        <span>Calculated automatically 20 mins before deadline</span>
-                      )}
-                    </div>
-                  </div>
+                  {(() => {
+                    const reminderInfo = computeReminderDisplay(formDueDate, formDueTime, formReminderOffset);
+                    return (
+                      <div
+                        style={{
+                          padding: '8px 12px',
+                          background: '#f0f9ff',
+                          borderRadius: 6,
+                          border: '1px solid #bae6fd',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          fontSize: 12,
+                          color: '#0369a1',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1, minWidth: 0 }}>
+                          <Bell size={15} color="#0284c7" style={{ flexShrink: 0 }} />
+                          <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <strong>Auto-Reminder: </strong>
+                            {reminderInfo.text ? (
+                              <span>
+                                {reminderInfo.text} ({formReminderOffset} minutes before deadline)
+                              </span>
+                            ) : (
+                              <span>Calculated automatically {formReminderOffset} mins before deadline</span>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0 }}>
+                          <label
+                            htmlFor="reminder-offset-select"
+                            style={{ fontSize: 11, color: '#0369a1', fontWeight: 600, margin: 0 }}
+                          >
+                            Offset:
+                          </label>
+                          <select
+                            id="reminder-offset-select"
+                            value={formReminderOffset}
+                            onChange={(e) => setFormReminderOffset(Number(e.target.value))}
+                            style={{
+                              fontSize: 11,
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: '1px solid #7dd3fc',
+                              background: '#ffffff',
+                              color: '#0369a1',
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            <option value={10}>10m</option>
+                            <option value={15}>15m</option>
+                            <option value={20}>20m (Default)</option>
+                            <option value={30}>30m</option>
+                            <option value={45}>45m</option>
+                            <option value={60}>60m</option>
+                          </select>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Priority Selector */}
                   <div className="form-group" style={{ margin: 0 }}>
@@ -1742,11 +1852,13 @@ export const TaskRemindersPage: React.FC<Props> = ({ initialTaskId }) => {
 
                 <div style={{ padding: 12, background: '#f0f9ff', borderRadius: 8, border: '1px solid #bae6fd' }}>
                   <div style={{ fontSize: 11, color: '#0369a1', textTransform: 'uppercase', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <Bell size={13} color="#0284c7" /> Automatic Reminder (20m before)
+                    <Bell size={13} color="#0284c7" /> Automatic Reminder ({viewingTask.reminder_offset_minutes || 20}m before)
                   </div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: '#0284c7', marginTop: 2 }}>
                     {viewingTask.reminder_time
-                      ? `${formatDate(viewingTask.reminder_time)} at ${new Date(viewingTask.reminder_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      ? `${formatDate(viewingTask.reminder_time)} at ${new Date(viewingTask.reminder_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${
+                          viewingTask.reminder_status ? ` • ${viewingTask.reminder_status}` : ''
+                        }`
                       : 'Scheduled automatically'}
                   </div>
                 </div>

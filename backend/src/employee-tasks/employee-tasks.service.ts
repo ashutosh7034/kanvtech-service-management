@@ -99,50 +99,44 @@ export class EmployeeTasksService {
   }
 
   /**
-   * Calculate automatic reminder timestamp: Exactly 20 minutes before deadline.
-   */
-  computeReminderTime(dueDate?: string | Date | null, dueTime?: string | null): Date | null {
-    if (!dueDate) return null;
-    const datePart =
-      dueDate instanceof Date
-        ? dueDate.toISOString().split('T')[0]
-        : String(dueDate).split('T')[0];
-    const timePart = dueTime ? dueTime.trim() : '18:00'; // Default EOD 6:00 PM
-
-    let hours = 18;
-    let minutes = 0;
-
-    const ampmMatch = timePart.match(/(\d+):(\d+)\s*(AM|PM)?/i);
-    if (ampmMatch) {
-      hours = parseInt(ampmMatch[1], 10);
-      minutes = parseInt(ampmMatch[2], 10);
-      const ampm = (ampmMatch[3] || '').toUpperCase();
-      if (ampm === 'PM' && hours < 12) hours += 12;
-      if (ampm === 'AM' && hours === 12) hours = 0;
-    }
-
-    const dueDateTime = new Date(
-      `${datePart}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`,
-    );
-    if (isNaN(dueDateTime.getTime())) return null;
-
-    // Automatic reminder = Due Date & Time - 20 minutes
-    return new Date(dueDateTime.getTime() - 20 * 60 * 1000);
-  }
-
-  /**
    * Parse due date & time into Date object.
    */
   parseDueDateTime(dueDate?: string | Date | null, dueTime?: string | null): Date | null {
     if (!dueDate) return null;
-    const datePart =
-      dueDate instanceof Date
-        ? dueDate.toISOString().split('T')[0]
-        : String(dueDate).split('T')[0];
-    const timePart = dueTime ? dueTime.trim() : '18:00';
+    let year: number;
+    let month: number;
+    let day: number;
 
+    if (dueDate instanceof Date) {
+      year = dueDate.getFullYear();
+      month = dueDate.getMonth();
+      day = dueDate.getDate();
+    } else {
+      const dateStr = String(dueDate).trim();
+      const ymdMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+      const dmyMatch = dateStr.match(/^(\d{1,2})-(\d{1,2})-(\d{4})/);
+
+      if (ymdMatch) {
+        year = parseInt(ymdMatch[1], 10);
+        month = parseInt(ymdMatch[2], 10) - 1;
+        day = parseInt(ymdMatch[3], 10);
+      } else if (dmyMatch) {
+        day = parseInt(dmyMatch[1], 10);
+        month = parseInt(dmyMatch[2], 10) - 1;
+        year = parseInt(dmyMatch[3], 10);
+      } else {
+        const parsed = new Date(dateStr);
+        if (isNaN(parsed.getTime())) return null;
+        year = parsed.getFullYear();
+        month = parsed.getMonth();
+        day = parsed.getDate();
+      }
+    }
+
+    const timePart = dueTime ? dueTime.trim() : '06:00 PM';
     let hours = 18;
     let minutes = 0;
+
     const ampmMatch = timePart.match(/(\d+):(\d+)\s*(AM|PM)?/i);
     if (ampmMatch) {
       hours = parseInt(ampmMatch[1], 10);
@@ -152,8 +146,19 @@ export class EmployeeTasksService {
       if (ampm === 'AM' && hours === 12) hours = 0;
     }
 
-    const d = new Date(`${datePart}T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
-    return isNaN(d.getTime()) ? new Date(dueDate) : d;
+    const d = new Date(year, month, day, hours, minutes, 0, 0);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  /**
+   * Calculate dynamic automatic reminder timestamp: Exactly offsetMinutes (default 20) before deadline.
+   */
+  computeReminderTime(dueDate?: string | Date | null, dueTime?: string | null, offsetMinutes: number = 20): Date | null {
+    const dueDateTime = this.parseDueDateTime(dueDate, dueTime);
+    if (!dueDateTime || isNaN(dueDateTime.getTime())) return null;
+
+    const offset = !isNaN(Number(offsetMinutes)) ? Number(offsetMinutes) : 20;
+    return new Date(dueDateTime.getTime() - offset * 60 * 1000);
   }
 
   /**
@@ -291,6 +296,7 @@ export class EmployeeTasksService {
       category?: string;
       dueDate?: string;
       dueTime?: string;
+      reminderOffsetMinutes?: number;
       taskType?: string;
       priority?: string;
       assignedToIds?: string[];
@@ -302,13 +308,28 @@ export class EmployeeTasksService {
       throw new BadRequestException('Task title is required.');
     }
 
+    const offsetMinutes =
+      data.reminderOffsetMinutes !== undefined && !isNaN(Number(data.reminderOffsetMinutes))
+        ? Number(data.reminderOffsetMinutes)
+        : 20;
+
     // Default Due Time: 6:00 PM EOD
     const dueTime = (data.dueTime?.trim() || '06:00 PM');
     const dueDateRaw = data.dueDate || new Date().toISOString().split('T')[0];
     const dueDateTime = this.parseDueDateTime(dueDateRaw, dueTime);
 
-    // Automatic reminder: 20 minutes before deadline
-    const reminderDateTime = this.computeReminderTime(dueDateRaw, dueTime);
+    // Automatic dynamic reminder = Due Date & Time - offsetMinutes
+    const reminderDateTime = this.computeReminderTime(dueDateRaw, dueTime, offsetMinutes);
+    const now = new Date();
+
+    let reminderStatus = 'SCHEDULED';
+    if (!reminderDateTime) {
+      reminderStatus = 'NONE';
+    } else if (reminderDateTime < now) {
+      // Policy: if reminder time has already passed when set, mark as PASSED to avoid unexpected immediate firing
+      reminderStatus = 'PASSED';
+    }
+
     const priority = data.priority ? data.priority.toUpperCase() : 'MEDIUM';
 
     // Normalize assignees
@@ -378,6 +399,16 @@ export class EmployeeTasksService {
         },
       });
 
+      // Update dynamic reminder tracking columns
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE employee_tasks
+         SET reminder_offset_minutes = $1, reminder_status = $2, reminder_delivery_timestamp = null
+         WHERE id = $3`,
+        offsetMinutes,
+        reminderStatus,
+        task.id,
+      );
+
       // Log initial creation activity
       await this.logActivity({
         taskId: task.id,
@@ -393,7 +424,9 @@ export class EmployeeTasksService {
           priority,
           dueTime,
           dueDate: dueDateTime,
+          reminderOffsetMinutes: offsetMinutes,
           autoReminderTime: reminderDateTime,
+          reminderStatus,
         },
       });
 
@@ -530,7 +563,8 @@ export class EmployeeTasksService {
     let extraMap: Record<string, any> = {};
     if (taskIds.length > 0) {
       const extras: any[] = await this.prisma.$queryRawUnsafe(
-        `SELECT id, progress, accepted_at, cancelled_at, cancellation_reason, last_reminder_sent_at, reminder_count, extension_requested_at, extension_requested_date, extension_reason
+        `SELECT id, progress, accepted_at, cancelled_at, cancellation_reason, last_reminder_sent_at, reminder_count, extension_requested_at, extension_requested_date, extension_reason,
+                reminder_offset_minutes, reminder_status, reminder_delivery_timestamp
          FROM employee_tasks WHERE id = ANY($1::text[])`,
         taskIds,
       );
@@ -563,7 +597,8 @@ export class EmployeeTasksService {
     if (!task) throw new NotFoundException('Task not found.');
 
     const [extras]: any[] = await this.prisma.$queryRawUnsafe(
-      `SELECT progress, accepted_at, cancelled_at, cancellation_reason, last_reminder_sent_at, reminder_count, extension_requested_at, extension_requested_date, extension_reason
+      `SELECT progress, accepted_at, cancelled_at, cancellation_reason, last_reminder_sent_at, reminder_count, extension_requested_at, extension_requested_date, extension_reason,
+              reminder_offset_minutes, reminder_status, reminder_delivery_timestamp
        FROM employee_tasks WHERE id = $1`,
       id,
     );
@@ -1131,6 +1166,7 @@ export class EmployeeTasksService {
       category?: string;
       dueDate?: string;
       dueTime?: string;
+      reminderOffsetMinutes?: number;
       priority?: string;
       status?: string;
     },
@@ -1149,24 +1185,49 @@ export class EmployeeTasksService {
       throw new ForbiddenException('You cannot edit this task.');
     }
 
+    const [existingExtra]: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT reminder_offset_minutes, reminder_status, reminder_delivery_timestamp 
+       FROM employee_tasks WHERE id = $1`,
+      id,
+    );
+
     let dueDateTime = task.dueDate;
     let dueTime = data.dueTime !== undefined ? data.dueTime?.trim() || null : task.dueTime;
+    let offsetMinutes =
+      data.reminderOffsetMinutes !== undefined && !isNaN(Number(data.reminderOffsetMinutes))
+        ? Number(data.reminderOffsetMinutes)
+        : (existingExtra?.reminder_offset_minutes ?? 20);
+
     let reminderDateTime = task.reminderTime;
     let resetReminder = false;
+    let reminderStatus = existingExtra?.reminder_status || 'SCHEDULED';
 
-    if (data.dueDate !== undefined || data.dueTime !== undefined) {
+    if (data.dueDate !== undefined || data.dueTime !== undefined || data.reminderOffsetMinutes !== undefined) {
       const rawDate = data.dueDate !== undefined ? data.dueDate : task.dueDate;
       dueDateTime = this.parseDueDateTime(rawDate, dueTime);
 
-      // Recalculate automatic reminder 20 minutes before new deadline
-      reminderDateTime = this.computeReminderTime(rawDate, dueTime);
+      // Recalculate automatic reminder dynamically: Due DateTime - offsetMinutes
+      reminderDateTime = this.computeReminderTime(rawDate, dueTime, offsetMinutes);
       resetReminder = true;
+
+      const now = new Date();
+      if (!reminderDateTime) {
+        reminderStatus = 'NONE';
+      } else if (reminderDateTime < now) {
+        // Policy: if reminder time has already passed, mark as PASSED to avoid unexpected immediate firing
+        reminderStatus = 'PASSED';
+      } else {
+        reminderStatus = 'SCHEDULED';
+      }
     }
 
     const newStatus = data.status || task.status;
     let completedAt = task.completedAt;
     if (newStatus === 'COMPLETED' && task.status !== 'COMPLETED') {
       completedAt = new Date();
+      reminderStatus = 'CANCELLED';
+    } else if (newStatus === 'CANCELLED') {
+      reminderStatus = 'CANCELLED';
     } else if (newStatus === 'PENDING') {
       completedAt = null;
     }
@@ -1191,6 +1252,21 @@ export class EmployeeTasksService {
       },
     });
 
+    // Update dynamic reminder columns transactionally
+    await this.prisma.$executeRawUnsafe(
+      `UPDATE employee_tasks 
+       SET reminder_offset_minutes = $1, 
+           reminder_status = $2, 
+           reminder_delivery_timestamp = CASE WHEN $3 = true THEN NULL ELSE reminder_delivery_timestamp END,
+           reminder_triggered_at = CASE WHEN $3 = true THEN NULL ELSE reminder_triggered_at END,
+           updated_at = now()
+       WHERE id = $4`,
+      offsetMinutes,
+      reminderStatus,
+      resetReminder,
+      id,
+    );
+
     if (resetReminder) {
       await this.logActivity({
         taskId: id,
@@ -1199,8 +1275,14 @@ export class EmployeeTasksService {
         actorUserId: requestingUserId,
         actorName: requestingUserName,
         activityType: 'DEADLINE_CHANGED',
-        comment: `Rescheduled deadline to ${dueDateTime ? dueDateTime.toLocaleDateString() : 'N/A'} at ${dueTime}`,
-        metadata: { newDueDate: dueDateTime, newDueTime: dueTime, newReminder: reminderDateTime },
+        comment: `Rescheduled deadline to ${dueDateTime ? dueDateTime.toLocaleDateString() : 'N/A'} at ${dueTime} (Reminder: ${offsetMinutes}m offset)`,
+        metadata: {
+          newDueDate: dueDateTime,
+          newDueTime: dueTime,
+          newReminder: reminderDateTime,
+          reminderOffsetMinutes: offsetMinutes,
+          reminderStatus,
+        },
       });
 
       // Notify assignee if assignor changed deadline
@@ -1307,50 +1389,46 @@ export class EmployeeTasksService {
   }
 
   /**
-   * Background processor: checks due reminders (20 minutes before deadline)
+   * Background processor: checks due reminders (offset minutes before deadline)
    * and creates in-app notifications idempotently.
    */
   async processDueReminders(): Promise<{ processedCount: number }> {
     const now = new Date();
 
-    const dueTasks = await this.prisma.employeeTask.findMany({
-      where: {
-        status: { in: ['PENDING', 'ACCEPTED', 'IN_PROGRESS', 'ON_HOLD'] },
-        reminderTime: { lte: now },
-        reminderTriggeredAt: null, // Idempotent: only trigger once per schedule
-      },
-      include: {
-        assignee: {
-          select: {
-            id: true,
-            name: true,
-            userId: true,
-          },
-        },
-      },
-    });
+    const dueTasks: any[] = await this.prisma.$queryRawUnsafe(
+      `SELECT t.id, t.title, t.due_time, t.reminder_time, t.reminder_offset_minutes,
+              u.id as assignee_user_id, e.name as assignee_name
+       FROM employee_tasks t
+       JOIN employees e ON t.assigned_to = e.id
+       JOIN users u ON e.user_id = u.id
+       WHERE t.status IN ('PENDING', 'ACCEPTED', 'IN_PROGRESS', 'ON_HOLD')
+       AND t.reminder_time <= now()
+       AND t.reminder_triggered_at IS NULL
+       AND (t.reminder_status IS NULL OR t.reminder_status = 'SCHEDULED')`,
+    );
 
     let processedCount = 0;
 
     for (const task of dueTasks) {
-      const targetUserId = task.assignee?.userId;
-
-      if (targetUserId) {
-        const dueInfo = task.dueTime ? ` Due at ${task.dueTime}.` : '';
+      if (task.assignee_user_id) {
+        const dueInfo = task.due_time ? ` Due at ${task.due_time}.` : '';
+        const offset = task.reminder_offset_minutes || 20;
 
         await this.notificationsService.createInAppNotification(
-          targetUserId,
+          Number(task.assignee_user_id),
           `Task Reminder: ${task.title}`,
-          `Upcoming task: "${task.title}".${dueInfo} (20 mins before deadline)`,
+          `Upcoming task: "${task.title}".${dueInfo} (${offset} mins before deadline)`,
           'TASK_REMINDER_AUTOMATIC',
           `/task-reminders?taskId=${task.id}`,
         );
       }
 
-      await this.prisma.employeeTask.update({
-        where: { id: task.id },
-        data: { reminderTriggeredAt: new Date() },
-      });
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE employee_tasks 
+         SET reminder_triggered_at = now(), reminder_delivery_timestamp = now(), reminder_status = 'TRIGGERED' 
+         WHERE id = $1`,
+        task.id,
+      );
 
       processedCount++;
     }
@@ -1404,6 +1482,12 @@ export class EmployeeTasksService {
           ? task.reminderTime.toISOString()
           : task.reminderTime
         : null,
+      reminder_offset_minutes: extra?.reminder_offset_minutes ?? 20,
+      reminderOffsetMinutes: extra?.reminder_offset_minutes ?? 20,
+      reminder_status: extra?.reminder_status || (task.status === 'COMPLETED' || task.status === 'CANCELLED' ? 'CANCELLED' : task.reminderTriggeredAt ? 'TRIGGERED' : 'SCHEDULED'),
+      reminderStatus: extra?.reminder_status || (task.status === 'COMPLETED' || task.status === 'CANCELLED' ? 'CANCELLED' : task.reminderTriggeredAt ? 'TRIGGERED' : 'SCHEDULED'),
+      reminder_delivery_timestamp: extra?.reminder_delivery_timestamp ?? task.reminderTriggeredAt ?? null,
+      reminderDeliveryTimestamp: extra?.reminder_delivery_timestamp ?? task.reminderTriggeredAt ?? null,
       reminder_triggered_at: task.reminderTriggeredAt
         ? task.reminderTriggeredAt instanceof Date
           ? task.reminderTriggeredAt.toISOString()

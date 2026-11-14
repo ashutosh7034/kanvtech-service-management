@@ -121,6 +121,12 @@ export class EmployeeTasksController {
         category: body.category,
         dueDate: body.due_date || body.dueDate,
         dueTime: body.due_time || body.dueTime,
+        reminderOffsetMinutes:
+          body.reminder_offset_minutes !== undefined
+            ? Number(body.reminder_offset_minutes)
+            : body.reminderOffsetMinutes !== undefined
+            ? Number(body.reminderOffsetMinutes)
+            : 20,
         priority: body.priority,
         taskType: body.task_type || body.taskType,
         assignedToIds:
@@ -155,6 +161,12 @@ export class EmployeeTasksController {
         category: body.category,
         dueDate: body.due_date || body.dueDate,
         dueTime: body.due_time || body.dueTime,
+        reminderOffsetMinutes:
+          body.reminder_offset_minutes !== undefined
+            ? Number(body.reminder_offset_minutes)
+            : body.reminderOffsetMinutes !== undefined
+            ? Number(body.reminderOffsetMinutes)
+            : undefined,
         priority: body.priority,
         status: body.status,
       },
