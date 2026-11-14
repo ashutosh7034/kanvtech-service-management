@@ -721,7 +721,7 @@ export const MaintenancePage: React.FC = () => {
               }}
             >
               <Plus size={16} />
-              + Create AMC Contract
+              Create AMC Contract
             </button>
           )}
         </div>
@@ -851,7 +851,7 @@ export const MaintenancePage: React.FC = () => {
             {canCreate && (
               <button className="btn btn-primary btn-sm" onClick={handleOpenCreateWizard}>
                 <Plus size={14} style={{ marginRight: 4 }} />
-                + Create AMC Contract
+                Create AMC Contract
               </button>
             )}
           </div>
@@ -1050,7 +1050,7 @@ export const MaintenancePage: React.FC = () => {
                   style={{ display: 'flex', alignItems: 'center', gap: 6 }}
                 >
                   <Plus size={14} />
-                  + Create New Plan
+                  Create New Plan
                 </button>
                 <button
                   onClick={() => setShowPlansModal(false)}

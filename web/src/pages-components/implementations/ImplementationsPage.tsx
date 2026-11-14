@@ -639,7 +639,7 @@ export const ImplementationsPage: React.FC = () => {
             }}
           >
             <Plus size={16} />
-            + Create New Implementation
+            Create New Implementation
           </button>
         )}
       </div>
