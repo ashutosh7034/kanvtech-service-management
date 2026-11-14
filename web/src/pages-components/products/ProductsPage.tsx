@@ -344,111 +344,120 @@ export const ProductsPage: React.FC = () => {
             </div>
           </div>
         ) : (
-          <table className="table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: 12, color: '#475569' }}>
-                <th style={{ padding: '12px 16px' }}>PRODUCT CODE</th>
-                <th style={{ padding: '12px 16px' }}>PRODUCT NAME</th>
-                <th style={{ padding: '12px 16px' }}>CATEGORY</th>
-                <th style={{ padding: '12px 16px' }}>SUBSCRIPTIONS</th>
-                <th style={{ padding: '12px 16px' }}>IMPLEMENTATIONS</th>
-                <th style={{ padding: '12px 16px' }}>STATUS</th>
-                <th style={{ padding: '12px 16px' }}>CREATED</th>
-                {canEditProduct && <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTIONS</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {products.map((p) => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
-                  <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0b3b60' }}>
-                    <code>{p.code}</code>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</div>
-                    {p.description && (
-                      <div style={{ fontSize: 11, color: '#64748b', maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {p.description}
-                      </div>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span className="badge" style={{ background: '#f1f5f9', color: '#334155' }}>
-                      {p.category}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#475569' }}>
-                    {p.subscriptions_count} active
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#475569' }}>
-                    {p.implementations_count} projects
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span
-                      className="badge"
-                      style={{
-                        background: p.isActive ? '#dcfce7' : '#f1f5f9',
-                        color: p.isActive ? '#15803d' : '#64748b',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {p.isActive ? 'ACTIVE' : 'INACTIVE'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px', color: '#64748b' }}>
-                    {formatDate(p.created_at)}
-                  </td>
-                  <td style={{ padding: '12px 16px', textAlign: 'right' }}>
-                    <div style={{ display: 'inline-flex', gap: 6 }}>
-                      <button
-                        className="btn btn-outline btn-xs"
-                        onClick={() => openHierarchy(p)}
-                        title="Manage Modules & Hierarchy"
-                        style={{ color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
-                      >
-                        <Layers size={13} />
-                        <span>Modules</span>
-                      </button>
-                      <button
-                        className="btn btn-outline btn-xs"
-                        onClick={() => openView(p)}
-                        title="View Product Details"
-                      >
-                        <Eye size={13} />
-                      </button>
-                      {canEditProduct && (
-                        <>
-                          <button
-                            className="btn btn-outline btn-xs"
-                            onClick={() => openEdit(p)}
-                            title="Edit Product"
-                          >
-                            <Edit2 size={13} />
-                          </button>
-                          <button
-                            className={`btn btn-xs ${p.isActive ? 'btn-outline' : 'btn-success'}`}
-                            onClick={() => handleToggleStatus(p)}
-                            title={p.isActive ? 'Deactivate Product' : 'Activate Product'}
-                          >
-                            {p.isActive ? <X size={13} color="#b91c1c" /> : <Check size={13} />}
-                          </button>
-                        </>
+          <div
+            style={{
+              overflowX: 'auto',
+              width: '100%',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'thin',
+            }}
+          >
+            <table className="table" style={{ width: '100%', minWidth: 1100, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', width: 140 }}>PRODUCT CODE</th>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', minWidth: 220 }}>PRODUCT NAME</th>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', width: 140 }}>CATEGORY</th>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', width: 130 }}>SUBSCRIPTIONS</th>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', width: 150 }}>IMPLEMENTATIONS</th>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', width: 110 }}>STATUS</th>
+                  <th style={{ padding: '12px 16px', whiteSpace: 'nowrap', width: 120 }}>CREATED</th>
+                  {canEditProduct && <th style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap', width: 180 }}>ACTIONS</th>}
+                </tr>
+              </thead>
+              <tbody>
+                {products.map((p) => (
+                  <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9', fontSize: 13 }}>
+                    <td style={{ padding: '12px 16px', fontWeight: 600, color: '#0b3b60', whiteSpace: 'nowrap' }}>
+                      <code>{p.code}</code>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <div style={{ fontWeight: 600, color: '#0f172a' }}>{p.name}</div>
+                      {p.description && (
+                        <div style={{ fontSize: 11, color: '#64748b', maxWidth: 300, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {p.description}
+                        </div>
                       )}
-                      {canDeleteProduct && (
+                    </td>
+                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                      <span className="badge" style={{ background: '#f1f5f9', color: '#334155' }}>
+                        {p.category}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#475569', whiteSpace: 'nowrap' }}>
+                      {p.subscriptions_count} active
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#475569', whiteSpace: 'nowrap' }}>
+                      {p.implementations_count} projects
+                    </td>
+                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                      <span
+                        className="badge"
+                        style={{
+                          background: p.isActive ? '#dcfce7' : '#f1f5f9',
+                          color: p.isActive ? '#15803d' : '#64748b',
+                          fontWeight: 600,
+                        }}
+                      >
+                        {p.isActive ? 'ACTIVE' : 'INACTIVE'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {formatDate(p.created_at)}
+                    </td>
+                    <td style={{ padding: '12px 16px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <div style={{ display: 'inline-flex', gap: 6, flexWrap: 'nowrap' }}>
                         <button
                           className="btn btn-outline btn-xs"
-                          onClick={() => handleDeleteProduct(p)}
-                          title="Delete Product (Admin Only)"
-                          style={{ color: '#b91c1c' }}
+                          onClick={() => openHierarchy(p)}
+                          title="Manage Modules & Hierarchy"
+                          style={{ color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                         >
-                          <Trash2 size={13} />
+                          <Layers size={13} />
+                          <span>Modules</span>
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        <button
+                          className="btn btn-outline btn-xs"
+                          onClick={() => openView(p)}
+                          title="View Product Details"
+                        >
+                          <Eye size={13} />
+                        </button>
+                        {canEditProduct && (
+                          <>
+                            <button
+                              className="btn btn-outline btn-xs"
+                              onClick={() => openEdit(p)}
+                              title="Edit Product"
+                            >
+                              <Edit2 size={13} />
+                            </button>
+                            <button
+                              className={`btn btn-xs ${p.isActive ? 'btn-outline' : 'btn-success'}`}
+                              onClick={() => handleToggleStatus(p)}
+                              title={p.isActive ? 'Deactivate Product' : 'Activate Product'}
+                            >
+                              {p.isActive ? <X size={13} color="#b91c1c" /> : <Check size={13} />}
+                            </button>
+                          </>
+                        )}
+                        {canDeleteProduct && (
+                          <button
+                            className="btn btn-outline btn-xs"
+                            onClick={() => handleDeleteProduct(p)}
+                            title="Delete Product (Admin Only)"
+                            style={{ color: '#b91c1c' }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
