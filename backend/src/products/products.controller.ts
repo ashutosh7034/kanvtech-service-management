@@ -60,30 +60,30 @@ export class ProductsController {
   }
 
   @Post()
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @RequirePermissions('product.create')
   @ApiOperation({ summary: 'Create a new product' })
   async createProduct(@Body() body: any, @Request() req: any) {
-    const tenantId = req.user.tenantId;
+    const tenantId = req.user.tenantId || req.user.defaultTenantId || 'KANVTECH';
     if (!tenantId) {
       throw new ForbiddenException('Authenticated tenant workspace context is required to create products.');
     }
-    const product = await this.productsService.createProduct({ ...body, tenantId }, req.user.userId);
+    const product = await this.productsService.createProduct({ ...body, tenantId }, req.user.userId || req.user.id || 1);
     return { success: true, id: product.id, productId: product.id, product, message: 'Product created successfully' };
   }
 
   @Put(':id')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @RequirePermissions('product.update')
   @ApiOperation({ summary: 'Update existing product details' })
   async updateProduct(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const product = await this.productsService.updateProduct(id, body, req.user.userId, tenantId);
+    const product = await this.productsService.updateProduct(id, body, req.user.userId || req.user.id || 1, tenantId);
     return { success: true, product, message: 'Product updated successfully' };
   }
 
   @Post(':id/status')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @RequirePermissions('product.update')
   @ApiOperation({ summary: 'Toggle product active/inactive status' })
   async toggleStatus(
@@ -93,17 +93,17 @@ export class ProductsController {
   ) {
     const isActive = body.isActive !== undefined ? Boolean(body.isActive) : Boolean(body.is_active);
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const product = await this.productsService.toggleProductStatus(id, isActive, req.user.userId, tenantId);
+    const product = await this.productsService.toggleProductStatus(id, isActive, req.user.userId || req.user.id || 1, tenantId);
     return { success: true, product, message: 'Product status updated successfully' };
   }
 
   @Delete(':id')
-  @Roles('ADMIN')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'PLATFORM_INCHARGE')
   @RequirePermissions('product.delete')
   @ApiOperation({ summary: 'Delete a product' })
   async deleteProduct(@Param('id') id: string, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const result = await this.productsService.deleteProduct(id, req.user.userId, tenantId);
+    const result = await this.productsService.deleteProduct(id, req.user.userId || req.user.id || 1, tenantId);
     return result;
   }
 
@@ -118,58 +118,58 @@ export class ProductsController {
   }
 
   @Post(':id/modules')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @ApiOperation({ summary: 'Create a module for a product' })
   async createModule(@Param('id') id: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const module = await this.productsService.createModule(id, body, req.user.userId, tenantId);
+    const module = await this.productsService.createModule(id, body, req.user.userId || req.user.id || 1, tenantId);
     return { success: true, module, message: 'Module created successfully' };
   }
 
   @Put('modules/:moduleId')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @ApiOperation({ summary: 'Update a module' })
   async updateModule(@Param('moduleId') moduleId: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const module = await this.productsService.updateModule(moduleId, body, req.user.userId, tenantId);
+    const module = await this.productsService.updateModule(moduleId, body, req.user.userId || req.user.id || 1, tenantId);
     return { success: true, module, message: 'Module updated successfully' };
   }
 
   @Delete('modules/:moduleId')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @ApiOperation({ summary: 'Delete a module and its submodules' })
   async deleteModule(@Param('moduleId') moduleId: string, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const result = await this.productsService.deleteModule(moduleId, req.user.userId, tenantId);
+    const result = await this.productsService.deleteModule(moduleId, req.user.userId || req.user.id || 1, tenantId);
     return result;
   }
 
   // --- Submodule Endpoints ---
 
   @Post('modules/:moduleId/submodules')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @ApiOperation({ summary: 'Create a submodule' })
   async createSubmodule(@Param('moduleId') moduleId: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const submodule = await this.productsService.createSubmodule(moduleId, body, req.user.userId, tenantId);
+    const submodule = await this.productsService.createSubmodule(moduleId, body, req.user.userId || req.user.id || 1, tenantId);
     return { success: true, submodule, message: 'Submodule created successfully' };
   }
 
   @Put('submodules/:submoduleId')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @ApiOperation({ summary: 'Update a submodule' })
   async updateSubmodule(@Param('submoduleId') submoduleId: string, @Body() body: any, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const submodule = await this.productsService.updateSubmodule(submoduleId, body, req.user.userId, tenantId);
+    const submodule = await this.productsService.updateSubmodule(submoduleId, body, req.user.userId || req.user.id || 1, tenantId);
     return { success: true, submodule, message: 'Submodule updated successfully' };
   }
 
   @Delete('submodules/:submoduleId')
-  @Roles('ADMIN', 'MANAGER')
+  @Roles('SUPER_ADMIN', 'ADMIN', 'MANAGER', 'PLATFORM_INCHARGE')
   @ApiOperation({ summary: 'Delete a submodule' })
   async deleteSubmodule(@Param('submoduleId') submoduleId: string, @Request() req: any) {
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
-    const result = await this.productsService.deleteSubmodule(submoduleId, req.user.userId, tenantId);
+    const result = await this.productsService.deleteSubmodule(submoduleId, req.user.userId || req.user.id || 1, tenantId);
     return result;
   }
 }

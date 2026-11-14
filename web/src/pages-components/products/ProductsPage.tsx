@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
+import { useNotifications } from '../../context/NotificationContext';
 import {
   Package,
   Plus,
@@ -37,9 +38,17 @@ interface Product {
 }
 
 export const ProductsPage: React.FC = () => {
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'ADMIN';
-  const isAdminOrManager = user?.role === 'ADMIN' || user?.role === 'MANAGER';
+  const { user, hasPermission } = useAuth();
+  const { showToast } = useNotifications();
+
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.isSuperAdmin;
+  const isPlatformIncharge = user?.role === 'PLATFORM_INCHARGE' || user?.isPlatformIncharge;
+  const isAdmin = isSuperAdmin || isPlatformIncharge || user?.role === 'ADMIN';
+  const isAdminOrManager = isAdmin || user?.role === 'MANAGER';
+
+  const canCreateProduct = isAdminOrManager || hasPermission('product.create');
+  const canEditProduct = isAdminOrManager || hasPermission('product.update');
+  const canDeleteProduct = isAdmin || hasPermission('product.delete');
 
   const [products, setProducts] = useState<Product[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -109,15 +118,19 @@ export const ProductsPage: React.FC = () => {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.name || !formData.category) return;
+    if (!formData.name?.trim() || !formData.category) {
+      showToast('Product name and category are required.', 'warning');
+      return;
+    }
     setSubmitting(true);
     try {
       await api.createProduct(formData);
       setShowAddModal(false);
       setFormData({ code: '', name: '', category: 'Enterprise Software', description: '', isActive: true });
+      showToast('Product created successfully!', 'success');
       fetchData();
     } catch (err: any) {
-      alert(`Error creating product: ${err.message}`);
+      showToast(`Error creating product: ${err.message}`, 'danger');
     } finally {
       setSubmitting(false);
     }
@@ -131,9 +144,10 @@ export const ProductsPage: React.FC = () => {
       await api.updateProduct(selectedProduct.id, formData);
       setShowEditModal(false);
       setSelectedProduct(null);
+      showToast('Product updated successfully!', 'success');
       fetchData();
     } catch (err: any) {
-      alert(`Error updating product: ${err.message}`);
+      showToast(`Error updating product: ${err.message}`, 'danger');
     } finally {
       setSubmitting(false);
     }
@@ -148,16 +162,18 @@ export const ProductsPage: React.FC = () => {
 
     try {
       await api.toggleProductStatus(product.id, newStatus);
+      showToast(`Product "${product.name}" ${newStatus ? 'activated' : 'deactivated'} successfully.`, 'info');
       fetchData();
     } catch (err: any) {
-      alert(`Status update failed: ${err.message}`);
+      showToast(`Status update failed: ${err.message}`, 'danger');
     }
   };
 
   const handleDeleteProduct = async (product: Product) => {
     if (product.subscriptions_count > 0 || product.implementations_count > 0) {
-      alert(
+      showToast(
         `Cannot delete product "${product.name}" because it is linked to ${product.subscriptions_count} subscription(s) and ${product.implementations_count} implementation(s). Please deactivate it instead.`,
+        'warning',
       );
       return;
     }
@@ -168,9 +184,10 @@ export const ProductsPage: React.FC = () => {
 
     try {
       await api.deleteProduct(product.id);
+      showToast(`Product "${product.name}" deleted successfully.`, 'info');
       fetchData();
     } catch (err: any) {
-      alert(`Deletion failed: ${err.message}`);
+      showToast(`Deletion failed: ${err.message}`, 'danger');
     }
   };
 
@@ -209,7 +226,7 @@ export const ProductsPage: React.FC = () => {
             Central catalog of software suites, enterprise platforms, and billable service modules
           </p>
         </div>
-        {isAdminOrManager && (
+        {canCreateProduct && (
           <button
             className="btn btn-primary"
             onClick={() => {
@@ -337,7 +354,7 @@ export const ProductsPage: React.FC = () => {
                 <th style={{ padding: '12px 16px' }}>IMPLEMENTATIONS</th>
                 <th style={{ padding: '12px 16px' }}>STATUS</th>
                 <th style={{ padding: '12px 16px' }}>CREATED</th>
-                {isAdminOrManager && <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTIONS</th>}
+                {canEditProduct && <th style={{ padding: '12px 16px', textAlign: 'right' }}>ACTIONS</th>}
               </tr>
             </thead>
             <tbody>
@@ -398,7 +415,7 @@ export const ProductsPage: React.FC = () => {
                       >
                         <Eye size={13} />
                       </button>
-                      {isAdminOrManager && (
+                      {canEditProduct && (
                         <>
                           <button
                             className="btn btn-outline btn-xs"
@@ -416,7 +433,7 @@ export const ProductsPage: React.FC = () => {
                           </button>
                         </>
                       )}
-                      {isAdmin && (
+                      {canDeleteProduct && (
                         <button
                           className="btn btn-outline btn-xs"
                           onClick={() => handleDeleteProduct(p)}
