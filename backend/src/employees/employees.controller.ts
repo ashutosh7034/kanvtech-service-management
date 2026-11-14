@@ -63,6 +63,17 @@ export class EmployeesController {
     return { success: true, message: `Employee level management ${body.enabled ? 'enabled' : 'disabled'}` };
   }
 
+  @Get('check-user-id')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('employee.user_id.availability_check')
+  @ApiOperation({ summary: 'Check Custom User ID availability and format' })
+  async checkUserId(
+    @Query('userId') userId: string,
+    @Query('employeeId') employeeId?: string,
+  ) {
+    return this.employeesService.checkUserIdAvailability(userId, employeeId);
+  }
+
   @Get(':id')
   @Roles('ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
   @ApiOperation({ summary: 'Get employee details and handled tickets' })
@@ -87,6 +98,7 @@ export class EmployeesController {
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
     };
     const id = await this.employeesService.createEmployee({ ...body, tenantId }, actor);
     return { success: true, employeeId: id, id, message: 'Employee created successfully' };
@@ -100,10 +112,40 @@ export class EmployeesController {
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
     };
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     await this.employeesService.updateEmployee(id, body, actor, tenantId);
     return { success: true, message: 'Employee updated successfully' };
+  }
+
+  @Get(':id/user-id-history')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('employee.user_id.view')
+  @ApiOperation({ summary: 'Get Custom User ID modification history' })
+  async getUserIdHistory(@Param('id') id: string, @Request() req: any) {
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    return this.employeesService.getEmployeeUserIdHistory(id, tenantId);
+  }
+
+  @Put(':id/user-id')
+  @Roles('ADMIN', 'SUPER_ADMIN', 'MANAGER', 'L1_EMPLOYEE', 'L2_EMPLOYEE', 'L3_EMPLOYEE')
+  @RequirePermissions('employee.user_id.update')
+  @ApiOperation({ summary: 'Update employee Custom User ID with reason' })
+  async updateUserId(
+    @Param('id') id: string,
+    @Body() body: { customUserId: string; reason?: string },
+    @Request() req: any,
+  ) {
+    const actor = {
+      id: req.user?.id || req.user?.userId,
+      role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
+    };
+    const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
+    const targetUserId = body.customUserId || (body as any).userId || (body as any).custom_user_id;
+    await this.employeesService.updateEmployeeUserId(id, targetUserId, body.reason, actor, tenantId);
+    return { success: true, message: 'User ID updated successfully.' };
   }
 
   @Post(':id/promote')
@@ -115,6 +157,7 @@ export class EmployeesController {
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
     };
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const updated = await this.employeesService.promoteEmployee(id, body?.level, actor, tenantId);
@@ -130,6 +173,7 @@ export class EmployeesController {
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
     };
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const updated = await this.employeesService.demoteEmployee(id, body?.level, actor, tenantId);
@@ -144,6 +188,7 @@ export class EmployeesController {
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
     };
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
 
@@ -183,6 +228,7 @@ export class EmployeesController {
     const actor = {
       id: req.user?.id || req.user?.userId,
       role: req.user?.role as UserRole,
+      permissions: req.user?.effectivePermissions || [],
     };
     const tenantId = req.user.isSuperAdmin ? undefined : req.user.tenantId || 'KANVTECH';
     const res = await this.employeesService.deleteEmployee(id, actor, tenantId);

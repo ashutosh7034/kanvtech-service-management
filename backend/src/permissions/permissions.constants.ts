@@ -57,6 +57,34 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     description: 'Grant and revoke granular permissions for other employees',
     moduleLabel: 'Employee Management',
   },
+  {
+    permissionCode: 'employee.user_id.view',
+    module: 'employee',
+    action: 'user_id.view',
+    description: 'View custom login User IDs across employee profiles and directories',
+    moduleLabel: 'Employee Management',
+  },
+  {
+    permissionCode: 'employee.user_id.create',
+    module: 'employee',
+    action: 'user_id.create',
+    description: 'Define and assign custom login User IDs during employee creation',
+    moduleLabel: 'Employee Management',
+  },
+  {
+    permissionCode: 'employee.user_id.update',
+    module: 'employee',
+    action: 'user_id.update',
+    description: 'Modify existing custom login User IDs and record change reason',
+    moduleLabel: 'Employee Management',
+  },
+  {
+    permissionCode: 'employee.user_id.availability_check',
+    module: 'employee',
+    action: 'user_id.availability_check',
+    description: 'Check platform-wide Custom User ID format and live availability',
+    moduleLabel: 'Employee Management',
+  },
 
   // Department Management
   {

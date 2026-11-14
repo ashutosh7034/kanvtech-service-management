@@ -8,7 +8,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   loading: boolean;
-  login: (email: string, passwordPlain: string, rememberMe?: boolean, selectedTenantId?: string) => Promise<any>;
+  login: (identifierOrEmail: string, passwordPlain: string, rememberMe?: boolean, selectedTenantId?: string) => Promise<any>;
   switchTenant: (tenantId: string) => Promise<void>;
   logout: () => Promise<void>;
   hasPermission: (permissionCode: string) => boolean;
@@ -70,6 +70,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id: res.user.id || res.user.userId,
           email: res.user.email,
           role: res.user.role,
+          customUserId: res.user.customUserId || res.user.custom_user_id,
           displayName:
             res.user.name ||
             res.user.displayName ||
@@ -171,8 +172,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  const login = async (email: string, passwordPlain: string, rememberMe = false, selectedTenantId?: string) => {
-    const res = await api.login({ email, password: passwordPlain, rememberMe, selectedTenantId });
+  const login = async (identifierOrEmail: string, passwordPlain: string, rememberMe = false, selectedTenantId?: string) => {
+    const res = await api.login({
+      email: identifierOrEmail,
+      identifier: identifierOrEmail,
+      password: passwordPlain,
+      rememberMe,
+      selectedTenantId,
+    });
     if (res && res.requiresTenantSelection) {
       return res;
     }
@@ -181,6 +188,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         id: res.user.id || res.user.userId,
         email: res.user.email,
         role: res.user.role,
+        customUserId: res.user.customUserId || res.user.custom_user_id,
         displayName:
           res.user.name ||
           res.user.displayName ||
@@ -202,7 +210,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (rememberMe) {
           localStorage.setItem('kanvtech_token', res.token);
           localStorage.setItem('kanvtech_remember_me', 'true');
-          localStorage.setItem('kanvtech_remembered_email', email.trim());
+          localStorage.setItem('kanvtech_remembered_email', identifierOrEmail.trim());
           localStorage.setItem('kanvtech_user', JSON.stringify(userData));
           sessionStorage.removeItem('kanvtech_token');
           sessionStorage.removeItem('kanvtech_user');

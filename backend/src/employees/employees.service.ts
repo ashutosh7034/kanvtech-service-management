@@ -3,7 +3,9 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
+import { validateAndNormalizeUserId } from '../auth/user-id-validator.util';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { EntitlementsService } from '../entitlements/entitlements.service';
@@ -80,6 +82,8 @@ export class EmployeesService {
         { id: { contains: q, mode: 'insensitive' } },
         { department: { contains: q, mode: 'insensitive' } },
         { departmentRel: { name: { contains: q, mode: 'insensitive' } } },
+        { customUserId: { contains: q, mode: 'insensitive' } },
+        { user: { customUserId: { contains: q, mode: 'insensitive' } } },
       ];
     }
 
@@ -87,7 +91,7 @@ export class EmployeesService {
       where,
       orderBy: [{ level: 'asc' }, { name: 'asc' }],
       include: {
-        user: { select: { id: true, role: true, isActive: true } },
+        user: { select: { id: true, role: true, isActive: true, customUserId: true } },
         manager: { select: { id: true, name: true } },
         departmentRel: { select: { id: true, name: true, code: true } },
         assignedTickets: {
@@ -104,11 +108,14 @@ export class EmployeesService {
 
     return employees.map((e) => {
       const isSuperAdmin = e.user?.role === UserRole.ADMIN || e.user?.role === UserRole.SUPER_ADMIN;
+      const customUserId = e.customUserId || e.user?.customUserId || null;
       return {
         id: e.id,
         user_id: e.userId,
         name: e.name,
         email: e.email,
+        custom_user_id: customUserId,
+        customUserId,
         alternate_emails: e.alternateEmails,
         phone: e.phone,
         alternate_phones: e.alternatePhones,
@@ -145,7 +152,7 @@ export class EmployeesService {
     const e = await this.prisma.employee.findFirst({
       where,
       include: {
-        user: { select: { id: true, role: true, isActive: true } },
+        user: { select: { id: true, role: true, isActive: true, customUserId: true } },
         manager: { select: { id: true, name: true } },
         departmentRel: { select: { id: true, name: true, code: true } },
         assignedTickets: {
@@ -179,12 +186,15 @@ export class EmployeesService {
     });
 
     const isSuperAdmin = e.user?.role === UserRole.ADMIN || e.user?.role === UserRole.SUPER_ADMIN;
+    const customUserId = e.customUserId || e.user?.customUserId || null;
 
     return {
       id: e.id,
       user_id: e.userId,
       name: e.name,
       email: e.email,
+      custom_user_id: customUserId,
+      customUserId,
       alternate_emails: e.alternateEmails,
       phone: e.phone,
       alternate_phones: e.alternatePhones,
@@ -239,6 +249,8 @@ export class EmployeesService {
       manager_id?: string;
       password?: string;
       tenantId?: string;
+      custom_user_id?: string;
+      customUserId?: string;
     },
     actor?: number | ActorContext,
   ): Promise<string> {
@@ -249,6 +261,40 @@ export class EmployeesService {
     const name = (data.name || '').trim();
     if (!name) {
       throw new BadRequestException('Employee name is required.');
+    }
+
+    // Custom Login User ID validation and availability check
+    let normalizedCustomUserId: string | null = null;
+    const candidateUserId = data.customUserId !== undefined ? data.customUserId : data.custom_user_id;
+    if (candidateUserId !== undefined && candidateUserId !== null && candidateUserId !== '') {
+      const hasUserIdCreate =
+        actorRole === UserRole.ADMIN ||
+        actorRole === UserRole.SUPER_ADMIN ||
+        actorRole === ('PLATFORM_INCHARGE' as any) ||
+        (actor as any)?.permissions?.includes('employee.user_id.create');
+      if (!hasUserIdCreate) {
+        throw new ForbiddenException('User lacks required permission: employee.user_id.create');
+      }
+
+      const validation = validateAndNormalizeUserId(candidateUserId);
+      if (!validation.valid) {
+        throw new BadRequestException(validation.error);
+      }
+      normalizedCustomUserId = validation.normalized;
+
+      const reserved = await this.prisma.reservedUserId.findUnique({
+        where: { userId: normalizedCustomUserId },
+      });
+      if (reserved) {
+        throw new BadRequestException('The requested User ID is reserved and cannot be assigned.');
+      }
+
+      const existingUserId = await this.prisma.user.findFirst({
+        where: { customUserId: { equals: normalizedCustomUserId, mode: 'insensitive' } },
+      });
+      if (existingUserId) {
+        throw new ConflictException('This User ID is already in use.');
+      }
     }
 
     // Commercial Entitlement check: enforce active subscription and available User Licences
@@ -348,6 +394,7 @@ export class EmployeesService {
         email,
         passwordHash,
         role,
+        customUserId: normalizedCustomUserId || null,
         isActive: true,
         defaultTenantId: tenantId,
       },
@@ -384,6 +431,7 @@ export class EmployeesService {
         tenantId,
         name,
         email,
+        customUserId: normalizedCustomUserId || null,
         alternateEmails: data.alternate_emails?.trim() || null,
         phone,
         alternatePhones: data.alternate_phones?.trim() || null,
@@ -396,6 +444,33 @@ export class EmployeesService {
         status: EmployeeStatus.ACTIVE,
       },
     });
+
+    // Record User ID history on initial creation
+    if (normalizedCustomUserId) {
+      const actorEmp = actorUserId
+        ? await this.prisma.employee.findUnique({ where: { userId: actorUserId } })
+        : null;
+      await this.prisma.userIdChangeHistory.create({
+        data: {
+          userId: user.id,
+          previousUserId: null,
+          newUserId: normalizedCustomUserId,
+          changedByUserId: actorUserId || user.id,
+          changedByName: actorEmp?.name || (actorRole === 'SUPER_ADMIN' ? 'System Administrator' : 'Administrator'),
+          tenantId,
+          changeReason: 'INITIAL_ASSIGNMENT',
+        },
+      });
+
+      await this.auditService.log({
+        actorUserId,
+        action: 'USER_ID_CREATED',
+        entityType: 'EMPLOYEE',
+        entityId: employeeId,
+        tenantId,
+        newValues: { customUserId: normalizedCustomUserId },
+      });
+    }
 
     // Record entitlement usage in history
     await this.entitlementsService.logEmployeeActivation(
@@ -602,6 +677,117 @@ export class EmployeesService {
         oldValues: { role: existing.user?.role },
         newValues: { role: targetUserRole, changedByRole: actorRole },
       });
+    }
+
+    // Handle Custom User ID update if provided
+    const rawCustomUserId = data.custom_user_id !== undefined ? data.custom_user_id : data.customUserId;
+    if (rawCustomUserId !== undefined) {
+      // 1. Authorization: Tenant Super Admin (ADMIN / SUPER_ADMIN) or delegated employee.user_id.update
+      let isAuthorized =
+        actorRole === UserRole.ADMIN ||
+        actorRole === UserRole.SUPER_ADMIN ||
+        actorRole === ('PLATFORM_INCHARGE' as any) ||
+        (actor as any)?.permissions?.includes('employee.user_id.update');
+      if (!isAuthorized && actorUserId) {
+        const empPerm = await this.prisma.employeePermission.findFirst({
+          where: {
+            employee: { userId: actorUserId },
+            permission: { permissionCode: 'employee.user_id.update' },
+          },
+        });
+        if (empPerm) isAuthorized = true;
+      }
+      if (!isAuthorized) {
+        throw new ForbiddenException('User lacks required permission: employee.user_id.update');
+      }
+
+      // Check if target is a platform account
+      const isTargetPlatformAccount =
+        existing.user?.role === 'PLATFORM_INCHARGE' ||
+        existing.id === 'EMP-PLT-001';
+      if (isTargetPlatformAccount && actorRole !== ('PLATFORM_INCHARGE' as any)) {
+        throw new ForbiddenException('Tenant administrators are not permitted to modify platform account identifiers.');
+      }
+
+      const currentUserId = existing.customUserId || existing.user?.customUserId || null;
+      const validation = validateAndNormalizeUserId(rawCustomUserId);
+      if (!validation.valid) {
+        throw new BadRequestException(validation.error);
+      }
+      const newNormalizedId = validation.normalized;
+
+      if (newNormalizedId !== (currentUserId ? currentUserId.toLowerCase() : null)) {
+        // Check reserved identifiers table
+        const reserved = await this.prisma.reservedUserId.findUnique({
+          where: { userId: newNormalizedId },
+        });
+        if (reserved) {
+          throw new BadRequestException('The requested User ID is reserved and cannot be assigned.');
+        }
+
+        // Check global uniqueness across all tenants and users
+        const collision = await this.prisma.user.findFirst({
+          where: {
+            customUserId: { equals: newNormalizedId, mode: 'insensitive' },
+            NOT: { id: existing.userId },
+          },
+        });
+        if (collision) {
+          throw new ConflictException('This User ID is already in use.');
+        }
+
+        // Execute updates inside an atomic transaction to guarantee users and employees never diverge
+        const actorEmp = actorUserId
+          ? await this.prisma.employee.findUnique({ where: { userId: actorUserId } })
+          : null;
+
+        await this.prisma.$transaction(async (tx) => {
+          await tx.user.update({
+            where: { id: existing.userId },
+            data: { customUserId: newNormalizedId },
+          });
+
+          await tx.employee.update({
+            where: { id: existing.id },
+            data: { customUserId: newNormalizedId },
+          });
+
+          // Record in change history
+          await tx.userIdChangeHistory.create({
+            data: {
+              userId: existing.userId,
+              previousUserId: currentUserId,
+              newUserId: newNormalizedId,
+              changedByUserId: actorUserId || existing.userId,
+              changedByName: actorEmp?.name || (actorRole === 'SUPER_ADMIN' ? 'System Administrator' : 'Administrator'),
+              tenantId: existing.tenantId,
+              changeReason: data.change_reason || data.changeReason || 'ADMIN_UPDATE',
+            },
+          });
+
+          // Reserve old User ID so it cannot be reassigned accidentally
+          if (currentUserId) {
+            await tx.reservedUserId.upsert({
+              where: { userId: currentUserId.toLowerCase() },
+              update: { reason: 'HISTORICAL_RESERVED' },
+              create: {
+                userId: currentUserId.toLowerCase(),
+                reason: 'HISTORICAL_RESERVED',
+                tenantId: existing.tenantId,
+              },
+            });
+          }
+        });
+
+        await this.auditService.log({
+          actorUserId,
+          action: 'USER_ID_CHANGED',
+          entityType: 'EMPLOYEE',
+          entityId: id,
+          oldValues: { customUserId: currentUserId },
+          newValues: { customUserId: newNormalizedId, reason: data.change_reason || data.changeReason || 'ADMIN_UPDATE' },
+        });
+      }
     }
 
     await this.auditService.log({
@@ -1021,5 +1207,101 @@ export class EmployeesService {
     });
 
     return { success: true, message: `Employee '${existing.name}' deactivated successfully.` };
+  }
+
+  /**
+   * Check Custom User ID availability and format compliance.
+   * Enforces global uniqueness across all tenants and accounts without leaking tenant ownership.
+   */
+  async checkUserIdAvailability(candidateId: string, currentEmployeeId?: string) {
+    if (!candidateId || typeof candidateId !== 'string') {
+      return { available: false, normalized: '', reason: 'User ID cannot be blank.' };
+    }
+
+    const validation = validateAndNormalizeUserId(candidateId);
+    if (!validation.valid) {
+      return { available: false, normalized: validation.normalized, reason: validation.error };
+    }
+
+    const normalized = validation.normalized;
+
+    // Check if in reserved identifiers
+    const reserved = await this.prisma.reservedUserId.findUnique({
+      where: { userId: normalized },
+    });
+    if (reserved) {
+      return { available: false, normalized, reason: 'This User ID is reserved and cannot be assigned.' };
+    }
+
+    // Check if assigned to any user globally
+    const existing = await this.prisma.user.findFirst({
+      where: { customUserId: { equals: normalized, mode: 'insensitive' } },
+      include: { employee: true },
+    });
+
+    if (existing) {
+      if (currentEmployeeId && existing.employee?.id === currentEmployeeId) {
+        return { available: true, normalized, reason: 'Current User ID' };
+      }
+      return { available: false, normalized, reason: 'This User ID is already in use.' };
+    }
+
+    return { available: true, normalized, reason: 'Available' };
+  }
+
+  /**
+   * Get chronological User ID change history for an employee profile.
+   */
+  async getEmployeeUserIdHistory(employeeId: string, tenantId?: string) {
+    const where: any = { id: employeeId };
+    if (tenantId) where.tenantId = tenantId;
+
+    const emp = await this.prisma.employee.findFirst({
+      where,
+      select: { id: true, name: true, userId: true, customUserId: true, tenantId: true },
+    });
+
+    if (!emp) {
+      throw new NotFoundException('Employee not found');
+    }
+
+    const history = await this.prisma.userIdChangeHistory.findMany({
+      where: { userId: emp.userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        previousUserId: true,
+        newUserId: true,
+        changedByName: true,
+        changeReason: true,
+        createdAt: true,
+      },
+    });
+
+    return {
+      success: true,
+      employeeId: emp.id,
+      employeeName: emp.name,
+      currentUserId: emp.customUserId,
+      history,
+    };
+  }
+
+  /**
+   * Standalone Custom User ID update with audit logging and reservation.
+   */
+  async updateEmployeeUserId(
+    employeeId: string,
+    newUserId: string,
+    reason?: string,
+    actor?: number | ActorContext,
+    tenantId?: string,
+  ) {
+    return this.updateEmployee(
+      employeeId,
+      { customUserId: newUserId, changeReason: reason },
+      actor,
+      tenantId,
+    );
   }
 }

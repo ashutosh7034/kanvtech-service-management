@@ -198,6 +198,12 @@ export const api = {
   toggleLevelManagement: (enabled: boolean) => request('/employees/level-management/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
   checkIn: (data: any) => request('/employees/attendance/check-in', { method: 'POST', body: JSON.stringify(data) }),
   checkOut: (data: any) => request('/employees/attendance/check-out', { method: 'POST', body: JSON.stringify(data) }),
+  checkUserIdAvailability: (userId: string, currentEmployeeId?: string) =>
+    request(`/employees/check-user-id?userId=${encodeURIComponent(userId)}${currentEmployeeId ? `&currentEmployeeId=${encodeURIComponent(currentEmployeeId)}` : ''}`),
+  getEmployeeUserIdHistory: (employeeId: string) =>
+    request(`/employees/${encodeURIComponent(employeeId)}/user-id-history`),
+  updateEmployeeUserId: (employeeId: string, data: { userId: string; reason?: string }) =>
+    request(`/employees/${encodeURIComponent(employeeId)}/user-id`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // Tickets
   getTickets: (params: any = {}) => request(`/tickets${toQueryString(params)}`),

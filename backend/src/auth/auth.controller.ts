@@ -16,16 +16,26 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @UseGuards(LoginThrottlerGuard)
-  @ApiOperation({ summary: 'Authenticate user with email and password' })
+  @ApiOperation({ summary: 'Authenticate user with User ID / email and password' })
   @ApiResponse({ status: 200, description: 'Authentication successful, JWT returned' })
-  @ApiResponse({ status: 401, description: 'Invalid email or password' })
+  @ApiResponse({ status: 401, description: 'Invalid User ID / email or password' })
   @ApiResponse({ status: 429, description: 'Too many failed attempts' })
   async login(
-    @Body() body: { email: string; password?: string; password_hash?: string; rememberMe?: boolean; selectedTenantId?: string },
+    @Body() body: {
+      email?: string;
+      userId?: string;
+      identifier?: string;
+      customUserId?: string;
+      password?: string;
+      password_hash?: string;
+      rememberMe?: boolean;
+      selectedTenantId?: string;
+    },
     @Res({ passthrough: true }) res: Response,
   ) {
+    const identifier = body.identifier || body.userId || body.customUserId || body.email || '';
     const password = body.password || body.password_hash || '';
-    const result = await this.authService.login(body.email, password, !!body.rememberMe, body.selectedTenantId);
+    const result = await this.authService.login(identifier, password, !!body.rememberMe, body.selectedTenantId);
 
     if (result && (result as any).token) {
       const isProduction = process.env.NODE_ENV === 'production';

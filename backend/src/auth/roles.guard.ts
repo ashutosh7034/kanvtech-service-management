@@ -135,6 +135,8 @@ export class RolesGuard implements CanActivate {
         grantedCodes.add('task.view_team');
       }
 
+      (req.user || user).effectivePermissions = Array.from(grantedCodes);
+
       const hasAllRequiredPermissions = requiredPermissions.every((p) =>
         grantedCodes.has(p),
       );

@@ -35,6 +35,7 @@ export interface User {
   email: string;
   role: UserRole;
   displayName: string;
+  customUserId?: string;
   tenantId?: string;
   tenantName?: string;
   isSuperAdmin?: boolean;
@@ -153,6 +154,8 @@ export interface Company {
 export interface Employee {
   id: string;
   user_id: number;
+  custom_user_id?: string;
+  customUserId?: string;
   name: string;
   email: string;
   phone: string;

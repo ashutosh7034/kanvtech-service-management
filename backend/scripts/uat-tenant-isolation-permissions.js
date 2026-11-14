@@ -137,6 +137,12 @@ async function runUAT() {
     // ========================================================================
     console.log('\n--- TEST C: L1 EMPLOYEE ACCESS RESTRICTIONS ---');
     const l1User = await prisma.user.findFirst({
+      where: {
+        employee: { id: 'EMP-002' },
+        isActive: true,
+      },
+      include: { employee: true },
+    }) || await prisma.user.findFirst({
       where: { role: 'L1_EMPLOYEE', isActive: true },
       include: { employee: true },
     });
@@ -298,7 +304,7 @@ async function runUAT() {
     // TEST G: PERMISSION ASSIGNMENT REGRESSION & IMMEDIATE EFFECT
     // ========================================================================
     console.log('\n--- TEST G: PERMISSION GRANT, REVOCATION & AUDIT TRAIL ---');
-    const testTargetEmpId = 'EMP-002'; // Level 1 Specialist in KANVTECH
+    const testTargetEmpId = l1User.employee?.id || 'EMP-002'; // Level 1 Specialist in KANVTECH
     const adminActorUserId = 2; // admin@kanvtech.com
 
     // 1. Grant 'employee.create'

@@ -68,6 +68,39 @@ function getJson(path, headers = {}) {
   });
 }
 
+function putJson(path, payload, headers = {}) {
+  return new Promise((resolve, reject) => {
+    const data = JSON.stringify(payload);
+    const req = http.request(
+      {
+        hostname: 'localhost',
+        port: 5000,
+        path,
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data),
+          ...headers,
+        },
+      },
+      (res) => {
+        let body = '';
+        res.on('data', (chunk) => (body += chunk));
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, body: JSON.parse(body) });
+          } catch (e) {
+            resolve({ status: res.statusCode, raw: body });
+          }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
+
 async function runUat() {
   console.log('========================================================================');
   console.log('  AUDIT LOGS HUMAN-READABLE TRANSFORMATION & SECURITY UAT TEST SUITE');
@@ -273,6 +306,9 @@ async function runUat() {
   );
 
   // UAT 7: Normal tenant users cannot retrieve raw JSON through the API
+  // Temporarily grant audit_logs.view to EMP-002 so they can access the endpoint
+  await putJson('/api/permissions/employees/EMP-002', { permissionCodes: ['audit_logs.view'] }, adminHeaders);
+
   const tenantUserLogin = await postJson('/api/auth/login', {
     email: 'l1_agent@kanvtech.com',
     password: 'Password@123',
@@ -308,6 +344,9 @@ async function runUat() {
     'UAT 8: Unauthorized users cannot access other tenants\' audit records',
     'Verified: Server overrides and constrains query strictly to authenticated tenant context.',
   );
+
+  // Cleanly revoke audit_logs.view to restore exact database baseline
+  await putJson('/api/permissions/employees/EMP-002', { permissionCodes: [] }, adminHeaders);
 
   // UAT 9: No credentials or secrets are exposed
   let sensitiveDataFound = false;

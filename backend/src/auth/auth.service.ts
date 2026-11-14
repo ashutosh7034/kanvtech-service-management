@@ -40,10 +40,15 @@ export class AuthService {
     }
   }
 
-  async login(email: string, pass: string, rememberMe = false, selectedTenantId?: string) {
-    const normalizedEmail = (email || '').trim().toLowerCase();
+  async login(identifier: string, pass: string, rememberMe = false, selectedTenantId?: string) {
+    const normalized = (identifier || '').trim().toLowerCase();
     const user = await this.prisma.user.findFirst({
-      where: { email: { equals: normalizedEmail, mode: 'insensitive' } },
+      where: {
+        OR: [
+          { email: { equals: normalized, mode: 'insensitive' } },
+          { customUserId: { equals: normalized, mode: 'insensitive' } },
+        ],
+      },
       include: {
         employee: true,
         companyContacts: true,
@@ -55,7 +60,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('User does not exist. Please contact admin.');
+      throw new UnauthorizedException('Invalid credentials. Please verify your User ID / Email and password.');
     }
 
     if (!user.isActive) {
@@ -78,13 +83,15 @@ export class AuthService {
         'rajesh@acme.com': ['cust123', 'Password@123'],
         'customer@acme.com': ['cust123', 'Password@123'],
       };
-      const allowedPasswords = DEMO_CREDENTIALS[normalizedEmail];
+      const allowedPasswords =
+        DEMO_CREDENTIALS[user.email.toLowerCase()] ||
+        (user.customUserId ? DEMO_CREDENTIALS[user.customUserId.toLowerCase()] : null);
       if (allowedPasswords && allowedPasswords.includes(pass)) {
         isMatch = true;
       }
     }
     if (!isMatch) {
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid credentials. Please verify your User ID / Email and password.');
     }
 
     // Resolve user's authorized tenant memberships on the server
@@ -187,7 +194,7 @@ export class AuthService {
         where: {
           OR: [
             { userId: user.id },
-            { email: { equals: normalizedEmail, mode: 'insensitive' } },
+            { email: { equals: user.email, mode: 'insensitive' } },
           ],
         },
       });
@@ -228,6 +235,7 @@ export class AuthService {
     const payload = {
       userId: user.id,
       email: user.email,
+      customUserId: user.customUserId || null,
       role: effectiveRole,
       isSuperAdmin: false,
       isPlatformIncharge,
@@ -258,6 +266,7 @@ export class AuthService {
         id: user.id,
         userId: user.id,
         email: user.email,
+        customUserId: user.customUserId || null,
         role: effectiveRole,
         isSuperAdmin: false,
         isPlatformIncharge,
@@ -485,6 +494,7 @@ export class AuthService {
         id: user.id,
         userId: user.id,
         email: user.email,
+        customUserId: user.customUserId || null,
         role: effectiveRole,
         isSuperAdmin: false,
         isPlatformIncharge,

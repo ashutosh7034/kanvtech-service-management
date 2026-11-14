@@ -73,6 +73,8 @@ export const EVENT_LABELS: Record<string, { label: string; module: string }> = {
   EMPLOYEE_STATUS_TOGGLED: { label: 'Employee Status Changed', module: 'Employee Management' },
   EMPLOYEE_DEACTIVATED: { label: 'Employee Deactivated', module: 'Employee Management' },
   EMPLOYEE_PERMISSIONS_UPDATED: { label: 'Employee Permissions Updated', module: 'Employee Management' },
+  USER_ID_CREATED: { label: 'User ID Assigned', module: 'Employee Management' },
+  USER_ID_CHANGED: { label: 'User ID Modified', module: 'Employee Management' },
   SUPER_ADMIN_CREATED: { label: 'Administrator Account Created', module: 'System Administration' },
   SUPER_ADMIN_ROLE_GRANTED: { label: 'Administrator Role Granted', module: 'System Administration' },
 

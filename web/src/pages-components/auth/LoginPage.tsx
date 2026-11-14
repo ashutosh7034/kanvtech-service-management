@@ -108,21 +108,30 @@ export const LoginPage: React.FC = () => {
     }
 
     if (!emailTrimmed && !passwordValue) {
-      setError('Please enter your email and password.');
+      setError('Please enter your User ID or corporate email and password.');
       return;
     }
     if (!emailTrimmed) {
-      setError('Please enter your email.');
+      setError('Please enter your User ID or corporate email.');
       return;
     }
     if (!passwordValue) {
       setError('Please enter your password.');
       return;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailTrimmed)) {
-      setError('Please enter a valid email address.');
-      return;
+
+    if (emailTrimmed.includes('@')) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(emailTrimmed)) {
+        setError('Please enter a valid corporate email address.');
+        return;
+      }
+    } else {
+      const userIdRegex = /^[a-zA-Z0-9._-]+$/;
+      if (emailTrimmed.length < 3 || emailTrimmed.length > 30 || !userIdRegex.test(emailTrimmed)) {
+        setError('User ID must be 3-30 characters and contain only letters, numbers, dots, hyphens, or underscores.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -168,7 +177,7 @@ export const LoginPage: React.FC = () => {
       } else if (msg.includes('User does not exist') || msg.includes('contact admin')) {
         setError('User does not exist. Please contact admin.');
       } else if (msg.includes('Invalid email or password') || msg.includes('Incorrect password')) {
-        setError('Incorrect password. Please try again.');
+        setError('Invalid User ID / email or password. Please try again.');
       } else {
         setError(msg || 'Authentication failed. Please check credentials.');
       }
@@ -336,19 +345,19 @@ export const LoginPage: React.FC = () => {
               noValidate={false}
             >
               <div className="form-group">
-                <label htmlFor="email" className="form-label">Corporate Email</label>
+                <label htmlFor="email" className="form-label">User ID / Email Address</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     ref={emailInputRef}
                     id="email"
                     name="email"
-                    type="email"
+                    type="text"
                     autoComplete="username"
                     className="form-control"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     onInput={(e) => setEmail((e.target as HTMLInputElement).value)}
-                    placeholder="Enter corporate email"
+                    placeholder="Enter User ID or corporate email"
                     required
                     autoFocus
                   />

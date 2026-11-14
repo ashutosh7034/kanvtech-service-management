@@ -91,3 +91,5 @@ admin_token.txt
 test_timer.ts
 .wifi-server.pids.json
 .cleanup_quarantine/
+.tmp_browser*
+**/.tmp_browser*
